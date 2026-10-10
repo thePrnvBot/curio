@@ -1,0 +1,22 @@
+{
+  "name": "@curio/api",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@curio/auth": "workspace:*",
+    "@curio/db": "workspace:*",
+    "@trpc/client": "catalog:",
+    "@trpc/server": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@curio/config": "workspace:*",
+    "typescript": "catalog:"
+  }
+}

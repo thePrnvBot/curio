@@ -1,0 +1,42 @@
+{
+  "name": "curio",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "type": "module",
+  "scripts": {
+    "dev": "vp run -r dev",
+    "build": "vp run -r build",
+    "check-types": "vp run -r check-types",
+    "check": "vp check && vp run -r check-types",
+    "lint": "vp lint",
+    "format": "vp fmt",
+    "staged": "vp staged",
+    "hooks:setup": "vp config",
+    "dev:web": "vp run --filter web dev",
+    "db:push": "vp run --filter @curio/db db:push",
+    "db:studio": "vp run --filter @curio/db db:studio",
+    "db:generate": "vp run --filter @curio/db db:generate",
+    "db:migrate": "vp run --filter @curio/db db:migrate",
+    "env:generate": "varlock codegen --path ./apps/web/ && varlock codegen --path ./packages/db/",
+    "postinstall": "varlock codegen --path ./apps/web/ && varlock codegen --path ./packages/db/",
+    "auth:generate": "cd apps/web && pnpm run auth:generate"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@curio/config": "workspace:*",
+    "@types/node": "^26.4.1",
+    "rolldown": "1.2.7",
+    "typescript": "catalog:",
+    "varlock": "catalog:",
+    "vite-plus": "0.3.1"
+  },
+  "overrides": {
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.3.1"
+  },
+  "packageManager": "pnpm@11.8.0"
+}
