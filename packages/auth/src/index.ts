@@ -4,10 +4,10 @@ import * as schema from "@curio/db/schema/auth";
 import { betterAuth } from "better-auth";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 
-export type AuthConfig = {
+export interface AuthConfig {
   BETTER_AUTH_URL: string;
   BETTER_AUTH_SECRET: string;
-};
+}
 
 export function createAuth(env: AuthConfig, database: Database) {
   return betterAuth({

@@ -13,7 +13,7 @@ export const Route = createFileRoute("/_auth")({
     }
     return { session };
   },
-  loader: async ({ context }) => {
+  loader: ({ context }) => {
     if (!context.session) {
       throw redirect({
         to: "/login",

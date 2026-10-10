@@ -1,6 +1,7 @@
+import { fileURLToPath } from "node:url";
+
 import dotenv from "dotenv";
 import { defineConfig } from "drizzle-kit";
-import { fileURLToPath } from "node:url";
 import { z } from "zod";
 
 dotenv.config({
