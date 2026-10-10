@@ -20,8 +20,6 @@
     "db:studio": "vp run --filter @curio/db db:studio",
     "db:generate": "vp run --filter @curio/db db:generate",
     "db:migrate": "vp run --filter @curio/db db:migrate",
-    "env:generate": "varlock codegen --path ./apps/web/ && varlock codegen --path ./packages/db/",
-    "postinstall": "varlock codegen --path ./apps/web/ && varlock codegen --path ./packages/db/",
     "auth:generate": "cd apps/web && pnpm run auth:generate"
   },
   "dependencies": {
@@ -32,7 +30,6 @@
     "@types/node": "^26.4.1",
     "rolldown": "1.2.7",
     "typescript": "catalog:",
-    "varlock": "catalog:",
     "vite-plus": "0.3.1"
   },
   "overrides": {

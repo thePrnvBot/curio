@@ -71,13 +71,11 @@ If you want to add app-specific blocks instead of shared primitives, run the sha
 
 ## Environment Configuration
 
-Each app owns its environment schema in `.env.schema`. Varlock generates `src/env.ts` during installation; run `pnpm run env:generate` after changing a schema. Commit schemas, and keep secrets in ignored env files or your deployment platform.
+The web app validates environment variables with Zod in `apps/web/src/env.server.ts` and loads local values from `apps/web/.env`. Keep secrets in ignored env files or your deployment platform.
 
-Import the generated `ENV` accessor in application code. Shared database and auth packages receive configuration or initialized clients from the application. See [Varlock's monorepo guide](https://varlock.dev/guides/monorepos/).
+Import the server-only `ENV` accessor where app services need configuration. Shared database and auth packages receive configuration or initialized clients from the application.
 
-Bun's automatic env loading is disabled in `bunfig.toml`; the framework integration or server bootstrap loads Varlock. Node deployments must include Varlock and its dependencies alongside the app schema.
-
-Run standalone Node/Bun tools that use Varlock from the owning app directory so they load that app's schema and env files. `env:generate` only generates TypeScript files; it does not initialize environment values in a subsequent command.
+Database CLI commands validate `DATABASE_URL` and load it from the web app's `.env` file. Production deployments should provide environment variables directly.
 
 ## Git Hooks and Formatting
 
@@ -116,4 +114,4 @@ curio/
 
 ## Better Auth Schema Generation
 
-After changing auth plugins or schema options, run `pnpm run auth:generate` from the project root. The script runs the Better Auth CLI through `varlock run` from the owning app directory, loading the auth instance from `src/services.ts`. Review the schema changes, then use your ORM's migration workflow to apply them.
+After changing auth plugins or schema options, run `pnpm run auth:generate` from the project root. The script runs the Better Auth CLI from the web app directory, loading the auth instance from `src/services.ts`. Review the schema changes, then use your ORM's migration workflow to apply them.

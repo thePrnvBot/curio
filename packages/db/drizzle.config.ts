@@ -1,5 +1,17 @@
+import dotenv from "dotenv";
 import { defineConfig } from "drizzle-kit";
-import "varlock/auto-load";
+import { fileURLToPath } from "node:url";
+import { z } from "zod";
+
+dotenv.config({
+  path: fileURLToPath(new URL("../../apps/web/.env", import.meta.url)),
+});
+
+const env = z
+  .object({
+    DATABASE_URL: z.string().min(1),
+  })
+  .parse(process.env);
 
 export default defineConfig({
   schema: "./src/schema/index.ts",
@@ -7,6 +19,6 @@ export default defineConfig({
   dialect: "postgresql",
   schemaFilter: ["public"],
   dbCredentials: {
-    url: process.env.DATABASE_URL || "",
+    url: env.DATABASE_URL,
   },
 });
