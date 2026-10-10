@@ -10,9 +10,9 @@
     "dev": "vp run -r dev",
     "build": "vp run -r build",
     "check-types": "vp run -r check-types",
-    "check": "vp check && vp run -r check-types",
-    "lint": "vp lint",
-    "format": "vp fmt",
+    "check": "ultracite check && vp run -r check-types",
+    "lint": "oxlint",
+    "format": "oxfmt",
     "staged": "vp staged",
     "hooks:setup": "vp config",
     "dev:web": "vp run --filter web dev",
@@ -20,7 +20,8 @@
     "db:studio": "vp run --filter @curio/db db:studio",
     "db:generate": "vp run --filter @curio/db db:generate",
     "db:migrate": "vp run --filter @curio/db db:migrate",
-    "auth:generate": "cd apps/web && pnpm run auth:generate"
+    "auth:generate": "cd apps/web && pnpm run auth:generate",
+    "fix": "ultracite fix"
   },
   "dependencies": {
     "zod": "catalog:"
@@ -28,8 +29,11 @@
   "devDependencies": {
     "@curio/config": "workspace:*",
     "@types/node": "^26.4.1",
+    "oxfmt": "^0.72.0",
+    "oxlint": "^1.87.0",
     "rolldown": "1.2.7",
     "typescript": "catalog:",
+    "ultracite": "7.12.4",
     "vite-plus": "0.3.1"
   },
   "packageManager": "pnpm@11.8.0"

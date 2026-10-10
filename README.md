@@ -12,7 +12,8 @@ This project was created with [Better-T-Stack](https://github.com/AmanVarshney01
 - **Drizzle** - TypeScript-first ORM
 - **PostgreSQL** - Database engine
 - **Authentication** - Better-Auth
-- **Vite+** - Unified Vite toolchain, workspace task runner, linting, and formatting
+- **Vite+** - Unified Vite toolchain and workspace task runner
+- **Ultracite** - Oxlint and Oxfmt presets for React and TanStack
 
 ## Getting Started
 
@@ -82,6 +83,7 @@ Database CLI commands validate `DATABASE_URL` and load it from the web app's `.e
 - Optional native Vite+ hooks: `pnpm run hooks:setup`
 - Docs: [Vite+ commit hooks](https://viteplus.dev/guide/commit-hooks)
 - Run checks: `pnpm run check`
+- Auto-fix lint and formatting: `pnpm run fix`
 
 ## Project Structure
 
@@ -106,10 +108,11 @@ curio/
 - `pnpm run db:generate`: Generate database client/types
 - `pnpm run db:migrate`: Run database migrations
 - `pnpm run db:studio`: Open database studio UI
-- `pnpm run check`: Run Vite+ format/lint checks and workspace TypeScript checks
-- `pnpm run lint`: Run Vite+ lint checks
-- `pnpm run format`: Run Vite+ formatting
-- `pnpm run staged`: Run Vite+ checks against staged files
+- `pnpm run check`: Run Ultracite checks and workspace TypeScript checks
+- `pnpm run lint`: Run Oxlint
+- `pnpm run format`: Run Oxfmt
+- `pnpm run fix`: Apply Ultracite lint fixes and format
+- `pnpm run staged`: Run Ultracite fixes on staged files
 - `pnpm run hooks:setup`: Install Vite+ native Git hooks with `vp config`
 
 ## Better Auth Schema Generation
