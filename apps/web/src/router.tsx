@@ -41,7 +41,6 @@ const trpcClient = createTRPCClient<AppRouter>({
     }),
   ],
 });
-
 export const getRouter = () => {
   const queryClient = createQueryClient();
   const trpc = createTRPCOptionsProxy({

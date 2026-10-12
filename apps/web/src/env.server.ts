@@ -9,5 +9,19 @@ export const ENV = z
     BETTER_AUTH_SECRET: z.string().min(32),
     BETTER_AUTH_URL: z.string().url(),
     DATABASE_URL: z.string().min(1),
+    AI_BASE_URL: z.string().url(),
+    AI_API_KEY: z.string().min(1),
+    AI_MODEL: z.string().min(1),
+    AI_PROTOCOL: z
+      .enum(["chat-completions", "responses"])
+      .default("chat-completions"),
+    ARTIFACT_SERVER_URL: z
+      .union([z.string().url(), z.literal("")])
+      .transform((value) => (value === "" ? undefined : value)),
+    ARTIFACT_SERVER_API_KEY: z
+      .string()
+      .min(1)
+      .optional()
+      .transform((value) => value ?? undefined),
   })
   .parse(process.env);
