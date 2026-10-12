@@ -10,6 +10,8 @@ import {
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import type { TRPCOptionsProxy } from "@trpc/tanstack-react-query";
+import type { ThemeProviderProps } from "next-themes";
+import { ThemeProvider } from "next-themes";
 
 import Header from "../components/header";
 
@@ -31,7 +33,7 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
         content: "width=device-width, initial-scale=1",
       },
       {
-        title: "My App",
+        title: "Curio",
       },
     ],
     links: [
@@ -45,20 +47,31 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
   component: RootDocument,
 });
 
+const themeProviderProps: ThemeProviderProps = {
+  attribute: "class",
+  defaultTheme: "system",
+  disableTransitionOnChange: true,
+  enableSystem: true,
+};
+
 function RootDocument() {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
-      <body>
-        <div className="grid h-svh grid-rows-[auto_1fr]">
-          <Header />
-          <Outlet />
-        </div>
-        <Toaster richColors />
-        <TanStackRouterDevtools position="bottom-left" />
-        <ReactQueryDevtools position="bottom" buttonPosition="bottom-right" />
+      <body suppressHydrationWarning>
+        <ThemeProvider {...themeProviderProps}>
+          <div className="grid h-svh grid-rows-[auto_1fr]">
+            <Header />
+            <main className="flex min-h-0 flex-col">
+              <Outlet />
+            </main>
+          </div>
+          <Toaster richColors />
+          <TanStackRouterDevtools position="bottom-left" />
+          <ReactQueryDevtools position="bottom" buttonPosition="bottom-right" />
+        </ThemeProvider>
         <Scripts />
       </body>
     </html>
