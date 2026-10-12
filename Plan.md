@@ -1,0 +1,7 @@
+Curio - MVP Project Plan
+
+MVP: AI Chat UI with Web Search with Opencode Go Support via API Key. The UI should use Vercel's AI Elements UI and AI SDK. The User must see the agent when it does a tool call. The UI must be light mode and dark mode supported. The User must be able to have multiple chat sessions via a sidebar. Just create a kitchen sink application of the AI Chat using the components. It must have support for multiple providers later on so the code must not be tightly coupled. The DB could change as well so keep typed contracts separate.
+
+TechStack: "@curio/api": "workspace:_", "@curio/auth": "workspace:_", "@curio/db": "workspace:_", "@curio/ui": "workspace:_", "@tailwindcss/vite": "^4.3.3", "@tanstack/react-form": "^1.33.5", "@tanstack/react-query": "^5.102.8", "@tanstack/react-router": "^1.170.32", "@tanstack/react-router-ssr-query": "^1.167.2", "@tanstack/react-start": "^1.168.49", "@trpc/client": "catalog:", "@trpc/server": "catalog:", "@trpc/tanstack-react-query": "^11.18.0", "better-auth": "catalog:", "dotenv": "^16.6.1", "lucide-react": "catalog:", "next-themes": "catalog:", "react": "catalog:", "react-dom": "catalog:", "sonner": "catalog:", "tailwindcss": "catalog:", "zod": "catalog:"
+
+Follow .NET API Style Dependency Inversion when designing the codebase architecture. Use Effect TS as well. Each codefile must have a singular purpose, must be human readable descriptive vars. Look up best practices of the tech stack.

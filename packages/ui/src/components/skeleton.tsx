@@ -1,10 +1,10 @@
-import { cn } from "@curio/ui/lib/utils";
+import { cn } from "cn";
 
 function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="skeleton"
-      className={cn("bg-muted animate-pulse rounded-none", className)}
+      className={cn("bg-muted animate-pulse rounded-md", className)}
       {...props}
     />
   );

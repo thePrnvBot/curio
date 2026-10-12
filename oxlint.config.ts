@@ -36,5 +36,31 @@ export default defineConfig({
         "jsx-a11y/label-has-associated-control": "off",
       },
     },
+    {
+      // Vendored AI Elements components follow upstream shadcn/AI Elements
+      // patterns that intentionally use bitflags, callbacks, refs-in-render
+      // and effect-driven open state. Keep the rules off ONLY for this folder.
+      files: ["packages/ui/src/components/ai-elements/**"],
+      rules: {
+        "eslint/no-bitwise": "off",
+        "eslint/no-empty-function": "off",
+        "promise/avoid-new": "off",
+        "promise/prefer-await-to-callbacks": "off",
+        "promise/prefer-await-to-then": "off",
+        "react-hooks/set-state-in-effect": "off",
+        "react/refs": "off",
+        "unicorn/prefer-add-event-listener": "off",
+      },
+    },
+    {
+      // Canned shadcn preset components (applied via `shadcn apply --preset`)
+      // ship upstream styling patterns that conflict with repo lint rules.
+      files: ["packages/ui/src/components/**"],
+      rules: {
+        "import/consistent-type-specifier-style": "off",
+        "jsx-a11y/prefer-tag-over-role": "off",
+        "unicorn/prefer-export-from": "off",
+      },
+    },
   ],
 });

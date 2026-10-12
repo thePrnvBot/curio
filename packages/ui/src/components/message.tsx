@@ -1,4 +1,4 @@
-import { cn } from "@curio/ui/lib/utils";
+import { cn } from "cn";
 import * as React from "react";
 
 function MessageGroup({ className, ...props }: React.ComponentProps<"div">) {
@@ -21,7 +21,7 @@ function Message({
       data-slot="message"
       data-align={align}
       className={cn(
-        "group/message relative flex w-full min-w-0 gap-1.5 text-xs data-[align=end]:flex-row-reverse",
+        "group/message relative flex w-full min-w-0 gap-1.5 text-xs/relaxed data-[align=end]:flex-row-reverse",
         className
       )}
       {...props}
@@ -60,7 +60,7 @@ function MessageHeader({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="message-header"
       className={cn(
-        "text-muted-foreground flex max-w-full min-w-0 items-center px-2.5 text-xs font-medium group-has-data-[variant=ghost]/message:px-0",
+        "text-muted-foreground flex max-w-full min-w-0 items-center px-2.5 text-[0.625rem] font-medium group-has-data-[variant=ghost]/message:px-0",
         className
       )}
       {...props}
@@ -73,7 +73,7 @@ function MessageFooter({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="message-footer"
       className={cn(
-        "text-muted-foreground flex max-w-full min-w-0 items-center px-2.5 text-xs font-medium group-has-data-[variant=ghost]/message:px-0 group-data-[align=end]/message:justify-end",
+        "text-muted-foreground flex max-w-full min-w-0 items-center px-2.5 text-[0.625rem] font-medium group-has-data-[variant=ghost]/message:px-0 group-data-[align=end]/message:justify-end",
         className
       )}
       {...props}
