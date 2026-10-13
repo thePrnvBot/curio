@@ -12,7 +12,6 @@ import { useEffect, useRef, useState } from "react";
 import AnimatedContent from "@/components/AnimatedContent";
 import Aurora from "@/components/Aurora";
 import CountUp from "@/components/CountUp";
-import ScrollReveal from "@/components/ScrollReveal";
 import SplitText from "@/components/SplitText";
 import StarBorder from "@/components/StarBorder";
 import {
@@ -149,12 +148,12 @@ function HomeComponent() {
               <MeshGradient
                 stops={isLight ? SHADER_STOPS.light : SHADER_STOPS.dark}
                 colorSpace="oklab"
-                count={5}
-                smoothness={3.2}
-                variation={0.25}
-                swirl={0.12}
-                drift={0.35}
-                speed={0.4}
+                count={4}
+                smoothness={3.4}
+                variation={0.2}
+                swirl={0.1}
+                drift={0.3}
+                speed={0.25}
                 seed={7}
               />
             </Shader>
@@ -241,18 +240,13 @@ function HomeComponent() {
           </p>
           <Squiggle className="text-primary/40 mt-3 h-2.5 w-24" />
         </AnimatedContent>
-        <ScrollReveal
-          enableBlur={false}
-          baseRotation={0}
-          baseOpacity={0.3}
-          containerClassName="relative max-w-3xl"
-          textClassName="text-foreground"
-        >
-          You choose what to learn and how; Curio does the rest - guided
-          teaching, exercises that meet you where you are, and recaps that
-          greet you when you come back.
-        </ScrollReveal>
-      </section>
+        <AnimatedContent distance={32} className="relative max-w-3xl">
+          <p className="text-2xl font-medium leading-relaxed text-balance sm:text-3xl">
+            You choose what to learn and how; Curio does the rest - guided
+            teaching, exercises that meet you where you are, and recaps that
+            greet you when you come back.
+          </p>
+        </AnimatedContent>      </section>
 
       {/* Features */}
       <section className="relative mx-auto max-w-5xl px-6 pb-28">
@@ -327,16 +321,12 @@ function HomeComponent() {
             sharing. Curio keeps the streak alive while life does its thing.
           </p>
           <div className="mt-10 flex justify-center">
-            <StarBorder
-              as={Link}
+            <Link
+              className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg px-5 py-3 text-sm font-medium transition-colors"
               to="/chat"
-              theme={isLight ? "light" : "dark"}
-              color={isLight ? "#0f766e" : "#34d399"}
-              duration={6}
-              className="text-sm"
             >
               Create your first course
-            </StarBorder>
+            </Link>
           </div>
           <p className="text-muted-foreground mt-16 text-xs">
             © {new Date().getFullYear()} Curio · Built with TanStack Start, Vercel
