@@ -6,7 +6,7 @@ import { BookOpenCheckIcon, CompassIcon, SparklesIcon, TrophyIcon } from "lucide
 
 import { useTRPC } from "@/utils/trpc";
 
-export const Route = createFileRoute("/_auth/courses")({
+export const Route = createFileRoute("/_auth/courses/")({
   component: CoursesRoute,
 });
 
@@ -155,9 +155,11 @@ function CourseListSection({
           {courses.map((course, courseIndex) => {
             const isActive = course.status === "active" && courseIndex === 0;
             return (
-              <div
+              <Link
                 className="hover:border-ring block w-full overflow-hidden rounded-xl border"
                 key={course.id}
+                params={{ courseId: course.id }}
+                to="/courses/$courseId"
               >
                 <div className="bg-muted/50 relative aspect-video w-full">
                   <span className="text-muted-foreground/40 absolute inset-0 flex items-center justify-center text-xs tracking-widest uppercase">
@@ -178,7 +180,7 @@ function CourseListSection({
                     </div>
                   </div>
                 </div>
-              </div>
+              </Link>
             );
           })}
         </div>
