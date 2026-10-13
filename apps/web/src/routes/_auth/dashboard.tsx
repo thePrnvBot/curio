@@ -5,22 +5,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   AtSignIcon,
-  CableIcon,
   CpuIcon,
-  LogOutIcon,
   MonitorIcon,
   MoonStarIcon,
-  ServerIcon,
   SunIcon,
-  ZapIcon,
-  type LucideIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useState, type ReactElement } from "react";
 import { toast } from "sonner";
 
 import { getRuntimeSettings } from "@/functions/get-runtime-settings";
-import { authClient } from "@/lib/auth-client";
 import { useTRPC } from "@/utils/trpc";
 
 export const Route = createFileRoute("/_auth/dashboard")({
@@ -58,40 +52,6 @@ interface ProviderFormState {
   provider: ProviderChoice;
 }
 
-function SectionCard(props: {
-  children: React.ReactNode;
-  description: string;
-  title: string;
-}): ReactElement {
-  return (
-    <div className="bg-card rounded-xl border p-6">
-      <div className="mb-5">
-        <h2 className="text-base font-medium tracking-tight">{props.title}</h2>
-        <p className="text-muted-foreground mt-1 text-sm">
-          {props.description}
-        </p>
-      </div>
-      {props.children}
-    </div>
-  );
-}
-
-function SettingRow(props: {
-  icon: LucideIcon;
-  label: string;
-  value: string;
-}): ReactElement {
-  return (
-    <div className="text-muted-foreground flex items-center justify-between gap-4 py-1.5 text-sm">
-      <span className="flex items-center gap-2.5">
-        <props.icon className="size-4" aria-hidden="true" />
-        {props.label}
-      </span>
-      <span className="text-foreground font-medium">{props.value}</span>
-    </div>
-  );
-}
-
 function ProviderField(props: {
   label: string;
   onChange: (value: string) => void;
@@ -115,10 +75,22 @@ function ProviderField(props: {
   );
 }
 
+function SectionHeader({ children }: { children: string }): ReactElement {
+  return (
+    <h2 className="text-muted-foreground mb-3 text-sm font-medium tracking-widest uppercase">
+      {children}
+    </h2>
+  );
+}
+
 function ModelProviderSection(): ReactElement {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
   const settingsQuery = useQuery(trpc.modelSettings.get.queryOptions());
+  const runtimeQuery = useQuery({
+    queryFn: () => getRuntimeSettings(),
+    queryKey: ["runtime-settings"],
+  });
 
   const [form, setForm] = useState<ProviderFormState>({
     apiKey: "",
@@ -153,11 +125,6 @@ function ModelProviderSection(): ReactElement {
 
   const isBusy =
     setSettingsMutation.isPending || clearSettingsMutation.isPending;
-
-  const runtimeQuery = useQuery({
-    queryFn: () => getRuntimeSettings(),
-    queryKey: ["runtime-settings"],
-  });
 
   function saveProvider(): void {
     setSettingsMutation.mutate(
@@ -209,19 +176,58 @@ function ModelProviderSection(): ReactElement {
     );
   }
 
-  const savedSettingLabel =
-    settingsQuery.data === undefined || settingsQuery.data === null
-      ? "Server default"
-      : `${settingsQuery.data.model}`;
+  const savedSettings = settingsQuery.data;
+  const isUsingSavedProvider = savedSettings !== null && savedSettings !== undefined;
+  const runtimeSettings = runtimeQuery.isError ? undefined : runtimeQuery.data;
+
+  const activeModel = isUsingSavedProvider
+    ? savedSettings.model
+    : (runtimeSettings?.model ?? "—");
+  const activeProviderLabel = isUsingSavedProvider
+    ? savedSettings.provider === "openai"
+      ? "OpenAI"
+      : "OpenAI-compatible"
+    : "Server default";
+  let activeHost: string | null = null;
+  if (isUsingSavedProvider) {
+    if (savedSettings.provider === "openai-compatible" && savedSettings.baseUrl !== null) {
+      try {
+        activeHost = new URL(savedSettings.baseUrl).host;
+      } catch {
+        activeHost = savedSettings.baseUrl;
+      }
+    } else if (savedSettings.provider === "openai") {
+      activeHost = "api.openai.com";
+    }
+  } else if (runtimeSettings !== undefined) {
+    activeHost = runtimeSettings.providerHost;
+  }
 
   return (
     <div className="space-y-4">
-      <p className="text-muted-foreground flex items-center gap-2 text-xs">
-        Active saved choice:{" "}
-        <Badge variant={settingsQuery.data === null ? "outline" : "default"}>
-          {savedSettingLabel}
-        </Badge>
-      </p>
+      {/* Active model - the single most important fact on this card. */}
+      <div className="border-primary/15 bg-primary/5 flex items-center gap-3.5 rounded-xl border p-4">
+        <span className="bg-primary/10 text-primary flex size-11 shrink-0 items-center justify-center rounded-full">
+          <CpuIcon className="size-5" aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-muted-foreground text-[11px] font-medium tracking-widest uppercase">
+            Active model
+          </p>
+          <p className="truncate text-base font-semibold tracking-tight">
+            {activeModel}
+          </p>
+          <p className="text-muted-foreground truncate text-xs">
+            {activeProviderLabel}
+            {activeHost !== null ? ` · ${activeHost}` : ""}
+          </p>
+        </div>
+        {isUsingSavedProvider ? (
+          <Badge>Custom</Badge>
+        ) : (
+          <Badge variant="outline">Default</Badge>
+        )}
+      </div>
 
       <div
         className="bg-muted/50 inline-flex items-center rounded-lg border p-1"
@@ -293,82 +299,56 @@ function ModelProviderSection(): ReactElement {
         />
       </div>
 
-      <div className="flex items-center justify-between gap-4 pt-1">
-        <p className="text-muted-foreground text-xs">
-          {serverDefaultHint(runtimeQuery.data)}
-        </p>
-        <div className="flex items-center gap-2">
-          {settingsQuery.data !== null ? (
-            <Button
-              disabled={isBusy}
-              onClick={() => {
-                resetToDefault();
-              }}
-              size="sm"
-              variant="outline"
-            >
-              Use default
-            </Button>
-          ) : null}
+      <div className="flex items-center justify-end gap-2 pt-1">
+        {settingsQuery.data !== null ? (
           <Button
-            disabled={isBusy || form.model.trim() === ""}
+            disabled={isBusy}
             onClick={() => {
-              saveProvider();
+              resetToDefault();
             }}
             size="sm"
+            variant="outline"
           >
-            Save provider
+            Use default
           </Button>
-        </div>
+        ) : null}
+        <Button
+          disabled={isBusy || form.model.trim() === ""}
+          onClick={() => {
+            saveProvider();
+          }}
+          size="sm"
+        >
+          Save provider
+        </Button>
       </div>
     </div>
   );
-}
-
-function serverDefaultHint(settingsData: {
-  readonly model: string;
-  readonly protocol: "chat-completions" | "responses";
-} | undefined): string {
-  if (settingsData === undefined) {
-    return "The server default provider is used.";
-  }
-  return `Server default: ${settingsData.model} (${settingsData.protocol}).`;
 }
 
 function DashboardRoute(): ReactElement {
   const { session } = Route.useRouteContext();
   const { theme, setTheme } = useTheme();
   const [isHydrated, setIsHydrated] = useState(false);
-  const runtimeQuery = useQuery({
-    queryFn: () => getRuntimeSettings(),
-    queryKey: ["runtime-settings"],
-  });
 
   useEffect(() => {
     setIsHydrated(true);
   }, []);
-
-  async function signOut(): Promise<void> {
-    await authClient.signOut();
-    window.location.assign("/login");
-  }
 
   return (
     <div className="mx-auto w-full max-w-3xl shrink-0 px-6 pt-8 pb-20">
       <div className="mb-8">
         <header>
           <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Profile, appearance and the runtime your Director runs on.
-          </p>
         </header>
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-7">
         {/* Profile */}
-        <SectionCard description="Your Curio account identity" title="Profile">
+        <div>
+          <SectionHeader>Profile</SectionHeader>
           <div className="flex items-center gap-3">
-            <span className="bg-primary/10 text-primary flex size-11 items-center justify-center rounded-full text-sm font-semibold">
+            <span className="bg-primary/10 text-primary flex size-10 items-center justify-center rounded-full text-sm font-semibold">
               {(session?.user.name ?? "C").slice(0, 1).toUpperCase()}
             </span>
             <div>
@@ -379,10 +359,11 @@ function DashboardRoute(): ReactElement {
               </p>
             </div>
           </div>
-        </SectionCard>
+        </div>
 
         {/* Appearance */}
-        <SectionCard description="How the interface looks on this device" title="Appearance">
+        <div>
+          <SectionHeader>Appearance</SectionHeader>
           {!isHydrated ? <Skeleton className="h-9 w-64" /> : null}
           {isHydrated ? (
             <div
@@ -418,77 +399,13 @@ function DashboardRoute(): ReactElement {
               })}
             </div>
           ) : null}
-        </SectionCard>
+        </div>
 
         {/* Model provider */}
-        <SectionCard
-          description="Choose which provider powers the Director - OpenAI (key via OPENAI_API_KEY or a personal key below) or any OpenAI-compatible endpoint"
-          title="Model provider"
-        >
+        <div>
+          <SectionHeader>Model provider</SectionHeader>
           <ModelProviderSection />
-        </SectionCard>
-
-        {/* Runtime */}
-        <SectionCard
-          description="Read-only view of the server variables the app boots with"
-          title="Environment"
-        >
-          {runtimeQuery.isPending ? (
-            <div className="space-y-2">
-              <Skeleton className="h-5 w-full" />
-              <Skeleton className="h-5 w-3/4" />
-              <Skeleton className="h-5 w-1/2" />
-            </div>
-          ) : runtimeQuery.isError ? (
-            <p className="text-destructive text-sm">
-              Runtime settings could not load: {runtimeQuery.error.message}
-            </p>
-          ) : runtimeQuery.data === undefined ? null : (
-            <div className="space-y-1.5">
-              <SettingRow
-                icon={ServerIcon}
-                label="Provider host"
-                value={runtimeQuery.data.providerHost}
-              />
-              <SettingRow
-                icon={ZapIcon}
-                label="Model"
-                value={runtimeQuery.data.model}
-              />
-              <SettingRow
-                icon={CableIcon}
-                label="Protocol"
-                value={runtimeQuery.data.protocol}
-              />
-              <SettingRow
-                icon={CpuIcon}
-                label="Artifact publishing"
-                value={
-                  runtimeQuery.data.artifactPublishing
-                    ? "Connected"
-                    : "Not configured"
-                }
-              />
-            </div>
-          )}
-        </SectionCard>
-
-        {/* Session */}
-        <SectionCard
-          description="End your Curio session on this device"
-          title="Session"
-        >
-          <Button
-            className="gap-2"
-            onClick={() => {
-              void signOut();
-            }}
-            variant="outline"
-          >
-            <LogOutIcon className="size-4" aria-hidden="true" />
-            Sign out
-          </Button>
-        </SectionCard>
+        </div>
       </div>
     </div>
   );
