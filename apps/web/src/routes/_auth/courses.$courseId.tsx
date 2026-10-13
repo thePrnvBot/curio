@@ -15,6 +15,7 @@ import {
   ArrowLeftIcon,
   CheckIcon,
   ChevronRightIcon,
+  XIcon,
 } from "lucide-react";
 import { useMemo, useState, type ReactElement } from "react";
 
@@ -296,12 +297,7 @@ function LessonContentView(props: {
         </div>
       );
     case "recap":
-      return (
-        <RecapExerciseView
-          questions={content.questions}
-          title={props.lesson.title}
-        />
-      );
+      return <RecapExerciseView questions={content.questions} />;
     case "video":
       return (
         <div className="space-y-6">
@@ -330,9 +326,8 @@ interface RecapQuestion {
 
 function RecapExerciseView(props: {
   questions: readonly RecapQuestion[];
-  title: string;
 }): ReactElement {
-  // Picked option index per question (null until answered)
+  // Picked option index per question (undefined until answered)
   const [pickedOptions, setPickedOptions] = useState<
     Record<number, number | undefined>
   >({});
@@ -341,103 +336,146 @@ function RecapExerciseView(props: {
   const allAnswered = props.questions.every(
     (_question, questionIndex) => pickedOptions[questionIndex] !== undefined
   );
-  const allCorrect = checked
-    ? props.questions.every(
+  const correctCount = checked
+    ? props.questions.filter(
         (question, questionIndex) =>
           pickedOptions[questionIndex] === question.answerIndex
-      )
-    : false;
+      ).length
+    : 0;
+  const allCorrect = checked && correctCount === props.questions.length;
 
   function resetAnswers(): void {
     setPickedOptions({});
     setChecked(false);
   }
 
+  const optionClass = ({
+    checked,
+    isPicked,
+    isAnswer,
+  }: {
+    checked: boolean;
+    isPicked: boolean;
+    isAnswer: boolean;
+  }): string => {
+    if (checked) {
+      if (isAnswer) {
+        return "border-primary bg-primary/10 text-primary flex w-full items-center justify-between gap-3 rounded-lg px-3.5 py-2.5 text-left text-sm";
+      }
+      if (isPicked) {
+        return "border-destructive/60 bg-destructive/5 text-destructive flex w-full items-center justify-between gap-3 rounded-lg px-3.5 py-2.5 text-left text-sm";
+      }
+      return "text-muted-foreground/60 w-full rounded-lg border px-3.5 py-2.5 text-left text-sm";
+    }
+    return isPicked
+      ? "border-primary bg-primary/10 text-primary w-full rounded-lg px-3.5 py-2.5 text-left text-sm"
+      : "hover:border-ring hover:bg-accent text-foreground w-full rounded-lg border px-3.5 py-2.5 text-left text-sm";
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {props.questions.map((question, questionIndex) => {
         const pickedOption = pickedOptions[questionIndex];
-        const isCorrect = pickedOption === question.answerIndex;
+        const isPickedCorrect = pickedOption === question.answerIndex;
         return (
           <div className="bg-card rounded-xl border p-5" key={question.prompt}>
-            <p className="font-medium">
-              {questionIndex + 1}. {question.prompt}
-            </p>
-            <div className="mt-3 space-y-2">
-              {question.options.map((option, optionIndex) => {
-                const isPicked = pickedOption === optionIndex;
-                let optionClass =
-                  "text-muted-foreground hover:bg-accent rounded-lg border px-3 py-2 text-sm";
-                if (!checked) {
-                  optionClass =
-                    isPicked === true
-                      ? "border-primary bg-primary/10 text-primary rounded-lg px-3 py-2 text-sm"
-                      : "text-muted-foreground hover:bg-accent rounded-lg border px-3 py-2 text-sm";
-                } else if (optionIndex === question.answerIndex) {
-                  optionClass =
-                    "border-primary bg-primary/10 text-primary flex items-center justify-between rounded-lg px-3 py-2 text-sm";
-                } else if (isPicked) {
-                  optionClass =
-                    "border-destructive bg-destructive/10 text-destructive rounded-lg px-3 py-2 text-sm";
-                }
-                return (
-                  <button
-                    className={optionClass}
-                    disabled={checked}
-                    key={option}
-                    onClick={() => {
-                      setPickedOptions({
-                        ...pickedOptions,
-                        [questionIndex]: optionIndex,
-                      });
-                      if (checked) {
-                        setChecked(false);
-                      }
-                    }}
-                    type="button"
-                  >
-                    <span>{option}</span>
-                    {checked && optionIndex === question.answerIndex && (
-                      <CheckIcon className="size-4" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-            {checked && pickedOption !== undefined && !isCorrect && (
-              <p className="text-muted-foreground mt-2 text-xs">
-                {question.explanation ?? "Not quite - revisit the lesson above."}
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm font-medium">
+                <span className="text-muted-foreground mr-2">
+                  {questionIndex + 1}
+                </span>
+                {question.prompt}
               </p>
+              {checked &&
+                (isPickedCorrect ? (
+                  <span className="bg-primary/10 text-primary flex size-6 shrink-0 items-center justify-center rounded-full">
+                    <CheckIcon className="size-3.5" aria-hidden="true" />
+                  </span>
+                ) : (
+                  <span className="border-destructive/40 bg-destructive/10 text-destructive flex size-6 shrink-0 items-center justify-center rounded-full border">
+                    <XIcon className="size-3.5" aria-hidden="true" />
+                  </span>
+                ))}
+            </div>
+            <div className="mt-3 space-y-2">
+              {question.options.map((option, optionIndex) => (
+                <button
+                  className={optionClass({
+                    checked,
+                    isPicked: pickedOption === optionIndex,
+                    isAnswer: optionIndex === question.answerIndex,
+                  })}
+                  disabled={checked}
+                  key={option}
+                  onClick={() => {
+                    setPickedOptions({
+                      ...pickedOptions,
+                      [questionIndex]: optionIndex,
+                    });
+                  }}
+                  type="button"
+                >
+                  <span>{option}</span>
+                  {checked && optionIndex === question.answerIndex && (
+                    <span className="text-xs font-medium opacity-70">
+                      correct
+                    </span>
+                  )}
+                  {checked && pickedOption === optionIndex && !isPickedCorrect && (
+                    <span className="text-xs font-medium opacity-70">
+                      your answer
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+            {checked && pickedOption !== undefined && !isPickedCorrect && (
+              <div className="border-destructive/30 bg-destructive/5 mt-3 rounded-lg border-l-3 px-3.5 py-2.5">
+                <p className="text-destructive text-xs font-semibold">
+                  {question.explanation !== undefined && question.explanation.length > 0
+                    ? "Why not"
+                    : "Not quite"}
+                </p>
+                <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
+                  {question.explanation ??
+                    "Revisit the lesson above and try a fresh take."}
+                </p>
+              </div>
             )}
           </div>
         );
       })}
-      <div className="flex items-center justify-between gap-4">
-        {!checked ? (
-          <Badge variant="outline">
-            {allAnswered ? "Ready to check" : "Answer every question"}
-          </Badge>
-        ) : (
-          <Badge variant={allCorrect ? "default" : "destructive"}>
-            {allCorrect ? "All correct" : "Keep trying"}
-          </Badge>
-        )}
-        {checked && !allCorrect ? (
-          <Button onClick={resetAnswers} size="sm" variant="outline">
-            Reset answers
-          </Button>
-        ) : null}
-        {!checked ? (
-          <Button
-            disabled={!allAnswered}
-            onClick={() => {
-              setChecked(true);
-            }}
-            size="sm"
-          >
-            Check answers
-          </Button>
-        ) : null}
+
+      <div className="mt-3 flex items-center justify-between gap-4">
+        <p className="text-muted-foreground text-xs">
+          {checked
+            ? allCorrect
+              ? "All correct - move on when ready."
+              : `${correctCount} of ${props.questions.length} correct`
+            : allAnswered
+              ? `${props.questions.length} question${
+                  props.questions.length === 1 ? "" : "s"
+                } answered - ready to check`
+              : "Pick an option for every question"}
+        </p>
+        <div className="flex items-center gap-2">
+          {checked && !allCorrect ? (
+            <Button onClick={resetAnswers} size="sm" variant="outline">
+              Try again
+            </Button>
+          ) : null}
+          {checked ? null : (
+            <Button
+              disabled={!allAnswered}
+              onClick={() => {
+                setChecked(true);
+              }}
+              size="sm"
+            >
+              Check answers
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -491,7 +529,7 @@ function LessonCompletionControls(props: {
           <p className="text-sm font-medium">{earnedBadgeLabel}</p>
         </div>
       )}
-      <div className="border-border/70 flex items-center justify-between gap-4 border-t pt-6">
+      <div className="mt-10 flex items-center justify-between gap-4">
         <div>
           <p className="text-sm font-medium">
             {props.completed
