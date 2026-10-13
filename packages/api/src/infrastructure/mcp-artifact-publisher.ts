@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { Effect, Option } from "effect";
+import { z } from "zod";
 
 import type {
   ArtifactPublicationInput,
@@ -22,41 +23,62 @@ export interface ArtifactServerMcpConfig {
 
 /**
  * Wire contracts below mirror the artifact-server MCP tool schemas
- * (src/mcp/artifact-mcp-server.ts). Provider payloads are still read
- * defensively via helpers so minor schema drift degrades gracefully.
+ * (src/mcp/artifact-mcp-server.ts). Everything crossing the MCP boundary is
+ * untrusted JSON, so it is parsed with zod at the adapter boundary — schema
+ * drift degrades into typed publish failures instead of `unknown` leaking
+ * deeper into the pipeline.
  */
-type ProviderRecord = Record<string, unknown>;
 
-function isRecord(value: unknown): value is ProviderRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+const mcpTextBlockSchema = z.object({
+  text: z.string().optional(),
+  type: z.string(),
+});
 
-function readString(
-  record: ProviderRecord,
-  keys: string[]
-): string | undefined {
-  for (const key of keys) {
-    const candidate = record[key];
-    if (typeof candidate === "string" && candidate.length > 0) {
-      return candidate;
-    }
-  }
-  return undefined;
-}
+const mcpToolResultSchema = z.object({
+  content: z.array(mcpTextBlockSchema).optional(),
+  isError: z.boolean().optional(),
+  structuredContent: z.record(z.string(), z.unknown()).optional(),
+});
 
-function recordArrayFromKeys(
-  record: ProviderRecord,
-  keys: string[]
-): readonly ProviderRecord[] {
-  for (const key of keys) {
-    if (record[key] !== undefined) {
-      return Array.isArray(record[key])
-        ? (record[key] as unknown[]).filter(isRecord)
-        : [];
-    }
-  }
-  return [];
-}
+const projectProjectionSchema = z.object({
+  id: z.string().min(1).optional(),
+  name: z.string().optional(),
+  projectId: z.string().min(1).optional(),
+});
+
+const projectListResultSchema = z.object({
+  projects: z.array(projectProjectionSchema).optional(),
+});
+
+const projectCreateResultSchema = z.object({
+  id: z.string().min(1).optional(),
+  project: projectProjectionSchema.optional(),
+  projectId: z.string().min(1).optional(),
+});
+
+const stagedFileSchema = z.object({
+  method: z.string().min(1).optional(),
+  path: z.string().min(1).optional(),
+  uploadUrl: z.string().min(1).optional(),
+});
+
+const stagedUploadResultSchema = z.object({
+  commit: z.object({ uploadId: z.string().min(1).optional() }).optional(),
+  files: z.array(stagedFileSchema).optional(),
+  uploadId: z.string().min(1).optional(),
+});
+
+const commitLinksSchema = z.object({
+  artifact: z.string().min(1).optional(),
+  review: z.string().min(1).optional(),
+  version: z.string().min(1).optional(),
+});
+
+const commitResultSchema = z.object({
+  artifact: z.object({ id: z.string().min(1).optional() }).optional(),
+  links: commitLinksSchema.optional(),
+  version: z.object({ id: z.string().min(1).optional() }).optional(),
+});
 
 function toMcpError(
   operationTitle: string
@@ -65,49 +87,85 @@ function toMcpError(
     new ArtifactPublishFailed({ cause, title: operationTitle });
 }
 
-function unwrapStructuredToolResult(
+/** Collapses an MCP `callTool` envelope into the structured result record: a
+ * protocol error becomes a typed publish failure, and a text-serialized JSON
+ * body (a common MCP fallback) is parsed before the underlying record is
+ * returned for schema validation. */
+function unwrapToolResultRecord(
   rawToolOutput: unknown,
   toolName: string
-): ProviderRecord {
-  const asFailure = (text: string): ArtifactPublishFailed =>
+): Record<string, unknown> {
+  const asFailure = (text: string): Error =>
     new ArtifactPublishFailed({ cause: text, title: toolName });
 
-  if (!isRecord(rawToolOutput)) {
+  const parsedEnvelope = mcpToolResultSchema.safeParse(rawToolOutput);
+  if (!parsedEnvelope.success) {
     throw asFailure("unexpected MCP result shape");
   }
-  if (rawToolOutput.isError === true) {
-    const errorTextBlock = recordArrayFromKeys(rawToolOutput, ["content"]).find(
-      (block) => block.type === "text" && typeof block.text === "string"
-    );
-    throw asFailure(
-      typeof errorTextBlock?.text === "string"
-        ? errorTextBlock.text
-        : "MCP tool reported an error"
-    );
+  if (parsedEnvelope.data.isError === true) {
+    const errorText = parsedEnvelope.data.content
+      ?.filter((block) => block.type === "text" && block.text !== undefined)
+      .map((block) => block.text)
+      .at(0);
+    throw asFailure(errorText ?? "MCP tool reported an error");
   }
-  if (isRecord(rawToolOutput.structuredContent)) {
-    return rawToolOutput.structuredContent;
+  if (parsedEnvelope.data.structuredContent !== undefined) {
+    return parsedEnvelope.data.structuredContent;
   }
-  const firstTextBlock = recordArrayFromKeys(rawToolOutput, ["content"]).find(
-    (block) => block.type === "text" && typeof block.text === "string"
-  );
-  if (firstTextBlock && typeof firstTextBlock.text === "string") {
+  const firstTextBlock = parsedEnvelope.data.content
+    ?.filter((block) => block.type === "text" && block.text !== undefined)
+    .at(0);
+  if (firstTextBlock?.text !== undefined) {
     try {
       const parsedText: unknown = JSON.parse(firstTextBlock.text);
-      if (isRecord(parsedText)) {
-        return parsedText;
+      const recordCheck = z
+        .record(z.string(), z.unknown())
+        .safeParse(parsedText);
+      if (recordCheck.success) {
+        return recordCheck.data;
       }
     } catch {
       throw asFailure(firstTextBlock.text);
     }
   }
   if (
-    Array.isArray(rawToolOutput.content) &&
-    rawToolOutput.content.length === 0
+    Array.isArray(parsedEnvelope.data.content) &&
+    parsedEnvelope.data.content.length === 0
   ) {
     return {};
   }
   throw asFailure("unexpected MCP result shape");
+}
+
+function callArtifactTool<T>(
+  client: Client,
+  toolName: string,
+  toolArguments: Record<string, unknown>,
+  resultSchema: z.ZodType<T>
+): Effect.Effect<T, ArtifactPublishFailed> {
+  return Effect.tryPromise({
+    catch: toMcpError(toolName),
+    try: () => client.callTool({ arguments: toolArguments, name: toolName }),
+  }).pipe(
+    Effect.flatMap((rawToolOutput) =>
+      Effect.try({
+        catch: toMcpError(toolName),
+        try: () => unwrapToolResultRecord(rawToolOutput, toolName),
+      })
+    ),
+    Effect.flatMap((resultRecord) => {
+      const parsedResult = resultSchema.safeParse(resultRecord);
+      if (parsedResult.success) {
+        return Effect.succeed(parsedResult.data);
+      }
+      return Effect.fail(
+        new ArtifactPublishFailed({
+          cause: parsedResult.error.message,
+          title: toolName,
+        })
+      );
+    })
+  );
 }
 
 function requireValue<T>(
@@ -124,17 +182,6 @@ function requireValue<T>(
       ),
     onSome: Effect.succeed,
   });
-}
-
-function callArtifactTool(
-  client: Client,
-  toolName: string,
-  toolArguments: ProviderRecord
-): Effect.Effect<ProviderRecord, ArtifactPublishFailed> {
-  return Effect.tryPromise({
-    catch: toMcpError(toolName),
-    try: () => client.callTool({ arguments: toolArguments, name: toolName }),
-  }).pipe(Effect.map((raw) => unwrapStructuredToolResult(raw, toolName)));
 }
 
 function connectArtifactServerMcp(
@@ -158,14 +205,16 @@ function connectArtifactServerMcp(
   });
 }
 
+interface ProjectProjectionView {
+  readonly id?: string;
+  readonly projectId?: string;
+}
+
 function readProjectId(
-  outcome: ProviderRecord
+  projection: ProjectProjectionView
 ): Effect.Effect<string, ArtifactPublishFailed> {
-  // project_create wraps the projection: { project: {...} }; project_list
-  // items are flat projections.
-  const projection = isRecord(outcome.project) ? outcome.project : outcome;
   return requireValue(
-    readString(projection, ["id", "projectId"]),
+    projection.id ?? projection.projectId,
     "project call returned no project id"
   );
 }
@@ -174,18 +223,26 @@ function resolveProjectId(
   client: Client,
   config: ArtifactServerMcpConfig
 ): Effect.Effect<string, ArtifactPublishFailed> {
-  return callArtifactTool(client, "project_list", {}).pipe(
+  return callArtifactTool(
+    client,
+    "project_list",
+    {},
+    projectListResultSchema
+  ).pipe(
     Effect.flatMap((listResult) => {
-      const allProjects = recordArrayFromKeys(listResult, ["projects"]);
-      const matchingProject = allProjects.find(
-        (project) => readString(project, ["name"]) === config.projectName
+      const matchingProject = (listResult.projects ?? []).find(
+        (project) =>
+          project.name !== undefined && project.name === config.projectName
       );
-      if (matchingProject) {
+      if (matchingProject !== undefined) {
         return readProjectId(matchingProject);
       }
-      return callArtifactTool(client, "project_create", {
-        name: config.projectName,
-      }).pipe(Effect.flatMap(readProjectId));
+      return callArtifactTool(
+        client,
+        "project_create",
+        { name: config.projectName },
+        projectCreateResultSchema
+      ).pipe(Effect.flatMap(readProjectId));
     })
   );
 }
@@ -197,54 +254,59 @@ function stageArtifactUpload(
   fingerprintSha256: string,
   byteLength: number
 ): Effect.Effect<
-  { stagedEntry: ProviderRecord; stagedUploadId: string },
+  { stagedEntry: { method?: string; uploadUrl?: string }; stagedUploadId: string },
   ArtifactPublishFailed
 > {
-  return callArtifactTool(client, "artifact_create_upload", {
-    entryPath: input.entryFilename,
-    files: [
-      {
-        mediaType: input.mediaType,
-        path: input.entryFilename,
-        sha256: fingerprintSha256,
-        size: byteLength,
-      },
-    ],
-    projectId,
-    routingMode: "static",
-  }).pipe(
+  return callArtifactTool(
+    client,
+    "artifact_create_upload",
+    {
+      entryPath: input.entryFilename,
+      files: [
+        {
+          mediaType: input.mediaType,
+          path: input.entryFilename,
+          sha256: fingerprintSha256,
+          size: byteLength,
+        },
+      ],
+      projectId,
+      routingMode: "static",
+    },
+    stagedUploadResultSchema
+  ).pipe(
     Effect.flatMap((createResult) => {
-      const stagedEntry = recordArrayFromKeys(createResult, ["files"]).find(
-        (fileEntry) => readString(fileEntry, ["path"]) === input.entryFilename
+      const stagedEntry = (createResult.files ?? []).find(
+        (fileEntry) => fileEntry.path === input.entryFilename
       );
-      return Effect.map(
-        requireValue(
+      const stagedUploadId =
+        createResult.uploadId ?? createResult.commit?.uploadId;
+      return Effect.gen(function* stageUpload() {
+        const resolvedEntry = yield* requireValue(
           stagedEntry,
           "artifact_create_upload returned no file instructions"
-        ),
-        (resolvedEntry) => ({
-          stagedEntry: resolvedEntry,
-          stagedUploadId:
-            readString(createResult, ["uploadId"]) ??
-            readString(createResult, ["commit", "uploadId"]) ??
-            "",
-        })
-      );
+        );
+        const uploadId = yield* requireValue(
+          stagedUploadId,
+          "artifact_create_upload returned no upload id"
+        );
+        return { stagedEntry: resolvedEntry, stagedUploadId: uploadId };
+      });
     })
   );
 }
 
 function uploadStagedEntryBytes(
-  stagedEntry: ProviderRecord,
+  stagedEntry: { method?: string; uploadUrl?: string },
   config: ArtifactServerMcpConfig,
   input: ArtifactPublicationInput
 ): Effect.Effect<void, ArtifactPublishFailed> {
   return Effect.gen(function* uploadEntry() {
     const uploadUrl = yield* requireValue(
-      readString(stagedEntry, ["uploadUrl"]),
+      stagedEntry.uploadUrl,
       "upload stage returned no upload URL"
     );
-    const uploadMethod = readString(stagedEntry, ["method"]) ?? "PUT";
+    const uploadMethod = stagedEntry.method ?? "PUT";
     // The upload plan's authorization instructs reuse of the MCP bearer
     // credential for the opaque upload URL.
     yield* Effect.tryPromise({
@@ -281,37 +343,36 @@ function commitArtifactUpload(
 ): Effect.Effect<ArtifactPublicationResult, ArtifactPublishFailed> {
   void fingerprintSha256;
   void byteLength;
-  return callArtifactTool(client, "artifact_commit_upload", {
-    idempotencyKey: crypto.randomUUID(),
-    projectId,
-    target: {
-      kind: "new_artifact",
-      name: input.title,
-      tags: [],
+  return callArtifactTool(
+    client,
+    "artifact_commit_upload",
+    {
+      idempotencyKey: crypto.randomUUID(),
+      projectId,
+      target: {
+        kind: "new_artifact",
+        name: input.title,
+        tags: [],
+      },
+      uploadId: stagedUploadId,
     },
-    uploadId: stagedUploadId,
-  }).pipe(
+    commitResultSchema
+  ).pipe(
     Effect.flatMap((commitResult) => {
-      const linkRecord = isRecord(commitResult.links) ? commitResult.links : {};
-      const artifactRecord = isRecord(commitResult.artifact)
-        ? commitResult.artifact
-        : {};
-      const versionRecord = isRecord(commitResult.version)
-        ? commitResult.version
-        : {};
+      const ties = commitResult.links ?? {};
       return Effect.map(
         requireValue(
-          readString(linkRecord, ["review"]),
+          ties.review,
           "artifact_commit_upload returned no review link"
         ),
         (resolvedReviewLink) => ({
-          artifactId: readString(artifactRecord, ["id"]) ?? "",
+          artifactId: commitResult.artifact?.id ?? "",
           links: {
-            artifact: readString(linkRecord, ["artifact"]) ?? "",
+            artifact: ties.artifact ?? "",
             review: resolvedReviewLink,
-            version: readString(linkRecord, ["version"]) ?? "",
+            version: ties.version ?? "",
           },
-          versionId: readString(versionRecord, ["id"]) ?? "",
+          versionId: commitResult.version?.id ?? "",
         })
       );
     })

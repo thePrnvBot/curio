@@ -18,6 +18,7 @@ import type { UIMessage } from "ai";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import type { ComponentProps, HTMLAttributes, ReactElement } from "react";
 import {
+  Children,
   createContext,
   memo,
   useCallback,
@@ -197,8 +198,10 @@ export const MessageBranchContent = ({
   ...props
 }: MessageBranchContentProps) => {
   const { currentBranch, setBranches, branches } = useMessageBranch();
+  // React.Children.toArray also flattens arrays, giving the branch list the
+  // exact ReactElement shape the branch context expects.
   const childrenArray = useMemo(
-    () => (Array.isArray(children) ? children : [children]),
+    () => Children.toArray(children),
     [children]
   );
 

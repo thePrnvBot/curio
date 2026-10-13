@@ -1,6 +1,6 @@
 import { Data } from "effect";
 
-function isRecordText(value: object): value is { errorText?: unknown } {
+function hasErrorText(value: object): value is { errorText?: unknown } {
   return "errorText" in value;
 }
 
@@ -18,7 +18,7 @@ function describeRootCause(cause: unknown, depth = 0): string {
     return parentDescription;
   }
   if (cause !== null && typeof cause === "object") {
-    const errorText = isRecordText(cause) ? cause.errorText : undefined;
+    const errorText = hasErrorText(cause) ? cause.errorText : undefined;
     return typeof errorText === "string" ? errorText : JSON.stringify(cause);
   }
   if (cause === undefined || cause === null) {
