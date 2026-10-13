@@ -161,6 +161,22 @@ export function createDrizzleCourseStore(
         )
       ).pipe(Effect.map((rows) => rows.map(toBadgeRecord))),
 
+    deleteCourse: (courseId, userId) =>
+      withCourseError("deleteCourse")(
+        Effect.gen(function* removeCourse() {
+          const deletedRows = yield* Effect.tryPromise(() =>
+            database
+              .delete(course)
+              .where(and(eq(course.id, courseId), eq(course.userId, userId)))
+              .returning({ id: course.id })
+          );
+          if (deletedRows.length === 0) {
+            return yield* Effect.fail(new CourseNotFound({ courseId }));
+          }
+          yield* Effect.void;
+        })
+      ),
+
     createCourse: ({ description, sections, title, userId }) =>
       withCourseError("createCourse")(
         Effect.tryPromise(async () => {

@@ -162,6 +162,27 @@ export function createCoursesRouter(runtime: CurioRuntime) {
       )
     ),
 
+    delete: protectedProcedure
+      .input(
+        z.object({
+          courseId: z.string().min(1).max(64),
+        })
+      )
+      .mutation(({ ctx, input }) =>
+        unwrap(
+          runtime.runPromise(
+            Effect.gen(function* deleteCourse() {
+              const courseStore = yield* CourseStore;
+              yield* courseStore.deleteCourse(
+                input.courseId,
+                ctx.session.user.id
+              );
+              return { deleted: true };
+            })
+          )
+        )
+      ),
+
     get: protectedProcedure
       .input(
         z.object({

@@ -18,6 +18,10 @@ export interface CourseStoreContract {
   readonly listBadges: (
     userId: string
   ) => Effect.Effect<readonly CourseBadgeRecord[], CourseOperationFailed>;
+  readonly deleteCourse: (
+    courseId: string,
+    userId: string
+  ) => Effect.Effect<void, CourseOperationFailed | CourseNotFound>;
   readonly createCourse: (
     creationInput: CourseCreationInput
   ) => Effect.Effect<CourseSummary, CourseOperationFailed>;
