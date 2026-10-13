@@ -3,6 +3,7 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import type { CurioRuntime } from "../composition/runtime";
 import type { Context } from "../context";
 import { createChatsRouter } from "./chats";
+import { createCoursesRouter } from "./courses";
 
 export const t = initTRPC.context<Context>().create();
 
@@ -29,6 +30,7 @@ export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
 export function createAppRouter(runtime: CurioRuntime) {
   return router({
     chats: createChatsRouter(runtime),
+    courses: createCoursesRouter(runtime),
     healthCheck: publicProcedure.query(() => "OK"),
     privateData: protectedProcedure.query(({ ctx }) => ({
       message: "This is private",

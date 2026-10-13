@@ -11,6 +11,8 @@ import type { ChatModelProviderContract } from "../services/chat-model-provider"
 import { ChatModelProvider } from "../services/chat-model-provider";
 import type { ChatStoreContract } from "../services/chat-store";
 import { ChatStore } from "../services/chat-store";
+import type { CourseStoreContract } from "../services/course-store";
+import { CourseStore } from "../services/course-store";
 import { ChatTitleComposer } from "../services/chat-title-composer";
 
 export type CurioRuntime = ManagedRuntime.ManagedRuntime<
@@ -18,7 +20,8 @@ export type CurioRuntime = ManagedRuntime.ManagedRuntime<
   | ChatModelProvider
   | ArtifactPublisher
   | ChatTitleComposer
-  | ArtifactGenerator,
+  | ArtifactGenerator
+  | CourseStore,
   never
 >;
 
@@ -39,6 +42,7 @@ export interface CurioApiDependencies {
   readonly artifactPublisher: ArtifactPublisherContract | null;
   readonly chatModelProvider: ChatModelProviderContract;
   readonly chatStore: ChatStoreContract;
+  readonly courseStore: CourseStoreContract;
 }
 
 function resolveChatModel(
@@ -57,7 +61,8 @@ function buildCurioLayer(
   | ChatModelProvider
   | ArtifactPublisher
   | ChatTitleComposer
-  | ArtifactGenerator,
+  | ArtifactGenerator
+  | CourseStore,
   never,
   never
 > {
@@ -106,7 +111,8 @@ function buildCurioLayer(
     chatModelProviderLayer,
     Layer.succeed(ArtifactPublisher, artifactPublisherContract),
     chatTitleComposerLayer,
-    artifactGeneratorLayer
+    artifactGeneratorLayer,
+    Layer.succeed(CourseStore, dependencies.courseStore)
   );
 }
 
