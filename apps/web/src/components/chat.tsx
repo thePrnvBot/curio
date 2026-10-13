@@ -58,6 +58,7 @@ import { DefaultChatTransport, isToolUIPart } from "ai";
 import type { ToolUIPart, UIMessage } from "ai";
 import {
   CopyIcon,
+  BookOpenCheckIcon,
   FilePlus2Icon,
   RefreshCwIcon,
   SparklesIcon,
@@ -65,8 +66,22 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { Skeleton } from "@curio/ui/components/skeleton";
+
 import ChatSessionPanel from "@/components/chat-session-panel";
-import { restoreUIMessages } from "@/utils/ui-messages";
+import {
+  ChatAnswerOption,
+  decodeArtifactHeight,
+  decodeGeneratedArtifactError,
+  PendingQuestions,
+  toArtifactData,
+  toCourseCreatedData,
+  toGeneratedArtifactResponse,
+  toPendingQuestions,
+} from "@/utils/chat-schemas";
+import {
+  restoreUIMessages,
+} from "@/utils/ui-messages";
 import type { ArtifactUIData } from "@/utils/ui-messages";
 
 export interface PersistedChatMessageRecord {
@@ -74,6 +89,9 @@ export interface PersistedChatMessageRecord {
   readonly role: string;
   readonly parts: unknown;
 }
+
+const ASK_USER_TOOL_NAME = "ask_user";
+const CREATE_COURSE_TOOL_NAME = "create_course";
 
 const CHAT_STARTER_SUGGESTIONS = [
   "Build a landing page artifact and publish it for review",
@@ -86,10 +104,6 @@ const CHAT_TRANSPORT_API = "/api/chat";
 
 const ARTIFACT_GENERATION_API = "/api/artifacts/generate";
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function toChatAttachmentData(
   file: PromptInputMessage["files"][number]
 ): ChatAttachmentData {
@@ -100,22 +114,28 @@ function toChatAttachmentData(
   };
 }
 
-function toArtifactData(input: unknown): ArtifactUIData | null {
-  if (!isRecord(input)) {
-    return null;
+function extractPendingQuestions(
+  messages: readonly UIMessage[]
+): PendingQuestions | null {
+  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex--) {
+    const candidateMessage = messages[messageIndex];
+    if (candidateMessage.role !== "assistant") {
+      // The panel only applies to the most recent exchange
+      break;
+    }
+    for (const part of candidateMessage.parts) {
+      if (
+        isToolUIPart(part) &&
+        part.type === `tool-${ASK_USER_TOOL_NAME}` &&
+        part.state !== "output-available" &&
+        part.state !== "output-error"
+      ) {
+        return toPendingQuestions(part.input);
+      }
+    }
+    break;
   }
-  const { content, mediaType } = input;
-  if (typeof content !== "string" || typeof mediaType !== "string") {
-    return null;
-  }
-  return {
-    content,
-    mediaType,
-    reviewUrl:
-      typeof input.reviewUrl === "string" ? input.reviewUrl : undefined,
-    summary: typeof input.summary === "string" ? input.summary : undefined,
-    title: typeof input.title === "string" ? input.title : undefined,
-  };
+  return null;
 }
 
 function codeBlockLanguage(mediaType: string): string {
@@ -205,16 +225,16 @@ function ArtifactPreviewer({ data }: { data: ArtifactUIData }) {
         return;
       }
       try {
-        const parsedMessage: unknown = JSON.parse(windowMessage.data);
+        const probeHeight = decodeArtifactHeight(
+          JSON.parse(windowMessage.data)
+        );
         if (
-          isRecord(parsedMessage) &&
-          parsedMessage.type === "curio-artifact-height" &&
-          typeof parsedMessage.height === "number" &&
-          Number.isFinite(parsedMessage.height)
+          probeHeight !== null &&
+          Number.isFinite(probeHeight)
         ) {
           setFrameHeight(
             Math.min(
-              Math.max(parsedMessage.height, ARTIFACT_MIN_PREVIEW_HEIGHT),
+              Math.max(probeHeight, ARTIFACT_MIN_PREVIEW_HEIGHT),
               ARTIFACT_MAX_PREVIEW_HEIGHT
             )
           );
@@ -424,43 +444,20 @@ async function requestArtifactGeneration(
   });
   const responseBody: unknown = await generateResponse.json().catch(() => null);
   if (!generateResponse.ok) {
-    const failureMessage =
-      isRecord(responseBody) && typeof responseBody.error === "string"
-        ? responseBody.error
-        : `Request failed (${generateResponse.status})`;
-    return { message: failureMessage, ok: false };
+    return {
+      message:
+        decodeGeneratedArtifactError(responseBody) ??
+        `Request failed (${generateResponse.status})`,
+      ok: false,
+    };
   }
-  if (!isRecord(responseBody)) {
-    return { message: "Malformed generation response", ok: false };
-  }
-  const responseBrief = isRecord(responseBody.brief)
-    ? responseBody.brief
-    : null;
-  const responseLinks = isRecord(responseBody.links)
-    ? responseBody.links
-    : null;
-  if (
-    responseBrief === null ||
-    typeof responseBrief.content !== "string" ||
-    typeof responseBrief.mediaType !== "string" ||
-    typeof responseBrief.summary !== "string" ||
-    typeof responseBrief.title !== "string" ||
-    responseLinks === null ||
-    typeof responseLinks.review !== "string"
-  ) {
+  const parsedResponse = toGeneratedArtifactResponse(responseBody);
+  if (parsedResponse === null) {
     return { message: "Malformed generation response", ok: false };
   }
   return {
     ok: true,
-    result: {
-      brief: {
-        content: responseBrief.content,
-        mediaType: responseBrief.mediaType,
-        summary: responseBrief.summary,
-        title: responseBrief.title,
-      },
-      links: { review: responseLinks.review },
-    },
+    result: parsedResponse,
   };
 }
 
@@ -507,6 +504,117 @@ function ArtifactActionButton({
   );
 }
 
+function PendingQuestionsPanel({
+  busy,
+  onAnswered,
+  pendingQuestions,
+}: {
+  busy: boolean;
+  onAnswered: (answersText: string) => void;
+  pendingQuestions: PendingQuestions;
+}) {
+  const initialAnswers: (string | null)[] = pendingQuestions.questions.map(
+    () => null
+  );
+  const [selectedOptions, setSelectedOptions] = useState(initialAnswers);
+  const allAnswered = selectedOptions.every(
+    (selectedOption) => selectedOption !== null
+  );
+
+  function sendAnswers(): void {
+    const header = pendingQuestions.intro;
+    const answerLines = pendingQuestions.questions.map(
+      (question, questionIndex) => {
+        const answer = selectedOptions[questionIndex] ?? "";
+        return `- ${question.question}: ${answer}`;
+      }
+    );
+    onAnswered([header, ...answerLines].join("\n"));
+  }
+
+  return (
+    <div className="px-3 py-3">
+      <p className="text-muted-foreground mb-3 text-xs leading-relaxed">
+        {pendingQuestions.intro}
+      </p>
+      <div className="space-y-3">
+        {pendingQuestions.questions.map((question, questionIndex) => (
+          <div key={question.question}>
+            <p className="mb-1.5 text-sm font-medium">{question.question}</p>
+            <div className="flex flex-wrap gap-1.5">
+              {question.options.map((option) => {
+                const isSelected = selectedOptions[questionIndex] === option;
+                return (
+                  <button
+                    aria-pressed={isSelected}
+                    className={
+                      isSelected
+                        ? "bg-primary text-primary-foreground rounded-md px-2.5 py-1 text-xs font-medium"
+                        : "hover:bg-accent hover:text-accent-foreground text-muted-foreground rounded-md border px-2.5 py-1 text-xs font-medium transition-colors"
+                    }
+                    key={option}
+                    onClick={() => {
+                      setSelectedOptions((previousOptions) => {
+                        const nextOptions = [...previousOptions];
+                        nextOptions[questionIndex] = isSelected ? null : option;
+                        return nextOptions;
+                      });
+                    }}
+                    type="button"
+                  >
+                    {option}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 flex justify-end">
+        <button
+          className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={!allAnswered || busy}
+          onClick={sendAnswers}
+          type="button"
+        >
+          {allAnswered ? "Send answers" : "Answer all questions"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CourseCreatedNote({
+  courseData,
+}: {
+  courseData: {
+    readonly lessonCount: number;
+    readonly title: string;
+  };
+}) {
+  return (
+    <div className="bg-card flex items-center gap-3 rounded-lg border px-3 py-2.5">
+      <span className="bg-primary/10 text-primary flex size-8 shrink-0 items-center justify-center rounded-lg">
+        <BookOpenCheckIcon className="size-4" aria-hidden="true" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">
+          Course ready: {courseData.title}
+        </p>
+        <p className="text-muted-foreground text-xs">
+          {courseData.lessonCount} lessons added -
+          <a
+            className="text-primary ml-1 font-medium underline underline-offset-2"
+            href="/courses"
+          >
+            open the Courses tab
+          </a>
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function ChatConversation({
   chatId,
   initialMessages,
@@ -547,8 +655,20 @@ function ChatConversation({
     });
 
   const isStreaming = status === "submitted" || status === "streaming";
+  const pendingQuestions = useMemo(
+    () => extractPendingQuestions(messages),
+    [messages]
+  );
 
   function handleMessageSubmit(message: PromptInputMessage) {
+    if (pendingQuestions !== null) {
+      // The question panel owns the input while questions are unanswered
+      if (message.text.trim().length > 0) {
+        sendPendingQuestionAnswers(message.text);
+      }
+      return;
+    }
+
     const hasText = message.text.trim().length > 0;
 
     if (!hasText && message.files.length === 0) {
@@ -560,6 +680,10 @@ function ChatConversation({
       files: message.files,
       text: hasText ? message.text : "Sent with attachments",
     });
+  }
+
+  function sendPendingQuestionAnswers(answersText: string): void {
+    void sendMessage({ text: answersText });
   }
 
   return (
@@ -653,21 +777,12 @@ function ChatConversation({
                       );
                     }
 
-                    if (part.type === "file" && isRecord(part)) {
+                    if (part.type === "file") {
                       const fileEntry: ChatAttachmentData = {
-                        filename:
-                          typeof part.filename === "string"
-                            ? part.filename
-                            : undefined,
+                        filename: part.filename,
                         id: `file-${partIndex}`,
-                        mediaType:
-                          typeof part.mediaType === "string"
-                            ? part.mediaType
-                            : undefined,
-                        url:
-                          typeof part.url === "string" && part.url.length > 0
-                            ? part.url
-                            : undefined,
+                        mediaType: part.mediaType,
+                        url: part.url,
                       };
 
                       return (
@@ -679,6 +794,22 @@ function ChatConversation({
                     }
 
                     if (isToolUIPart(part)) {
+                      if (part.type === `tool-${CREATE_COURSE_TOOL_NAME}`) {
+                        if (part.state !== "output-available") {
+                          return null;
+                        }
+                        const createdCourseData = toCourseCreatedData(
+                          part.output
+                        );
+                        if (createdCourseData === null) {
+                          return null;
+                        }
+                        return (
+                          <div className="w-full" key={structuralKey}>
+                            <CourseCreatedNote courseData={createdCourseData} />
+                          </div>
+                        );
+                      }
                       if (part.type !== "tool-create_artifact") {
                         return null;
                       }
@@ -753,42 +884,55 @@ function ChatConversation({
                 }}
                 onSubmit={handleMessageSubmit}
               >
-                <PromptInputAttachmentsDisplay />
-                <PromptInputBody>
-                  <PromptInputTextarea placeholder="Ask Curio anything..." />
-                </PromptInputBody>
+                {pendingQuestions !== null && (
+                  <PendingQuestionsPanel
+                    busy={isStreaming}
+                    onAnswered={sendPendingQuestionAnswers}
+                    pendingQuestions={pendingQuestions}
+                  />
+                )}
+                {pendingQuestions === null && <PromptInputAttachmentsDisplay />}
+                {pendingQuestions === null && (
+                  <PromptInputBody>
+                    <PromptInputTextarea placeholder="Ask Curio anything..." />
+                  </PromptInputBody>
+                )}
                 <PromptInputFooter>
                   <PromptInputTools>
-                    <PromptInputActionMenu>
-                      <PromptInputActionMenuTrigger />
-                      <PromptInputActionMenuContent>
-                        <PromptInputActionAddAttachments />
-                      </PromptInputActionMenuContent>
-                    </PromptInputActionMenu>
-                    <ArtifactActionButton
-                      onPublished={(artifactResult) => {
-                        const artifactMessage: UIMessage = {
-                          id: `artifact-${crypto.randomUUID().slice(0, 8)}`,
-                          parts: [
-                            {
-                              data: {
-                                content: artifactResult.brief.content,
-                                mediaType: artifactResult.brief.mediaType,
-                                summary: artifactResult.brief.summary,
-                                title: artifactResult.brief.title,
-                              },
-                              type: "data-artifact",
-                            },
-                          ],
-                          role: "assistant",
-                        };
-                        setMessages((previousMessages) => [
-                          ...previousMessages,
-                          artifactMessage,
-                        ]);
-                        onChatUpdated?.();
-                      }}
-                    />
+                    {pendingQuestions === null && (
+                      <>
+                        <PromptInputActionMenu>
+                          <PromptInputActionMenuTrigger />
+                          <PromptInputActionMenuContent>
+                            <PromptInputActionAddAttachments />
+                          </PromptInputActionMenuContent>
+                        </PromptInputActionMenu>
+                        <ArtifactActionButton
+                          onPublished={(artifactResult) => {
+                            const artifactMessage: UIMessage = {
+                              id: `artifact-${crypto.randomUUID().slice(0, 8)}`,
+                              parts: [
+                                {
+                                  data: {
+                                    content: artifactResult.brief.content,
+                                    mediaType: artifactResult.brief.mediaType,
+                                    summary: artifactResult.brief.summary,
+                                    title: artifactResult.brief.title,
+                                  },
+                                  type: "data-artifact",
+                                },
+                              ],
+                              role: "assistant",
+                            };
+                            setMessages((previousMessages) => [
+                              ...previousMessages,
+                              artifactMessage,
+                            ]);
+                            onChatUpdated?.();
+                          }}
+                        />
+                      </>
+                    )}
                   </PromptInputTools>
                   <PromptInputSubmit
                     disabled={false}
@@ -810,6 +954,32 @@ function ChatConversation({
   );
 }
 
+/** Skeleton view shown while the restored conversation loads. */
+export function ChatSkeleton() {
+  return (
+    <div className="flex size-full flex-col overflow-hidden">
+      <div className="mx-auto w-full max-w-3xl flex-1 space-y-6 overflow-hidden px-4 py-6">
+        <div className="flex justify-start">
+          <Skeleton className="h-14 w-2/3 rounded-2xl" />
+        </div>
+        <div className="flex justify-end">
+          <Skeleton className="h-10 w-1/2 rounded-2xl" />
+        </div>
+        <div className="flex justify-start">
+          <Skeleton className="h-24 w-3/4 rounded-2xl" />
+        </div>
+        <div className="flex justify-end">
+          <Skeleton className="h-8 w-1/3 rounded-2xl" />
+        </div>
+      </div>
+      <div className="mx-auto w-full max-w-3xl px-4 pb-4">
+        <Skeleton className="h-28 w-full rounded-xl" />
+      </div>
+    </div>
+  );
+}
+
+/** Skeleton view shown while the restored conversation loads. */
 export default function Chat({
   chatId,
   onChatUpdated,
@@ -822,11 +992,7 @@ export default function Chat({
   const restoredState = useRestoredMessages(persistedMessages);
 
   if (restoredState.status === "restoring") {
-    return (
-      <div className="text-muted-foreground flex size-full items-center justify-center text-sm">
-        Restoring conversation...
-      </div>
-    );
+    return <ChatSkeleton />;
   }
 
   // useChat only reads `messages` on mount, so the conversation component

@@ -2,7 +2,11 @@ import { validateUIMessages } from "ai";
 import type { UIMessage } from "ai";
 import { z } from "zod";
 
-const artifactDataSchema = z.object({
+/**
+ * Shape of the `data-artifact` UI part payload, shared between message
+ * restoration and inline artifact rendering.
+ */
+export const artifactDataSchema = z.object({
   content: z.string(),
   mediaType: z.string(),
   reviewUrl: z.string().url().optional(),

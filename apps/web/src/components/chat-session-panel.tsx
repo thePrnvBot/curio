@@ -12,6 +12,11 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
+import {
+  toArtifactToolEntry,
+  toInlineDataArtifact,
+} from "@/utils/chat-schemas";
+
 type SessionEntryKind =
   | "artifact"
   | "image"
@@ -49,10 +54,6 @@ const ENTRY_KIND_LABELS: Record<SessionEntryKind, string> = {
   link: "Links",
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function classifyMediaEntry(mediaType: string): SessionEntryKind {
   if (mediaType.startsWith("image/")) {
     return "image";
@@ -72,21 +73,16 @@ function pushCreateArtifactEntry(
   messageId: string,
   toolCallId: string
 ): void {
-  if (!isRecord(partInput)) {
+  const parsedInput = toArtifactToolEntry(partInput);
+  if (parsedInput === null) {
     return;
   }
-  const artifactTitle =
-    typeof partInput.title === "string" ? partInput.title : undefined;
-  const artifactFilename =
-    typeof partInput.filename === "string" ? partInput.filename : undefined;
-  const artifactMediaType =
-    typeof partInput.mediaType === "string" ? partInput.mediaType : undefined;
   entries.push({
     kind: "artifact",
     key: `tool-${toolCallId}`,
-    mediaType: artifactMediaType,
+    mediaType: parsedInput.mediaType,
     messageId,
-    title: artifactTitle ?? artifactFilename ?? "Artifact",
+    title: parsedInput.title ?? parsedInput.filename ?? "Artifact",
   });
 }
 
@@ -96,19 +92,16 @@ function pushInlineDataArtifactEntry(
   messageId: string,
   partIndex: number
 ): void {
-  if (!isRecord(partData)) {
+  const parsedData = toInlineDataArtifact(partData);
+  if (parsedData === null) {
     return;
   }
-  const inlineTitle =
-    typeof partData.title === "string" ? partData.title : undefined;
-  const inlineMediaType =
-    typeof partData.mediaType === "string" ? partData.mediaType : undefined;
   entries.push({
     kind: "artifact",
     key: `data-${messageId}-${partIndex}`,
-    mediaType: inlineMediaType,
+    mediaType: parsedData.mediaType,
     messageId,
-    title: inlineTitle ?? "Artifact",
+    title: parsedData.title ?? "Artifact",
   });
 }
 

@@ -38,6 +38,12 @@ function ExistingChatRoute() {
         void queryClient.invalidateQueries({
           queryKey: trpc.chats.list.queryKey(),
         });
+        void queryClient.invalidateQueries({
+          queryKey: trpc.courses.list.queryKey(),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: trpc.courses.listBadges.queryKey(),
+        });
       }}
     />
   );

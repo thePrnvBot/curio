@@ -1,5 +1,7 @@
 import { toUIMessage } from "@curio/api/domain/chat";
 import { createArtifactTool } from "@curio/api/infrastructure/artifact-create-tool";
+import { createAskUserTool } from "@curio/api/infrastructure/ask-user-tool";
+import { createCourseTool } from "@curio/api/infrastructure/course-create-tool";
 import { ChatModelProvider } from "@curio/api/services/chat-model-provider";
 import { ChatStore } from "@curio/api/services/chat-store";
 import { ChatTitleComposer } from "@curio/api/services/chat-title-composer";
@@ -12,24 +14,82 @@ import {
   streamText,
   toUIMessageStream,
 } from "ai";
-import type { UIMessage } from "ai";
+import type { ToolUIPart, UIMessage } from "ai";
 import { Effect } from "effect";
 import { z } from "zod";
 
 import {
   auth,
+  createScopedCourse,
   curioFeatures,
   curioRuntime,
   runtimeScopedArtifactPublisher,
 } from "../../services";
 
+const ASK_USER_TOOL_NAME = "ask_user";
+
+/**
+ * Human-in-the-loop reconstruction: an ask_user call can stay unresolved
+ * while the user answers via the question UI. Before the conversation goes
+ * back to the model, those parts are given synthetic outputs so the model
+ * sees a completed tool step and reads the answers from the next user message.
+ */
+function sanitizePendingQuestionTools(
+  conversation: readonly UIMessage[]
+): UIMessage[] {
+  function mapPart(part: unknown): unknown {
+    if (
+      typeof part !== "object" ||
+      part === null ||
+      (part as ToolUIPart).type !== `tool-${ASK_USER_TOOL_NAME}`
+    ) {
+      return part;
+    }
+    const questionPart = part as ToolUIPart;
+    if (typeof questionPart.state !== "string") {
+      return part;
+    }
+    if (questionPart.state === "output-available") {
+      return part;
+    }
+    return {
+      ...questionPart,
+      state: "output-available",
+      output: {
+        note: "The learner answered these questions; the answers are in the next user message.",
+      },
+    };
+  }
+
+  return conversation.map((message) => {
+    if (message.role !== "assistant") {
+      return message;
+    }
+    let mutated = false;
+    const sanitizedParts = message.parts.map((part) => {
+      const mappedPart = mapPart(part);
+      if (mappedPart !== part) {
+        mutated = true;
+      }
+      return mappedPart as never;
+    });
+    return mutated ? { ...message, parts: sanitizedParts } : message;
+  });
+}
+
 const CHAT_INSTRUCTIONS =
-  "You are Curio, a helpful assistant. " +
+  "You are Curio, the Director - a learning guide that builds courses with the user. " +
   "Answer clearly and use markdown for structure. " +
   "When the user asks you to build a page, document, design, or any publishable deliverable, " +
   "use the create_artifact tool to publish it. " +
   "Do NOT include the artifact review link or any 'View the artifact' link in your reply text; " +
-  "the chat renders the published artifact itself as an interactive card directly below your message.";
+  "the chat renders the published artifact itself as an interactive card directly below your message. " +
+  "When the user wants to learn something or asks you to create a course: first use the ask_user " +
+  "tool with at most four multiple-choice questions about their level, goal, and preferred pace; " +
+  "the UI collects the answers and they arrive in the next user message. Then use the create_course " +
+  "tool to build a course of 6 to 10 mixed lessons (video, cards, animation, recap), and tell the " +
+  "user their course is ready in the Courses tab. Never invent course creation results: only report " +
+  "courses that the create_course tool actually created.";
 
 const MAX_STREAM_STEPS = 8;
 
@@ -363,11 +423,19 @@ export const Route = createFileRoute("/api/chat")({
           ? createArtifactTool(runtimeScopedArtifactPublisher)
           : undefined;
 
+        const courseTools = createCourseTool((creationRequest) =>
+          createScopedCourse(userId, creationRequest)
+        );
+        const questionTools = createAskUserTool();
+
+        const sanitizedConversation =
+          sanitizePendingQuestionTools(conversation);
+
         return await createChatResponse({
           abortSignal: request.signal,
           chatId,
-          conversation,
-          tools: artifactTools,
+          conversation: sanitizedConversation,
+          tools: { ...courseTools, ...questionTools, ...artifactTools },
           userId,
         });
       },
