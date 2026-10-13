@@ -20,6 +20,7 @@ import type { ComponentProps, HTMLAttributes, ReactElement } from "react";
 import {
   Children,
   createContext,
+  isValidElement,
   memo,
   useCallback,
   useContext,
@@ -198,10 +199,10 @@ export const MessageBranchContent = ({
   ...props
 }: MessageBranchContentProps) => {
   const { currentBranch, setBranches, branches } = useMessageBranch();
-  // React.Children.toArray also flattens arrays, giving the branch list the
-  // exact ReactElement shape the branch context expects.
+  // Children.toArray flattens list children; isValidElement keeps only real
+  // elements, which is what the branch context tracks (keys and indices).
   const childrenArray = useMemo(
-    () => Children.toArray(children),
+    () => Children.toArray(children).filter(isValidElement),
     [children]
   );
 
