@@ -1,8 +1,34 @@
 import { Badge } from "@curio/ui/components/badge";
 import { Skeleton } from "@curio/ui/components/skeleton";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { BookOpenCheckIcon, CompassIcon, SparklesIcon, TrophyIcon } from "lucide-react";
+import {
+  BookOpenCheckIcon,
+  CompassIcon,
+  LoaderIcon,
+  Share2Icon,
+  SparklesIcon,
+  Trash2Icon,
+  TrophyIcon,
+} from "lucide-react";
+import { toast } from "sonner";
+import { useState, type ReactElement } from "react";
+
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@curio/ui/components/alert-dialog";
 
 import { useTRPC } from "@/utils/trpc";
 
@@ -60,11 +86,7 @@ function CurrentCourseSection({
 }) {
   return (
     <section>
-      <SectionHeader
-        note={activeCourse === null && !loading ? "No active course yet" : undefined}
-      >
-        Currently learning
-      </SectionHeader>
+      <SectionHeader>Currently learning</SectionHeader>
       {loading ? (
         <div className="bg-card rounded-xl border p-5 md:p-6">
           <div className="mb-4 flex items-center justify-between gap-4">
@@ -121,15 +143,7 @@ function CourseListSection({
 }) {
   return (
     <section>
-      <SectionHeader
-        note={
-          courses.length === 0 && !loading
-            ? undefined
-            : "New lessons appear here as the Director builds them."
-        }
-      >
-        Your courses
-      </SectionHeader>
+      <SectionHeader>Your courses</SectionHeader>
       {loading ? (
         <div className="grid gap-5 sm:grid-cols-2">
           {COURSE_CARD_SKELETONS.map((index) => (
@@ -155,32 +169,37 @@ function CourseListSection({
           {courses.map((course, courseIndex) => {
             const isActive = course.status === "active" && courseIndex === 0;
             return (
-              <Link
-                className="hover:border-ring block w-full overflow-hidden rounded-xl border"
+              <div
+                className="group relative w-full overflow-hidden rounded-xl border"
                 key={course.id}
-                params={{ courseId: course.id }}
-                to="/courses/$courseId"
               >
-                <div className="bg-muted/50 relative aspect-video w-full">
-                  <span className="text-muted-foreground/40 absolute inset-0 flex items-center justify-center text-xs tracking-widest uppercase">
-                    Video slot
-                  </span>
-                  <div className="from-background via-background/70 absolute inset-x-0 bottom-0 bg-gradient-to-t to-transparent p-4 pt-12">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate font-medium">
-                        {course.title}
-                      </span>
-                      {isActive ? <Badge>In progress</Badge> : null}
-                    </div>
-                    <p className="text-muted-foreground mt-1 text-sm">
-                      {`${course.completedLessonCount} of ${course.lessonCount} lessons · ${progressPercent(course)}%`}
-                    </p>
-                    <div className="mt-3 flex items-center gap-2">
-                      <Badge variant="outline">{`${course.lessonCount} lessons`}</Badge>
+                <Link
+                  className="hover:border-ring block"
+                  params={{ courseId: course.id }}
+                  to="/courses/$courseId"
+                >
+                  <div className="bg-muted/50 relative aspect-video w-full">
+                    <span className="text-muted-foreground/40 absolute inset-0 flex items-center justify-center text-xs tracking-widest uppercase">
+                      Video slot
+                    </span>
+                    <div className="from-background via-background/70 absolute inset-x-0 bottom-0 bg-gradient-to-t to-transparent p-4 pt-12">
+                      <div className="flex items-center justify-between gap-2 pr-20">
+                        <span className="truncate font-medium">
+                          {course.title}
+                        </span>
+                        {isActive ? <Badge>In progress</Badge> : null}
+                      </div>
+                      <p className="text-muted-foreground mt-1 text-sm">
+                        {`${course.completedLessonCount} of ${course.lessonCount} lessons · ${progressPercent(course)}%`}
+                      </p>
+                      <div className="mt-3 flex items-center gap-2">
+                        <Badge variant="outline">{`${course.lessonCount} lessons`}</Badge>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </Link>
+                </Link>
+                <CardActions courseId={course.id} title={course.title} />
+              </div>
             );
           })}
         </div>
@@ -188,6 +207,128 @@ function CourseListSection({
         empty
       )}
     </section>
+  );
+}
+
+const cardActionButtonClass =
+  "bg-background/85 text-muted-foreground hover:text-foreground hover:bg-background rounded-lg border p-2 shadow-xs transition-colors";
+
+/** Share + delete icon buttons, pinned to the card's bottom-right corner.
+ * Sits outside the card link so the nested-element rules stay clean. */
+function CardActions({
+  courseId,
+  title,
+}: {
+  courseId: string;
+  title: string;
+}): ReactElement {
+  const trpc = useTRPC();
+  const queryClient = useQueryClient();
+  const [isSharing, setIsSharing] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const deleteCourse = useMutation(trpc.courses.delete.mutationOptions());
+
+  async function shareCourse(): Promise<void> {
+    const shareUrl = `${window.location.origin}/courses/${courseId}`;
+    // Native share sheet where available (mobile); clipboard otherwise.
+    if (typeof navigator.share === "function") {
+      try {
+        setIsSharing(true);
+        await navigator.share({ title, url: shareUrl });
+        return;
+      } catch {
+        // User dismissed the sheet - fall through to copying the link.
+      } finally {
+        setIsSharing(false);
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      toast.success("Course link copied");
+    } catch {
+      toast.error("Could not copy the course link");
+    }
+  }
+
+  function confirmDelete(): void {
+    deleteCourse.mutate(
+      { courseId },
+      {
+        onError: (mutationError) => {
+          toast.error(mutationError.message);
+        },
+        onSuccess: () => {
+          setConfirmOpen(false);
+          void queryClient.invalidateQueries({
+            queryKey: trpc.courses.pathKey(),
+          });
+          toast.success(`Course "${title}" deleted`);
+        },
+      }
+    );
+  }
+
+  return (
+    <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+      <div className="absolute right-3 bottom-3 z-10 flex items-center gap-1.5">
+        <button
+          aria-label={`Share ${title}`}
+          className={cardActionButtonClass}
+          disabled={isSharing || deleteCourse.isPending}
+          onClick={() => {
+            void shareCourse();
+          }}
+          title="Share course"
+          type="button"
+        >
+          <Share2Icon className="size-4" aria-hidden="true" />
+        </button>
+        <AlertDialogTrigger
+          aria-label={`Delete ${title}`}
+          className={
+            deleteCourse.isPending
+              ? `${cardActionButtonClass} text-destructive`
+              : `${cardActionButtonClass} hover:border-destructive/40 hover:text-destructive`
+          }
+          title="Delete course"
+        >
+          {deleteCourse.isPending ? (
+            <LoaderIcon className="animate-spin size-4" aria-hidden="true" />
+          ) : (
+            <Trash2Icon className="size-4" aria-hidden="true" />
+          )}
+        </AlertDialogTrigger>
+      </div>
+
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{`Delete "${title}"?`}</AlertDialogTitle>
+          <AlertDialogDescription>
+            The course and its lessons - including progress - are removed
+            permanently. This cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel
+            disabled={deleteCourse.isPending}
+            onClick={() => {
+              setConfirmOpen(false);
+            }}
+          >
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction
+            disabled={deleteCourse.isPending}
+            onClick={() => {
+              confirmDelete();
+            }}
+          >
+            {deleteCourse.isPending ? "Deleting..." : "Delete course"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
@@ -203,15 +344,7 @@ function BadgeShowcaseSection({
 }) {
   return (
     <section>
-      <SectionHeader
-        note={
-          badges.length === 0 && !loading
-            ? undefined
-            : "Share earned badges to your profile or social media."
-        }
-      >
-        Badge showcase
-      </SectionHeader>
+      <SectionHeader>Badge showcase</SectionHeader>
       {loading ? (
         <div className="flex flex-wrap gap-x-7 gap-y-5">
           {BADGE_SKELETONS.map((index) => (
@@ -276,10 +409,6 @@ function CoursesRoute() {
       <div className="mb-8">
         <header>
           <h1 className="text-2xl font-semibold tracking-tight">Courses</h1>
-          <p className="text-muted-foreground mt-1 max-w-xl text-sm text-balance">
-            Courses take shape while you chat with the Director - lessons,
-            animations and recap exercises land here as you learn.
-          </p>
         </header>
       </div>
 
