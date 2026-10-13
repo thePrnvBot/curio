@@ -87,7 +87,10 @@ const CHAT_INSTRUCTIONS =
   "When the user wants to learn something or asks you to create a course: first use the ask_user " +
   "tool with at most four multiple-choice questions about their level, goal, and preferred pace; " +
   "the UI collects the answers and they arrive in the next user message. Then use the create_course " +
-  "tool to build a course of 6 to 10 mixed lessons (video, cards, animation, recap), and tell the " +
+  "tool to build a complete course page: 3 to 6 sections (sidebar headings, each a coherent theme) " +
+  "holding 8 to 12 lessons total, mixing kinds - video walkthroughs with teaching prose, card decks " +
+  "for condensed reads, one or two interactive HTML animations, and recaps with 2-4 crafted quiz " +
+  "questions. Include real teaching content in every lesson; never leave lessons empty. Tell the " +
   "user their course is ready in the Courses tab. Never invent course creation results: only report " +
   "courses that the create_course tool actually created.";
 

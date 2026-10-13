@@ -1,14 +1,6 @@
 import { createCurioRuntime } from "@curio/api/composition/runtime";
 import { ArtifactPublishFailed } from "@curio/api/domain/artifact-publish-failed";
-import type {
-  CourseLessonInput,
-  CourseLessonKind,
-} from "@curio/api/domain/course";
-import { COURSE_LESSON_KINDS } from "@curio/api/domain/course";
-import type {
-  CourseCreationToolRequest,
-  CourseCreationToolResult,
-} from "@curio/api/infrastructure/course-create-tool";
+import type { CourseCreationToolRequest, CourseCreationToolResult } from "@curio/api/infrastructure/course-create-tool";
 import { createDrizzleChatStore } from "@curio/api/infrastructure/drizzle-chat-store";
 import { createDrizzleCourseStore } from "@curio/api/infrastructure/drizzle-course-store";
 import { createMcpArtifactPublisher } from "@curio/api/infrastructure/mcp-artifact-publisher";
@@ -16,6 +8,11 @@ import { createOpenAiCompatibleChatModelProvider } from "@curio/api/infrastructu
 import type { ArtifactPublisherContract } from "@curio/api/services/artifact-publisher";
 import { ArtifactPublisher } from "@curio/api/services/artifact-publisher";
 import { CourseStore } from "@curio/api/services/course-store";
+import type {
+  CourseLessonKind,
+  LessonContent,
+} from "@curio/api/domain/course";
+import { COURSE_LESSON_KINDS } from "@curio/api/domain/course";
 import { createAuth } from "@curio/auth";
 import { createDb } from "@curio/db";
 import { Effect } from "effect";
@@ -89,7 +86,14 @@ export async function createScopedCourse(
       const courseStoreService = yield* CourseStore;
       return yield* courseStoreService.createCourse({
         description: creationRequest.description ?? "",
-        lessons: toLessonInputs(creationRequest.lessons),
+        sections: creationRequest.sections.map((section) => ({
+          lessons: section.lessons.map((lesson) => ({
+            content: toLessonContent(lesson),
+            kind: normalizeLessonKind(lesson.kind),
+            title: lesson.title,
+          })),
+          title: section.title,
+        })),
         title: creationRequest.title,
         userId,
       });
@@ -106,13 +110,66 @@ export async function createScopedCourse(
 
 /** The model supplies lesson kinds as free strings; anything unrecognized
  * degrades to `cards` rather than failing the whole creation. */
-function toLessonInputs(
-  lessons: readonly { kind: string; title: string }[]
-): readonly CourseLessonInput[] {
-  return lessons.map((lesson) => ({
-    kind: (COURSE_LESSON_KINDS as readonly string[]).includes(lesson.kind)
-      ? (lesson.kind as CourseLessonKind)
-      : "cards",
-    title: lesson.title,
-  }));
+function normalizeLessonKind(kind: string): CourseLessonKind {
+  return (
+    COURSE_LESSON_KINDS.find((candidate) => candidate === kind) ?? "cards"
+  );
+}
+
+/** Tool content is already validated by the tool's zod schema; this only
+ * normalizes kinds/defaults into the stored `LessonContent` union. */
+function toLessonContent(
+  lesson: CourseCreationToolRequest["sections"][number]["lessons"][number]
+): LessonContent | undefined {
+  const rawContent = lesson.content;
+  if (rawContent === undefined) {
+    return undefined;
+  }
+  switch (rawContent.kind) {
+    case "animation": {
+      return {
+        body: rawContent.body,
+        html: rawContent.html,
+        kind: "animation",
+      };
+    }
+    case "cards": {
+      return {
+        body: rawContent.body,
+        cards: rawContent.cards.map((card) => ({
+          body: card.body,
+          title: card.title,
+        })),
+        kind: "cards",
+      };
+    }
+    case "recap": {
+      return {
+        kind: "recap",
+        questions: rawContent.questions.map((question) => ({
+          answerIndex: Math.max(
+            0,
+            Math.min(question.answerIndex, question.options.length - 1)
+          ),
+          explanation: question.explanation,
+          options: question.options,
+          prompt: question.prompt,
+        })),
+      };
+    }
+    case "video": {
+      return {
+        body: rawContent.body,
+        kind: "video",
+        videoUrl: rawContent.videoUrl,
+      };
+    }
+    default: {
+      return {
+        body: "",
+        cards: [],
+        kind: "cards",
+      };
+    }
+  }
 }

@@ -9,13 +9,6 @@ export class CourseOperationFailed extends Error {
   }
 }
 
-export class CourseNotFound extends Error {
-  constructor(params: { courseId: string }) {
-    super(`Course ${params.courseId} was not found`);
-    this.name = "CourseNotFound";
-  }
-}
-
 function describeCourseCause(cause: unknown): string {
   if (cause instanceof Error) {
     return cause.message;
