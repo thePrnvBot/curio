@@ -512,72 +512,121 @@ function PendingQuestionsPanel({
   onAnswered: (answersText: string) => void;
   pendingQuestions: PendingQuestions;
 }) {
-  const initialAnswers: (string | null)[] = pendingQuestions.questions.map(
-    () => null
-  );
-  const [selectedOptions, setSelectedOptions] = useState(initialAnswers);
-  const allAnswered = selectedOptions.every(
-    (selectedOption) => selectedOption !== null
-  );
+  const questions = pendingQuestions.questions;
+  const [currentStep, setCurrentStep] = useState(0);
+  const [pickedOptions, setPickedOptions] = useState<
+    Record<number, number | undefined>
+  >({});
 
-  function sendAnswers(): void {
+  const isLastStep = currentStep >= questions.length - 1;
+  const currentQuestion = questions[currentStep];
+
+  function sendAllAnswers(): void {
     const header = pendingQuestions.intro;
-    const answerLines = pendingQuestions.questions.map(
-      (question, questionIndex) => {
-        const answer = selectedOptions[questionIndex] ?? "";
-        return `- ${question.question}: ${answer}`;
-      }
-    );
+    const answerLines = questions.map((question, questionIndex) => {
+      const pickedOption = pickedOptions[questionIndex];
+      const answer =
+        pickedOption === undefined ? "" : question.options[pickedOption];
+      return `- ${question.question}: ${answer}`;
+    });
     onAnswered([header, ...answerLines].join("\n"));
   }
 
+  function pickOption(optionIndex: number): void {
+    setPickedOptions({
+      ...pickedOptions,
+      [currentStep]: optionIndex,
+    });
+    // One question per step: picking lands on the next question; the last
+    // pick sends the whole answer set.
+    if (isLastStep) {
+      sendAllAnswers();
+      return;
+    }
+    setCurrentStep(currentStep + 1);
+  }
+
   return (
-    <div className="px-3 py-3">
-      <p className="text-muted-foreground mb-3 text-xs leading-relaxed">
-        {pendingQuestions.intro}
-      </p>
-      <div className="space-y-3">
-        {pendingQuestions.questions.map((question, questionIndex) => (
-          <div key={question.question}>
-            <p className="mb-1.5 text-sm font-medium">{question.question}</p>
-            <div className="flex flex-wrap gap-1.5">
-              {question.options.map((option) => {
-                const isSelected = selectedOptions[questionIndex] === option;
-                return (
-                  <button
-                    aria-pressed={isSelected}
-                    className={
-                      isSelected
-                        ? "bg-primary text-primary-foreground rounded-md px-2.5 py-1 text-xs font-medium"
-                        : "hover:bg-accent hover:text-accent-foreground text-muted-foreground rounded-md border px-2.5 py-1 text-xs font-medium transition-colors"
-                    }
-                    key={option}
-                    onClick={() => {
-                      setSelectedOptions((previousOptions) => {
-                        const nextOptions = [...previousOptions];
-                        nextOptions[questionIndex] = isSelected ? null : option;
-                        return nextOptions;
-                      });
-                    }}
-                    type="button"
-                  >
-                    {option}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+    // data-align="block-start" tells the wrapping InputGroup this render owns
+    // the whole input area - without it the group stays h-7 tall and clips
+    // the questionnaire (the textarea unlock is unavailable in this state).
+    <div
+      className="flex min-h-[280px] w-full flex-col px-5 py-5"
+      data-align="block-start"
+    >
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <p className="text-muted-foreground text-sm leading-relaxed">
+          {pendingQuestions.intro}
+        </p>
+        <p className="text-muted-foreground shrink-0 text-xs tabular-nums">
+          {currentStep + 1} of {questions.length}
+        </p>
       </div>
-      <div className="mt-4 flex justify-end">
+
+      {/* Fixed-size stage: the header and progress row stay put while
+        stepping, and longer question/option sets scroll inside the reserved
+        box instead of shifting the surrounding input. */}
+      <div className="min-h-[190px] w-full flex-1 overflow-y-auto pr-1 [scrollbar-width:thin]">
+        <p className="text-foreground w-full text-base font-medium">
+          {currentQuestion.question}
+        </p>
+        <div className="mt-3 flex w-full flex-col gap-2">
+          {currentQuestion.options.map((option, optionIndex) => {
+            const isPicked = pickedOptions[currentStep] === optionIndex;
+            return (
+              <button
+                aria-pressed={isPicked}
+                className={
+                  isPicked
+                    ? "bg-primary text-primary-foreground w-full rounded-lg border border-primary/60 px-4 py-3 text-left text-[15px] font-medium"
+                    : "hover:bg-accent hover:text-accent-foreground text-muted-foreground w-full rounded-lg border px-4 py-3 text-left text-[15px] transition-colors"
+                }
+                disabled={busy}
+                key={option}
+                onClick={() => {
+                  pickOption(optionIndex);
+                }}
+                type="button"
+              >
+                {option}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="mt-4 flex items-center justify-between">
         <button
-          className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={!allAnswered || busy}
-          onClick={sendAnswers}
+          className="text-muted-foreground hover:text-foreground rounded-md px-2 py-1 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40"
+          disabled={currentStep === 0 || busy}
+          onClick={() => {
+            setCurrentStep(Math.max(currentStep - 1, 0));
+          }}
           type="button"
         >
-          {allAnswered ? "Send answers" : "Answer all questions"}
+          Back
         </button>
+        <div
+          className="flex items-center gap-1.5"
+          aria-label={`Question ${currentStep + 1} of ${questions.length}`}
+        >
+          {questions.map((question, questionIndex) => {
+            const isAnswered = pickedOptions[questionIndex] !== undefined;
+            const isCurrent = questionIndex === currentStep;
+            return (
+              <span
+                className={
+                  isCurrent
+                    ? "bg-foreground size-2 rounded-full"
+                    : isAnswered
+                      ? "bg-primary size-2 rounded-full"
+                      : "bg-muted-foreground/40 size-2 rounded-full"
+                }
+                key={question.question}
+              />
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -744,7 +793,13 @@ function ChatConversation({
                         }
                         return (
                           <Reasoning
-                            isStreaming={part.state === "streaming"}
+                            defaultOpen={false}
+                            // Aborts and errors leave the in-flight part at
+                            // "streaming"; the global status tells us the
+                            // stream is truly over, so "Thinking..." stops.
+                            isStreaming={
+                              part.state === "streaming" && isStreaming
+                            }
                             key={partIndex}
                           >
                             <ReasoningTrigger />
@@ -883,23 +938,22 @@ function ChatConversation({
                 }}
                 onSubmit={handleMessageSubmit}
               >
-                {pendingQuestions !== null && (
+                {pendingQuestions !== null ? (
+                  /* While the Director is asking, the input area IS the
+                    questionnaire: no textarea, no tools, no submit button. */
                   <PendingQuestionsPanel
                     busy={isStreaming}
                     onAnswered={sendPendingQuestionAnswers}
                     pendingQuestions={pendingQuestions}
                   />
-                )}
-                {pendingQuestions === null && <PromptInputAttachmentsDisplay />}
-                {pendingQuestions === null && (
-                  <PromptInputBody>
-                    <PromptInputTextarea placeholder="Ask Curio anything..." />
-                  </PromptInputBody>
-                )}
-                <PromptInputFooter>
-                  <PromptInputTools>
-                    {pendingQuestions === null && (
-                      <>
+                ) : (
+                  <>
+                    <PromptInputAttachmentsDisplay />
+                    <PromptInputBody>
+                      <PromptInputTextarea placeholder="Ask Curio anything..." />
+                    </PromptInputBody>
+                    <PromptInputFooter>
+                      <PromptInputTools>
                         <PromptInputActionMenu>
                           <PromptInputActionMenuTrigger />
                           <PromptInputActionMenuContent>
@@ -930,17 +984,17 @@ function ChatConversation({
                             onChatUpdated?.();
                           }}
                         />
-                      </>
-                    )}
-                  </PromptInputTools>
-                  <PromptInputSubmit
-                    disabled={false}
-                    onStop={() => {
-                      stop();
-                    }}
-                    status={status}
-                  />
-                </PromptInputFooter>
+                      </PromptInputTools>
+                      <PromptInputSubmit
+                        disabled={false}
+                        onStop={() => {
+                          stop();
+                        }}
+                        status={status}
+                      />
+                    </PromptInputFooter>
+                  </>
+                )}
               </PromptInput>
             </PromptInputProvider>
           </div>
