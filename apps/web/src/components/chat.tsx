@@ -70,7 +70,6 @@ import { Skeleton } from "@curio/ui/components/skeleton";
 
 import ChatSessionPanel from "@/components/chat-session-panel";
 import {
-  ChatAnswerOption,
   decodeArtifactHeight,
   decodeGeneratedArtifactError,
   PendingQuestions,
