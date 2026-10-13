@@ -2,7 +2,7 @@ import { toUIMessage } from "@curio/api/domain/chat";
 import { createArtifactTool } from "@curio/api/infrastructure/artifact-create-tool";
 import { createAskUserTool } from "@curio/api/infrastructure/ask-user-tool";
 import { createCourseTool } from "@curio/api/infrastructure/course-create-tool";
-import { ChatModelProvider } from "@curio/api/services/chat-model-provider";
+import type { LanguageModel } from "ai";
 import { ChatStore } from "@curio/api/services/chat-store";
 import { ChatTitleComposer } from "@curio/api/services/chat-title-composer";
 import { createFileRoute } from "@tanstack/react-router";
@@ -21,6 +21,7 @@ import { z } from "zod";
 import {
   auth,
   createScopedCourse,
+  createScopedModel,
   curioFeatures,
   curioRuntime,
   runtimeScopedArtifactPublisher,
@@ -284,23 +285,18 @@ async function composeAndPersistChatTitle({
 async function createChatResponse({
   abortSignal,
   chatId,
+  chatModel,
   conversation,
   tools,
   userId,
 }: {
   abortSignal: AbortSignal;
   chatId: string;
+  chatModel: LanguageModel;
   conversation: UIMessage[];
   tools: Parameters<typeof streamText>[0]["tools"];
   userId: string;
 }): Promise<Response> {
-  const chatModel = await curioRuntime.runPromise(
-    Effect.gen(function* chatModelPerChat() {
-      const chatModelProvider = yield* ChatModelProvider;
-      return yield* chatModelProvider.getChatModel(chatId);
-    })
-  );
-
   const streamResult = streamText({
     abortSignal,
     instructions: CHAT_INSTRUCTIONS,
@@ -437,6 +433,7 @@ export const Route = createFileRoute("/api/chat")({
         return await createChatResponse({
           abortSignal: request.signal,
           chatId,
+          chatModel: await createScopedModel(userId, chatId),
           conversation: sanitizedConversation,
           tools: { ...courseTools, ...questionTools, ...artifactTools },
           userId,

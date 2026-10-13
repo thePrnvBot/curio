@@ -4,6 +4,7 @@ import type { CurioRuntime } from "../composition/runtime";
 import type { Context } from "../context";
 import { createChatsRouter } from "./chats";
 import { createCoursesRouter } from "./courses";
+import { createModelSettingsRouter } from "./model-settings";
 
 export const t = initTRPC.context<Context>().create();
 
@@ -32,6 +33,7 @@ export function createAppRouter(runtime: CurioRuntime) {
     chats: createChatsRouter(runtime),
     courses: createCoursesRouter(runtime),
     healthCheck: publicProcedure.query(() => "OK"),
+    modelSettings: createModelSettingsRouter(runtime),
     privateData: protectedProcedure.query(({ ctx }) => ({
       message: "This is private",
       user: ctx.session.user,
