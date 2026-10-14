@@ -12,10 +12,7 @@ import { ArtifactPublisher } from "@curio/api/services/artifact-publisher";
 import { ChatModelProvider } from "@curio/api/services/chat-model-provider";
 import { CourseStore } from "@curio/api/services/course-store";
 import { ModelSettingsStore } from "@curio/api/services/model-settings-store";
-import type {
-  CourseLessonKind,
-  LessonContent,
-} from "@curio/api/domain/course";
+import type { CourseLessonKind, LessonContent } from "@curio/api/domain/course";
 import { COURSE_LESSON_KINDS } from "@curio/api/domain/course";
 import type { LanguageModel } from "ai";
 import { createAuth } from "@curio/auth";
@@ -193,6 +190,21 @@ function toLessonContent(
           explanation: question.explanation,
           options: question.options,
           prompt: question.prompt,
+        })),
+      };
+    }
+    case "guided-explanation": {
+      return {
+        intro: rawContent.intro,
+        kind: "guided-explanation",
+        steps: rawContent.steps.map((step) => ({
+          durationMs: step.durationMs,
+          narration: step.narration,
+          visual: {
+            kind: step.visual.kind,
+            language: step.visual.language,
+            source: step.visual.source,
+          },
         })),
       };
     }

@@ -47,11 +47,34 @@ export interface RecapLessonContent {
   readonly questions: readonly RecapExercise[];
 }
 
+/** Narrated, step-sequenced explanation rendered one step per view.
+ * Steps reveal code or prose in sync with the narration script. */
+export interface GuidedExplanationVisual {
+  readonly kind: "code" | "markdown";
+  /** Syntax hint for code visuals. */
+  readonly language?: string;
+  readonly source: string;
+}
+
+export interface GuidedExplanationStep {
+  readonly narration: string;
+  readonly visual: GuidedExplanationVisual;
+  /** Optional authored duration hint (ms); the player refines it. */
+  readonly durationMs?: number;
+}
+
+export interface GuidedExplanationLessonContent {
+  readonly kind: "guided-explanation";
+  readonly intro?: string;
+  readonly steps: readonly GuidedExplanationStep[];
+}
+
 export type LessonContent =
   | VideoLessonContent
   | CardLessonContent
   | AnimationLessonContent
-  | RecapLessonContent;
+  | RecapLessonContent
+  | GuidedExplanationLessonContent;
 
 export const course = pgTable(
   "course",

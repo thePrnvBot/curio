@@ -1,10 +1,25 @@
 import type { LessonContent } from "@curio/db/schema/course";
 
-export const COURSE_LESSON_KINDS = ["video", "cards", "animation", "recap"] as const;
+export const COURSE_LESSON_KINDS = [
+  "video",
+  "cards",
+  "animation",
+  "recap",
+  "guided-explanation",
+] as const;
 
 export type CourseLessonKind = (typeof COURSE_LESSON_KINDS)[number];
 
-export type { LessonContent, VideoLessonContent, CardLessonContent, AnimationLessonContent, RecapExercise, RecapLessonContent } from "@curio/db/schema/course";
+export type {
+  GuidedExplanationStep,
+  GuidedExplanationLessonContent,
+  LessonContent,
+  VideoLessonContent,
+  CardLessonContent,
+  AnimationLessonContent,
+  RecapExercise,
+  RecapLessonContent,
+} from "@curio/db/schema/course";
 
 export interface CourseSummary {
   readonly id: string;

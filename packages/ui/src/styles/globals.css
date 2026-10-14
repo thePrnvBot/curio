@@ -144,3 +144,25 @@
 .animate-chat-activity-sweep {
   animation: chat-activity-sweep 1.6s ease-in-out infinite;
 }
+
+/* Guided explanation player stage: orchestrated entrance motion for each
+ * synchronized visual (code lines / prose blocks), staggered by an inline
+ * --guided-delay set per element. */
+@keyframes guided-block-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+.animate-guided-block-in {
+  opacity: 0;
+  animation: guided-block-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: var(--guided-delay, 0ms);
+}

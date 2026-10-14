@@ -84,6 +84,7 @@ const KNOWN_LESSON_KINDS: readonly CourseLessonKind[] = [
   "cards",
   "animation",
   "recap",
+  "guided-explanation",
 ];
 
 function normalizeLessonKind(kind: string): CourseLessonKind {

@@ -70,11 +70,31 @@ const recapContentSchema = z.object({
     .max(10),
 });
 
+const guidedExplanationSchema = z.object({
+  kind: z.literal("guided-explanation"),
+  intro: z.string().max(2000).optional(),
+  steps: z
+    .array(
+      z.object({
+        narration: z.string().min(1).max(1200),
+        visual: z.object({
+          kind: z.enum(["code", "markdown"]),
+          language: z.string().max(40).optional(),
+          source: z.string().min(1).max(8000),
+        }),
+        durationMs: z.number().int().min(1000).max(600000).optional(),
+      })
+    )
+    .min(2)
+    .max(12),
+});
+
 const lessonContentSchema = z.discriminatedUnion("kind", [
   videoContentSchema,
   cardsContentSchema,
   animationContentSchema,
   recapContentSchema,
+  guidedExplanationSchema,
 ]);
 
 const lessonInputSchema = z.object({

@@ -57,11 +57,50 @@ const recapContentSchema = z.object({
     .max(10),
 });
 
+const guidedExplanationSchema = z.object({
+  intro: z.string().max(2000).optional(),
+  kind: z.literal("guided-explanation"),
+  steps: z
+    .array(
+      z.object({
+        durationMs: z.number().int().min(1000).max(600000).optional(),
+        narration: z
+          .string()
+          .min(1)
+          .max(1200)
+          .describe(
+            "What the narrator says over this step - one or two sentences"
+          ),
+        visual: z.object({
+          kind: z.enum(["code", "markdown"]),
+          language: z
+            .string()
+            .max(40)
+            .optional()
+            .describe("Syntax hint for code visuals, e.g. 'typescript'"),
+          source: z
+            .string()
+            .min(1)
+            .max(8000)
+            .describe(
+              "What is on screen during this step: a code excerpt, formula, diagram source or structured notes that SUPPORT the narration. Never repeat narration text - the visual must add information the narration alone does not show. Code excerpts under 80 lines; if a markdown visual, prefer a short heading plus a table or code fence, not prose sentences from the narration. Show the last example again only if the step builds on it"
+            ),
+        }),
+      })
+    )
+    .min(2)
+    .max(12)
+    .describe(
+      "3-10 sequential steps; each is one narration beat with a SHORT code excerpt or prose on screen. Split long walkthroughs into more steps instead of pasting large files"
+    ),
+});
+
 const lessonContentSchema = z.discriminatedUnion("kind", [
   videoContentSchema,
   cardsContentSchema,
   animationContentSchema,
   recapContentSchema,
+  guidedExplanationSchema,
 ]);
 
 /**
@@ -83,6 +122,19 @@ export interface CourseCreationToolRequest {
               readonly explanation?: string;
               readonly options: readonly string[];
               readonly prompt: string;
+            }[];
+          }
+        | {
+            readonly kind: "guided-explanation";
+            readonly intro?: string;
+            readonly steps: readonly {
+              readonly durationMs?: number;
+              readonly narration: string;
+              readonly visual: {
+                readonly kind: "code" | "markdown";
+                readonly language?: string;
+                readonly source: string;
+              };
             }[];
           };
       readonly kind: string;
@@ -122,8 +174,11 @@ export function createCourseTool(
         "'video' for taught walkthroughs (body prose, optional videoUrl), " +
         "'cards' for bite-sized reads (a deck of title+body cards), " +
         "'animation' for an interactive explainer (self-contained HTML with " +
-        "inline styles/scripts shown on an iframe), and 'recap' for graded " +
-        "recall exercises (2-4 questions with options and answerIndex). " +
+        "inline styles/scripts shown on an iframe), 'recap' for graded " +
+        "recall exercises (2-4 questions with options and answerIndex), and " +
+        "'guided-explanation' for concept or code walkthroughs taught step " +
+        "by step - 3 to 10 narration beats, each showing the code or prose " +
+        "on screen while the narration reads it. " +
         "Every lesson MUST include content: never create lessons without it.",
       execute: async (input) => createScopedCourse(input),
       inputSchema: z.object({
@@ -140,7 +195,13 @@ export function createCourseTool(
                   z.object({
                     content: lessonContentSchema,
                     kind: z
-                      .enum(["video", "cards", "animation", "recap"])
+                      .enum([
+                        "video",
+                        "cards",
+                        "animation",
+                        "recap",
+                        "guided-explanation",
+                      ])
                       .describe("How this lesson is delivered"),
                     title: z
                       .string()

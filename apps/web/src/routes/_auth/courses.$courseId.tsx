@@ -10,15 +10,25 @@ import {
   Link,
   useNavigate,
 } from "@tanstack/react-router";
-import type { LessonContent } from "@curio/db/schema/course";
+import type {
+  GuidedExplanationLessonContent,
+  GuidedExplanationStep,
+  LessonContent,
+} from "@curio/db/schema/course";
 import {
   ArrowLeftIcon,
   CheckIcon,
   ChevronRightIcon,
+  PauseIcon,
+  PlayIcon,
+  SkipBackIcon,
+  SkipForwardIcon,
   XIcon,
 } from "lucide-react";
-import { useMemo, useState, type ReactElement } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement } from "react";
 
+import { highlightCode } from "@curio/ui/components/ai-elements/code-block";
+import { playInteractionCue } from "@/utils/sound";
 import { useTRPC } from "@/utils/trpc";
 
 export const Route = createFileRoute("/_auth/courses/$courseId")({
@@ -46,6 +56,7 @@ const LESSON_KIND_LABELS: Record<string, string> = {
   cards: "Cards",
   recap: "Recap",
   video: "Video",
+  "guided-explanation": "Guided explanation",
 };
 
 /** The single lesson the reader currently has open: first incomplete lesson,
@@ -126,10 +137,10 @@ function CoursePageRoute() {
         );
 
   return (
-    <div className="bg-background text-foreground min-h-svh">
-      <div className="grid md:grid-cols-[300px_1fr]">
+    <div className="bg-background text-foreground flex min-h-0 flex-1 flex-col">
+      <div className="grid min-h-0 flex-1 md:grid-cols-[300px_1fr]">
         {/* Sidebar: course, headings (sections), subheadings (lessons) */}
-        <aside className="border-border/70 bg-sidebar md:min-h-svh md:border-r">
+        <aside className="border-border/70 bg-sidebar md:h-full md:overflow-y-auto md:border-r">
           <div className="space-y-6 px-5 py-6">
             <Link
               className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs font-medium"
@@ -201,14 +212,27 @@ function CoursePageRoute() {
           </div>
         </aside>
 
-        {/* Center: lesson content */}
-        <main className="flex min-h-svh flex-col">
-          <div className="mx-auto w-full max-w-2xl flex-1 px-6 py-10">
-            {lessonQuery.isPending || selectedLessonId === null ? (
+        {/* Center: lesson content — scrolls internally, never the page */}
+        <main className="flex min-h-0 flex-1 flex-col md:overflow-y-auto">
+          {lessonQuery.isPending || selectedLessonId === null || lessonQuery.isError ? (
+            <div className="mx-auto w-full max-w-2xl flex-1 px-6 py-10">
               <LessonContentSkeleton />
-            ) : lessonQuery.isError ? (
-              <LessonContentSkeleton />
-            ) : (
+            </div>
+          ) : lessonQuery.data.kind === "guided-explanation" &&
+            lessonQuery.data.content !== null &&
+            lessonQuery.data.content.kind === "guided-explanation" ? (
+            <GuidedExplanationPlayer
+              completed={lessonQuery.data.completed}
+              content={lessonQuery.data.content}
+              courseId={courseId}
+              lessonId={lessonQuery.data.id}
+              lessonTitle={lessonQuery.data.title}
+              nextLessonId={nextLesson?.id ?? null}
+              nextLessonTitle={nextLesson?.title ?? null}
+              onGoToLesson={goToLesson}
+            />
+          ) : (
+            <div className="mx-auto w-full max-w-2xl flex-1 px-6 py-10">
               <article>
                 <header className="mb-8">
                   <p className="text-muted-foreground mb-2 text-xs tracking-widest uppercase">
@@ -230,8 +254,8 @@ function CoursePageRoute() {
                   onGoToLesson={goToLesson}
                 />
               </article>
-            )}
-          </div>
+            </div>
+          )}
         </main>
       </div>
     </div>
@@ -324,6 +348,472 @@ interface RecapQuestion {
   readonly explanation?: string;
   readonly options: readonly string[];
   readonly prompt: string;
+}
+
+/** Narrated, step-sequenced explanation player: transcript on the left,
+ * synced visuals on the right, timer-driven playback (no voice yet). */
+function guidedStepDurationMs(step: GuidedExplanationStep): number {
+  if (step.durationMs !== undefined) {
+    return step.durationMs;
+  }
+  const wordCount = step.narration.trim().split(/\s+/).length;
+  return Math.max(2400, Math.round(wordCount * 340) + 900);
+}
+
+/** Sentence segmentation for the transcript: the active sentence lights up
+ * while its step narrates, so the prose reads as one flowing paragraph. */
+function narrationSentences(narration: string): string[] {
+  return narration
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.length > 0);
+}
+
+interface GuidedStageLine {
+  readonly spans: ReadonlyArray<{
+    readonly content: string;
+    readonly style?: CSSProperties;
+  }>;
+}
+
+/** Code stage with shiki highlighting and staggered line-in motion. Uses the
+ * shared highlighter cache from the CodeBlock module; falls back to plain
+ * monospace until tokens are ready, identical layout either way. */
+function GuidedCodeStage(props: {
+  source: string;
+  language: string;
+}): ReactElement {
+  const [highlighted, setHighlighted] = useState<{
+    bg: string;
+    fg: string;
+    lines: GuidedStageLine[];
+  } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    highlightCode(props.source as never, props.language as never, (result) => {
+      if (cancelled) {
+        return;
+      }
+      setHighlighted({
+        bg: result.bg,
+        fg: result.fg,
+        lines: result.tokens.map((line) => ({
+          spans: line.map((token) => {
+            let fontStyle: "italic" | undefined;
+            let fontWeight: "bold" | undefined;
+            let textDecoration: "underline" | undefined;
+            if ((token.fontStyle ?? 0) & 1) {
+              fontStyle = "italic";
+            }
+            if ((token.fontStyle ?? 0) & 2) {
+              fontWeight = "bold";
+            }
+            if ((token.fontStyle ?? 0) & 4) {
+              textDecoration = "underline";
+            }
+            return {
+              content: token.content,
+              style: {
+                backgroundColor: token.bgColor,
+                color: token.color,
+                fontStyle,
+                fontWeight,
+                textDecoration,
+                ...token.htmlStyle,
+              } as CSSProperties,
+            };
+          }),
+        })),
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [props.language, props.source]);
+
+  const fallbackLines: GuidedStageLine[] = props.source
+    .split("\n")
+    .map((line) => ({ spans: [{ content: line }] }));
+
+  const lines = highlighted === null ? fallbackLines : highlighted.lines;
+
+  return (
+    <pre
+      className="font-mono text-sm leading-6 overflow-x-auto p-4"
+      style={
+        highlighted === null
+          ? undefined
+          : { backgroundColor: highlighted.bg, color: highlighted.fg }
+      }
+    >
+      <code>
+        {lines.map((line, lineIndex) => (
+          <span
+            className="animate-guided-block-in block"
+            key={lineIndex}
+            style={
+              {
+                "--guided-delay": `${120 + Math.min(lineIndex * 45, 900)}ms`,
+              } as CSSProperties
+            }
+          >
+            {line.spans.length === 0
+              ? "\u00A0"
+              : line.spans.map((span, spanIndex) => (
+                  <span key={spanIndex} style={span.style}>
+                    {span.content}
+                  </span>
+                ))}
+          </span>
+        ))}
+      </code>
+    </pre>
+  );
+}
+
+/** Markdown stage: prose blocks drift in one by one, in narration order. */
+function GuidedMarkdownStage(props: { source: string }): ReactElement {
+  const blocks = props.source
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter((block) => block.length > 0);
+
+  return (
+    <div className="space-y-4 text-sm leading-relaxed">
+      {blocks.map((block, blockIndex) => (
+        <div
+          className="animate-guided-block-in"
+          key={blockIndex}
+          style={
+            {
+              "--guided-delay": `${120 + Math.min(blockIndex * 90, 800)}ms`,
+            } as CSSProperties
+          }
+        >
+          <MessageResponse>{block}</MessageResponse>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GuidedExplanationPlayer(props: {
+  content: GuidedExplanationLessonContent;
+  lessonTitle: string;
+  completed: boolean;
+  courseId: string;
+  lessonId: string;
+  nextLessonId: string | null;
+  nextLessonTitle: string | null;
+  onGoToLesson: (lessonId: string | null) => void;
+}): ReactElement {
+  const steps = props.content.steps;
+  const [stepIndex, setStepIndex] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [stepProgress, setStepProgress] = useState(0);
+
+  // Restart the explanation when a different guided lesson is opened.
+  useEffect(() => {
+    setStepIndex(0);
+    setStepProgress(0);
+    setIsPlaying(true);
+  }, [props.lessonId]);
+
+  const isLastStep = stepIndex === steps.length - 1;
+
+  function goToStep(nextStepIndex: number): void {
+    const boundedIndex = Math.max(0, Math.min(nextStepIndex, steps.length - 1));
+    if (boundedIndex !== stepIndex) {
+      playInteractionCue("select", {
+        direction: boundedIndex > stepIndex ? "forward" : "back",
+        emphasis: "subtle",
+      });
+    }
+    setStepIndex(boundedIndex);
+    setStepProgress(0);
+  }
+
+  // rAF-driven step clock: drives the per-step progress bar and advances to
+  // the next step when the current step's duration elapses. Pausing simply
+  // tears the clock down; progress freezes at the frozen frame.
+  useEffect(() => {
+    if (!isPlaying) {
+      return undefined;
+    }
+    setStepProgress(0);
+    const stepDurationMs = guidedStepDurationMs(steps[stepIndex]);
+    const startedAt = performance.now();
+    let rafId = 0;
+    const tick = (): void => {
+      const percent = Math.min(
+        ((performance.now() - startedAt) / stepDurationMs) * 100,
+        100,
+      );
+      setStepProgress(percent);
+      if (percent < 100) {
+        rafId = requestAnimationFrame(tick);
+      }
+    };
+    rafId = requestAnimationFrame(tick);
+    const advanceTimer = window.setTimeout(() => {
+      if (isLastStep) {
+        setIsPlaying(false);
+        return;
+      }
+      setStepIndex((currentStepIndex) => currentStepIndex + 1);
+    }, stepDurationMs);
+    return () => {
+      cancelAnimationFrame(rafId);
+      window.clearTimeout(advanceTimer);
+    };
+  }, [isPlaying, stepIndex, isLastStep, steps]);
+
+  // Keyboard: space toggles playback, arrows step (institute-style).
+  useEffect(() => {
+    function handleKeyDown(keyboardEvent: KeyboardEvent): void {
+      const eventTarget = keyboardEvent.target as HTMLElement | null;
+      if (
+        eventTarget !== null &&
+        ["INPUT", "TEXTAREA", "SELECT"].includes(eventTarget.tagName)
+      ) {
+        return;
+      }
+      if (keyboardEvent.code === "Space") {
+        keyboardEvent.preventDefault();
+        playInteractionCue("toggle");
+        setIsPlaying((currentlyPlaying) => !currentlyPlaying);
+        return;
+      }
+      if (keyboardEvent.code === "ArrowRight") {
+        keyboardEvent.preventDefault();
+        goToStep(stepIndex + 1);
+        return;
+      }
+      if (keyboardEvent.code === "ArrowLeft") {
+        keyboardEvent.preventDefault();
+        goToStep(stepIndex - 1);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [stepIndex, steps.length]);
+
+  // Transcript: the narration reads as one continuous paragraph; the sentence
+  // currently being narrated lights up. Sentences are flattened step by step
+  // so the lit index tracks playback across step boundaries.
+  const transcriptSentences = useMemo(() => {
+    const sentences: Array<{ stepIndex: number; text: string }> = [];
+    steps.forEach((step, stepRefIndex) => {
+      for (const sentence of narrationSentences(step.narration)) {
+        sentences.push({ stepIndex: stepRefIndex, text: sentence });
+      }
+    });
+    return sentences;
+  }, [steps]);
+  const stepSentenceOffsets = useMemo(() => {
+    const offsets: number[] = [];
+    let offset = 0;
+    for (const step of steps) {
+      offsets.push(offset);
+      offset += narrationSentences(step.narration).length;
+    }
+    return offsets;
+  }, [steps]);
+
+  const stepSentenceCount = Math.max(
+    1,
+    narrationSentences(steps[stepIndex]?.narration ?? "").length
+  );
+  const activeSentenceIndex = Math.min(
+    stepSentenceOffsets[stepIndex] +
+      Math.floor((stepProgress / 100) * stepSentenceCount),
+    transcriptSentences.length - 1
+  );
+
+  // Keep the lit sentence in view.
+  const transcriptRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    transcriptRef.current
+      ?.querySelector(`[data-transcript-sentence="${activeSentenceIndex}"]`)
+      ?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [activeSentenceIndex]);
+
+  const currentStep = steps[stepIndex];
+
+  const transcript = (
+    <aside className="border-border/70 w-full shrink-0 border-b lg:h-full lg:w-[360px] lg:border-b-0 lg:border-r">
+      <div className="flex h-full flex-col">
+        <div className="px-6 pt-5 pb-3">
+          <p className="text-muted-foreground text-[11px] font-medium tracking-widest uppercase">
+            Guided explanation
+          </p>
+          <h2 className="text-foreground mt-1 text-sm font-semibold">
+            {props.lessonTitle}
+          </h2>
+        </div>
+        <div
+          className="min-h-0 flex-1 overflow-y-auto px-6 pb-6"
+          ref={transcriptRef}
+        >
+          <p className="text-[15px] leading-7">
+            {transcriptSentences.map(
+              (sentence, sentenceRefIndex) => {
+                const isPast = sentenceRefIndex < activeSentenceIndex;
+                const isActive = sentenceRefIndex === activeSentenceIndex;
+                return (
+                  <span key={sentenceRefIndex}>
+                    <span
+                      aria-current={isActive || undefined}
+                      className={
+                        isActive
+                          ? "bg-primary/10 text-foreground cursor-pointer rounded-sm px-0.5 -mx-0.5 font-medium [box-decoration-break:clone] transition-colors duration-200"
+                          : isPast
+                            ? "text-foreground/55 cursor-pointer [box-decoration-break:clone] transition-colors duration-200 hover:text-foreground/80"
+                            : "text-foreground/25 cursor-pointer [box-decoration-break:clone] transition-colors duration-200 hover:text-foreground/60"
+                      }
+                      data-transcript-sentence={sentenceRefIndex}
+                      onClick={() => {
+                        goToStep(sentence.stepIndex);
+                      }}
+                    >
+                      {sentence.text}
+                    </span>
+                    {sentenceRefIndex < transcriptSentences.length - 1
+                      ? " "
+                      : null}
+                  </span>
+                );
+              }
+            )}
+          </p>
+        </div>
+      </div>
+    </aside>
+  );
+
+  const stageAndControls = (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex flex-1 flex-col overflow-y-auto p-6">
+        <div className="mx-auto w-full max-w-3xl">
+          {props.content.intro !== undefined && stepIndex === 0 && (
+            <div
+              className="text-muted-foreground mb-4 mt-2 text-sm leading-relaxed"
+              style={
+                {
+                  animationDelay: "60ms",
+                } as CSSProperties
+              }
+            >
+              <MessageResponse>{props.content.intro}</MessageResponse>
+            </div>
+          )}
+
+          <div
+            className="bg-card rounded-xl border"
+            key={stepIndex}
+          >
+            <div className="flex items-center justify-between border-b px-4 py-2.5">
+              <p className="text-muted-foreground text-xs font-medium tracking-widest uppercase">
+                {currentStep.visual.kind === "code"
+                  ? (currentStep.visual.language ?? "Code")
+                  : "Notes"}
+              </p>
+              <p className="text-muted-foreground text-xs tabular-nums">
+                {`Step ${stepIndex + 1} of ${steps.length}`}
+              </p>
+            </div>
+            <div className="p-5">
+              {currentStep.visual.kind === "code" ? (
+                <GuidedCodeStage
+                  language={currentStep.visual.language ?? "text"}
+                  source={currentStep.visual.source}
+                />
+              ) : (
+                <GuidedMarkdownStage source={currentStep.visual.source} />
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="border-border/70 border-t px-6 pt-4 pb-2">
+        <div className="bg-muted mx-auto mb-3 h-1 w-full max-w-3xl overflow-hidden rounded-full">
+          <div
+            className="bg-primary h-full rounded-full transition-[width] duration-150 ease-linear"
+            style={{ width: `${Math.min(stepProgress, 100)}%` }}
+          />
+        </div>
+        <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Button
+              aria-label={isPlaying ? "Pause explanation" : "Play explanation"}
+              disabled={isLastStep && !isPlaying}
+              onClick={() => {
+                playInteractionCue("toggle");
+                setIsPlaying((currentlyPlaying) => !currentlyPlaying);
+              }}
+              size="icon"
+              variant={isPlaying ? "secondary" : "default"}
+            >
+              {isPlaying ? (
+                <PauseIcon className="size-4" aria-hidden="true" />
+              ) : (
+                <PlayIcon className="size-4" aria-hidden="true" />
+              )}
+            </Button>
+            <Button
+              aria-label="Previous step"
+              disabled={stepIndex === 0}
+              onClick={() => {
+                goToStep(stepIndex - 1);
+              }}
+              size="icon"
+              variant="ghost"
+            >
+              <SkipBackIcon className="size-4" aria-hidden="true" />
+            </Button>
+            <Button
+              aria-label="Next step"
+              disabled={isLastStep}
+              onClick={() => {
+                goToStep(stepIndex + 1);
+              }}
+              size="icon"
+              variant="ghost"
+            >
+              <SkipForwardIcon className="size-4" aria-hidden="true" />
+            </Button>
+            <span className="text-muted-foreground text-xs tabular-nums">
+              {isPlaying ? "Playing" : isLastStep ? "Complete" : "Paused"} ·{" "}
+              {stepIndex + 1}/{steps.length}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="mx-auto w-full max-w-3xl px-6 pb-6">
+        <LessonCompletionControls
+          className="mt-2"
+          completed={props.completed}
+          courseId={props.courseId}
+          lessonId={props.lessonId}
+          nextLessonId={props.nextLessonId}
+          nextLessonTitle={props.nextLessonTitle}
+          onGoToLesson={props.onGoToLesson}
+        />
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="grid h-full min-h-0 flex-1 lg:grid-cols-[minmax(300px,380px)_1fr]">
+      {transcript}
+      {stageAndControls}
+    </div>
+  );
 }
 
 function RecapExerciseView(props: {
@@ -490,6 +980,9 @@ function LessonCompletionControls(props: {
   nextLessonId: string | null;
   nextLessonTitle: string | null;
   onGoToLesson: (lessonId: string | null) => void;
+  /** How far the block sits below the content above it; the article layout
+   * uses the loose default, the player passes a tight one. */
+  className?: string;
 }): ReactElement {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
@@ -516,6 +1009,9 @@ function LessonCompletionControls(props: {
       });
       if (result.badge !== undefined && result.badge !== null) {
         setEarnedBadgeLabel(result.badge.label);
+        playInteractionCue("success", { emphasis: "strong" });
+      } else {
+        playInteractionCue("success", { emphasis: "subtle" });
       }
       props.onGoToLesson(props.nextLessonId);
     } finally {
@@ -524,14 +1020,14 @@ function LessonCompletionControls(props: {
   }
 
   return (
-    <div className="mt-10">
+    <div className={props.className ?? "mt-10"}>
       {earnedBadgeLabel !== null && (
-        <div className="border-primary/30 bg-primary/10 mb-4 flex items-center gap-2 rounded-lg border px-4 py-3">
+        <div className="border-primary/30 bg-primary/10 mb-3 flex items-center gap-2 rounded-lg border px-4 py-3">
           <Badge>{"New badge"}</Badge>
           <p className="text-sm font-medium">{earnedBadgeLabel}</p>
         </div>
       )}
-      <div className="mt-10 flex items-center justify-between gap-4">
+      <div className="flex items-center justify-between gap-4">
         <div>
           <p className="text-sm font-medium">
             {props.completed
@@ -584,7 +1080,7 @@ function LessonContentSkeleton(): ReactElement {
 
 function CoursePageSkeleton(): ReactElement {
   return (
-    <div className="grid min-h-svh md:grid-cols-[300px_1fr]">
+    <div className="grid min-h-0 flex-1 md:grid-cols-[300px_1fr]">
       <div className="space-y-6 border-r px-5 py-6">
         <Skeleton className="h-4 w-24" />
         <div className="space-y-2">
@@ -612,7 +1108,7 @@ function MissingCourseNotice(props: {
   title: string;
 }): ReactElement {
   return (
-    <div className="flex min-h-svh items-center justify-center px-6">
+    <div className="flex min-h-0 flex-1 items-center justify-center px-6">
       <div className="max-w-md text-center">
         <h1 className="text-xl font-semibold">{props.title}</h1>
         <p className="text-muted-foreground mt-2 text-sm">

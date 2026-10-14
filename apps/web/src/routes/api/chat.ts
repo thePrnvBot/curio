@@ -90,8 +90,11 @@ const CHAT_INSTRUCTIONS =
   "the UI collects the answers and they arrive in the next user message. Then use the create_course " +
   "tool to build a complete course page: 3 to 6 sections (sidebar headings, each a coherent theme) " +
   "holding 8 to 12 lessons total, mixing kinds - video walkthroughs with teaching prose, card decks " +
-  "for condensed reads, one or two interactive HTML animations, and recaps with 2-4 crafted quiz " +
-  "questions. Include real teaching content in every lesson; never leave lessons empty. Tell the " +
+  "for condensed reads, one or two interactive HTML animations, recaps with 2-4 crafted quiz " +
+  "questions, and guided explanations for the concept or code walkthroughs that deserve a " +
+  "narrated, step-by-step reveal (guided explanation steps stay short: a two-sentence " +
+  "narration and one focused code excerpt per step; split longer walkthroughs across steps). " +
+  "Include real teaching content in every lesson; never leave lessons empty. Tell the " +
   "user their course is ready in the Courses tab. Never invent course creation results: only report " +
   "courses that the create_course tool actually created.";
 
