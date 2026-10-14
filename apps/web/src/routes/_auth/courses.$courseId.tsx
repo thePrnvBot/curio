@@ -375,6 +375,66 @@ interface GuidedStageLine {
   }>;
 }
 
+/** Resolve the shiki language for a step's code. The Director may omit
+ * language; guess from the source instead of falling straight to "text",
+ * which removes all syntax color. */
+function guidedCodeLanguageHint(
+  language: string | undefined,
+  source: string
+): string {
+  const aliases: Record<string, string> = {
+    cjs: "javascript",
+    go: "go",
+    js: "javascript",
+    jsx: "jsx",
+    mjs: "javascript",
+    shell: "bash",
+    sh: "bash",
+    ts: "typescript",
+    tsx: "tsx",
+    yml: "yaml",
+    zsh: "bash",
+  };
+  const languageHint = language?.trim().toLowerCase();
+  if (languageHint !== undefined && languageHint !== "") {
+    return aliases[languageHint] ?? languageHint;
+  }
+  if (/\bdef\s+\w+\s*\(|:\s*$/m.test(source) && !/[;{]\s*$/m.test(source)) {
+    return "python";
+  }
+  if (
+    /^\s*(CREATE TABLE|INSERT INTO|SELECT\s|UPDATE\s|ALTER TABLE)/im.test(
+      source
+    )
+  ) {
+    return "sql";
+  }
+  if (
+    source.startsWith("#!") ||
+    /^\s*(cd |sudo |npm |pnpm |yarn |git |curl |echo )/m.test(source)
+  ) {
+    return "bash";
+  }
+  if (
+    /^\s*(const |let |import |export |function |async function)/m.test(
+      source
+    ) ||
+    /=>/m.test(source)
+  ) {
+    return "typescript";
+  }
+  if (/\bfunc\s+\w+\s*\(/.test(source)) {
+    return "go";
+  }
+  if (/\bfn\s+\w+\s*\(|\blet\s+mut\s/.test(source)) {
+    return "rust";
+  }
+  if (/{\s*"[^"]*"\s*:/.test(source)) {
+    return "json";
+  }
+  return "text";
+}
+
 /** Code stage with shiki highlighting and staggered line-in motion. Uses the
  * shared highlighter cache from the CodeBlock module; falls back to plain
  * monospace until tokens are ready, identical layout either way. */
@@ -390,7 +450,11 @@ function GuidedCodeStage(props: {
 
   useEffect(() => {
     let cancelled = false;
-    highlightCode(props.source as never, props.language as never, (result) => {
+    const applyTokens = (result: {
+      bg: string;
+      fg: string;
+      tokens: ReadonlyArray<ReadonlyArray<any>>;
+    }): void => {
       if (cancelled) {
         return;
       }
@@ -425,7 +489,23 @@ function GuidedCodeStage(props: {
           }),
         })),
       });
-    });
+    };
+    // highlightCode is a sync-cache + async-callback API: a cache hit
+    // returns the tokens WITHOUT invoking the callback, so the sync result
+    // must be consumed here too (otherwise revisited steps lose all
+    // highlighting).
+    const cachedTokens = highlightCode(
+      props.source as never,
+      props.language as never
+    );
+    if (cachedTokens !== null) {
+      applyTokens(cachedTokens);
+    }
+    highlightCode(
+      props.source as never,
+      props.language as never,
+      applyTokens
+    );
     return () => {
       cancelled = true;
     };
@@ -439,7 +519,7 @@ function GuidedCodeStage(props: {
 
   return (
     <pre
-      className="font-mono text-sm leading-6 overflow-x-auto p-4"
+      className="font-mono text-sm leading-6 overflow-x-auto p-4 dark:!bg-[var(--shiki-dark-bg)] dark:!text-[var(--shiki-dark)]"
       style={
         highlighted === null
           ? undefined
@@ -460,7 +540,11 @@ function GuidedCodeStage(props: {
             {line.spans.length === 0
               ? "\u00A0"
               : line.spans.map((span, spanIndex) => (
-                  <span key={spanIndex} style={span.style}>
+                  <span
+                    className="dark:!bg-[var(--shiki-dark-bg)] dark:!text-[var(--shiki-dark)]"
+                    key={spanIndex}
+                    style={span.style}
+                  >
                     {span.content}
                   </span>
                 ))}
@@ -781,7 +865,10 @@ function GuidedExplanationPlayer(props: {
             <div className="p-5">
               {currentStep.visual.kind === "code" ? (
                 <GuidedCodeStage
-                  language={currentStep.visual.language ?? "text"}
+                  language={guidedCodeLanguageHint(
+                    currentStep.visual.language,
+                    currentStep.visual.source
+                  )}
                   source={currentStep.visual.source}
                 />
               ) : (
