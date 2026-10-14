@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { TRPCError } from "@trpc/server";
 
-import Chat from "@/components/chat";
+import Chat, { ChatSkeleton } from "@/components/chat";
 import { useTRPC } from "@/utils/trpc";
 
 export const Route = createFileRoute("/_auth/chat/$chatId")({
@@ -22,6 +22,7 @@ export const Route = createFileRoute("/_auth/chat/$chatId")({
     }
   },
   component: ExistingChatRoute,
+  pendingComponent: ChatSkeleton,
 });
 
 function ExistingChatRoute() {

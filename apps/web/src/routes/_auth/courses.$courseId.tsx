@@ -23,6 +23,8 @@ import { useTRPC } from "@/utils/trpc";
 
 export const Route = createFileRoute("/_auth/courses/$courseId")({
   component: CoursePageRoute,
+  // Skeleton over the orb while the course structure resolves on navigation
+  pendingComponent: () => <CoursePageSkeleton />,
   validateSearch: (search: Record<string, unknown>): { lesson?: string } => ({
     lesson:
       typeof search.lesson === "string" && search.lesson.length > 0
