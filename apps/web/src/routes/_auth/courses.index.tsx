@@ -6,6 +6,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { playInteractionCue } from "@/utils/sound";
 import {
   BookOpenCheckIcon,
   CompassIcon,
@@ -245,6 +246,7 @@ function CardActions({
     }
     try {
       await navigator.clipboard.writeText(shareUrl);
+      playInteractionCue("success", { emphasis: "subtle" });
       toast.success("Course link copied");
     } catch {
       toast.error("Could not copy the course link");
@@ -264,6 +266,7 @@ function CardActions({
             queryKey: trpc.courses.pathKey(),
           });
           toast.success(`Course "${title}" deleted`);
+          playInteractionCue("close", { emphasis: "strong" });
         },
       }
     );

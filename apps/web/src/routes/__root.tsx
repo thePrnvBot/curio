@@ -12,8 +12,10 @@ import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import type { TRPCOptionsProxy } from "@trpc/tanstack-react-query";
 import type { ThemeProviderProps } from "next-themes";
 import { ThemeProvider } from "next-themes";
+import { useEffect } from "react";
 
 import Header from "../components/header";
+import { bindInteractionSounds } from "@/utils/sound";
 
 import appCss from "../index.css?url";
 
@@ -55,6 +57,12 @@ const themeProviderProps: ThemeProviderProps = {
 };
 
 function RootDocument() {
+  useEffect(() => {
+    // Once for the document: delegated data-cuelume-* bindings + the saved
+    // sound preference. Returns the unbind cleanup.
+    return bindInteractionSounds();
+  }, []);
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>

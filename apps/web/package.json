@@ -34,6 +34,7 @@
     "better-auth": "catalog:",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.2.6",
+    "cuelume": "^0.2.6",
     "dotenv": "^16.6.1",
     "effect": "catalog:",
     "gsap": "^3.15.0",

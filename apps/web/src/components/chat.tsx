@@ -76,6 +76,9 @@ import {
   titleFromMessages,
 } from "@/utils/chat-runtime";
 import {
+  playInteractionCue,
+} from "@/utils/sound";
+import {
   decodeArtifactHeight,
   decodeGeneratedArtifactError,
   PendingQuestions,
@@ -710,10 +713,28 @@ function ChatConversation({
     onChatUpdated?.();
   }, [chatId, isStreaming, messages, onChatUpdated]);
 
+  // Sound: fire outcome cues when a watched stream settles. Stop gets its
+  // own cue in the submit button's onStop handler.
+  const streamSoundStateRef = useRef<"idle" | "running" | "stopped">("idle");
+  useEffect(() => {
+    if (isStreaming) {
+      streamSoundStateRef.current = "running";
+      return;
+    }
+    if (streamSoundStateRef.current !== "running") {
+      return;
+    }
+    streamSoundStateRef.current = "idle";
+    if (!error) {
+      playInteractionCue("ready", { emphasis: "subtle" });
+    }
+  }, [isStreaming, error]);
+
   // Surface stream failures when this conversation is being watched.
   useEffect(() => {
     if (error) {
       toast.error(error.message);
+      playInteractionCue("error");
     }
   }, [error]);
 
@@ -737,6 +758,7 @@ function ChatConversation({
       files: message.files,
       text: hasText ? message.text : "Sent with attachments",
     });
+    playInteractionCue("tap");
   }
 
   function sendPendingQuestionAnswers(answersText: string): void {
@@ -997,6 +1019,10 @@ function ChatConversation({
                       <PromptInputSubmit
                         disabled={false}
                         onStop={() => {
+                          playInteractionCue("close");
+                          // Consumed before the settle effect runs, so a
+                          // stopped stream doesn't also play the ready cue.
+                          streamSoundStateRef.current = "idle";
                           stop();
                         }}
                         status={status}

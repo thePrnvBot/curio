@@ -198,6 +198,9 @@ importers:
       cn:
         specifier: ^0.2.6
         version: 0.2.6
+      cuelume:
+        specifier: ^0.2.6
+        version: 0.2.6
       dotenv:
         specifier: ^16.6.1
         version: 16.6.1
@@ -3069,6 +3072,9 @@ packages:
 
   csstype@3.2.3:
     resolution: {integrity: sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==}
+
+  cuelume@0.2.6:
+    resolution: {integrity: sha512-ZApqE9PVLmn85YC4gnzySujI6+B4GMT4Q07lh1ji16czIGf7azBSd5KhHjXnNQ167QSadG6W8FdFdfe7SFQ6bw==}
 
   data-urls@8.0.0:
     resolution: {integrity: sha512-JQUCCK+/CAGbGGx618PlFZMXH81Jtj7t73CHv9dd/zVWvxgGT2zLFRjnKb+Ng46GIwcy+f7f88qd4duqllK+WQ==}
@@ -7850,6 +7856,8 @@ snapshots:
   cssesc@3.0.0: {}
 
   csstype@3.2.3: {}
+
+  cuelume@0.2.6: {}
 
   data-urls@8.0.0(@noble/hashes@2.4.0):
     dependencies:

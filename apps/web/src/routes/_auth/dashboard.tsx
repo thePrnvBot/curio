@@ -15,6 +15,12 @@ import { useEffect, useState, type ReactElement } from "react";
 import { toast } from "sonner";
 
 import { getRuntimeSettings } from "@/functions/get-runtime-settings";
+import {
+  disableInteractionSounds,
+  enableInteractionSounds,
+  playInteractionCue,
+  soundSettingEnabled,
+} from "@/utils/sound";
 import { useTRPC } from "@/utils/trpc";
 
 export const Route = createFileRoute("/_auth/dashboard")({
@@ -142,6 +148,7 @@ function ModelProviderSection(): ReactElement {
           void queryClient.invalidateQueries({
             queryKey: trpc.modelSettings.get.queryKey(),
           });
+          playInteractionCue("success");
           toast.success("Model provider saved");
         },
       }
@@ -158,6 +165,7 @@ function ModelProviderSection(): ReactElement {
         void queryClient.invalidateQueries({
           queryKey: trpc.modelSettings.get.queryKey(),
         });
+        playInteractionCue("close", { emphasis: "subtle" });
         toast.success("Using the server default provider again");
       },
     });
@@ -330,10 +338,35 @@ function DashboardRoute(): ReactElement {
   const { session } = Route.useRouteContext();
   const { theme, setTheme } = useTheme();
   const [isHydrated, setIsHydrated] = useState(false);
+  const [isSoundEnabled, setIsSoundEnabled] = useState(false);
+  const [isSoundBusy, setIsSoundBusy] = useState(false);
 
   useEffect(() => {
     setIsHydrated(true);
+    setIsSoundEnabled(soundSettingEnabled());
   }, []);
+
+  async function toggleSound(): Promise<void> {
+    if (isSoundEnabled) {
+      disableInteractionSounds();
+      setIsSoundEnabled(false);
+      return;
+    }
+    setIsSoundBusy(true);
+    try {
+      // Trust the browser's answer over the toggle state: without a
+      // successful unlock nothing will sound.
+      const unlocked = await enableInteractionSounds();
+      setIsSoundEnabled(unlocked);
+      if (unlocked) {
+        playInteractionCue("toggle");
+      } else {
+        toast.error("Audio is unavailable in this browser");
+      }
+    } finally {
+      setIsSoundBusy(false);
+    }
+  }
 
   return (
     <div className="mx-auto w-full max-w-3xl shrink-0 px-6 pt-8 pb-20">
@@ -388,6 +421,9 @@ function DashboardRoute(): ReactElement {
                     }
                     key={option.theme}
                     onClick={() => {
+                      playInteractionCue("select", {
+                        emphasis: "subtle",
+                      });
                       setTheme(option.theme);
                     }}
                     type="button"
@@ -397,6 +433,21 @@ function DashboardRoute(): ReactElement {
                   </button>
                 );
               })}
+            </div>
+          ) : null}
+          {isHydrated ? (
+            <div className="mt-3 flex items-center gap-3">
+              <span className="text-sm font-medium">Interaction sounds</span>
+              <Button
+                disabled={isSoundBusy}
+                onClick={() => {
+                  void toggleSound();
+                }}
+                size="sm"
+                variant="outline"
+              >
+                {isSoundEnabled ? "Sound on" : "Sound off"}
+              </Button>
             </div>
           ) : null}
         </div>
