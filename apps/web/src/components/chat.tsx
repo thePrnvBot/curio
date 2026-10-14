@@ -54,7 +54,7 @@ import {
   ToolHeader,
   ToolInput,
 } from "@curio/ui/components/ai-elements/tool";
-import { DefaultChatTransport, isToolUIPart } from "ai";
+import { isToolUIPart } from "ai";
 import type { ToolUIPart, UIMessage } from "ai";
 import {
   CopyIcon,
@@ -69,6 +69,12 @@ import { toast } from "sonner";
 import { Skeleton } from "@curio/ui/components/skeleton";
 
 import ChatSessionPanel from "@/components/chat-session-panel";
+import {
+  getChatInstance,
+  markChatIdle,
+  markChatStreaming,
+  titleFromMessages,
+} from "@/utils/chat-runtime";
 import {
   decodeArtifactHeight,
   decodeGeneratedArtifactError,
@@ -98,8 +104,6 @@ const CHAT_STARTER_SUGGESTIONS = [
   "Design an SVG logo and publish it for review",
   "Compare optimistic vs pessimistic locking in databases",
 ] as const;
-
-const CHAT_TRANSPORT_API = "/api/chat";
 
 const ARTIFACT_GENERATION_API = "/api/artifacts/generate";
 
@@ -521,10 +525,12 @@ function PendingQuestionsPanel({
   const isLastStep = currentStep >= questions.length - 1;
   const currentQuestion = questions[currentStep];
 
-  function sendAllAnswers(): void {
+  function sendAllAnswers(
+    finalPicks: Record<number, number | undefined> = pickedOptions
+  ): void {
     const header = pendingQuestions.intro;
     const answerLines = questions.map((question, questionIndex) => {
-      const pickedOption = pickedOptions[questionIndex];
+      const pickedOption = finalPicks[questionIndex];
       const answer =
         pickedOption === undefined ? "" : question.options[pickedOption];
       return `- ${question.question}: ${answer}`;
@@ -533,14 +539,15 @@ function PendingQuestionsPanel({
   }
 
   function pickOption(optionIndex: number): void {
-    setPickedOptions({
-      ...pickedOptions,
-      [currentStep]: optionIndex,
-    });
+    // Compose the next picks map up front: the final pick must be part of
+    // the answers that get sent (state updates are async - reading
+    // `pickedOptions` here would send without the last answer).
+    const nextPicks = { ...pickedOptions, [currentStep]: optionIndex };
+    setPickedOptions(nextPicks);
     // One question per step: picking lands on the next question; the last
     // pick sends the whole answer set.
     if (isLastStep) {
-      sendAllAnswers();
+      sendAllAnswers(nextPicks);
       return;
     }
     setCurrentStep(currentStep + 1);
@@ -672,41 +679,43 @@ function ChatConversation({
   initialMessages: UIMessage[];
   onChatUpdated?: () => void;
 }) {
-  const transport = useMemo(
-    () =>
-      new DefaultChatTransport({
-        api: CHAT_TRANSPORT_API,
-        credentials: "include",
-        prepareSendMessagesRequest: ({ id, messages, messageId, trigger }) => ({
-          body: {
-            id,
-            messageId,
-            trigger,
-            message: messages.at(-1),
-          },
-        }),
-      }),
-    []
-  );
+  // The Chat instance lives outside the React tree: navigating away to
+  // another conversation never tears an in-flight stream down, and coming
+  // back reattaches to the same instance mid-stream.
+  const chat = getChatInstance(chatId, initialMessages);
 
-  const { messages, status, sendMessage, regenerate, stop, setMessages } =
-    useChat({
-      id: chatId,
-      messages: initialMessages,
-      onFinish: () => {
-        onChatUpdated?.();
-      },
-      transport,
-      onError: (error) => {
-        toast.error(error.message);
-      },
-    });
+  const { messages, status, sendMessage, regenerate, stop, setMessages, error } =
+    useChat({ chat });
 
   const isStreaming = status === "submitted" || status === "streaming";
   const pendingQuestions = useMemo(
     () => extractPendingQuestions(messages),
     [messages]
   );
+
+  // Show the left-to-right pulse in the right sidebar while this stream
+  // runs, and fire the data-refresh once it settles (even on stop/error).
+  const wasStreamingRef = useRef(false);
+  useEffect(() => {
+    if (isStreaming) {
+      wasStreamingRef.current = true;
+      markChatStreaming(chatId, titleFromMessages(messages));
+      return;
+    }
+    if (!wasStreamingRef.current) {
+      return;
+    }
+    wasStreamingRef.current = false;
+    markChatIdle(chatId);
+    onChatUpdated?.();
+  }, [chatId, isStreaming, messages, onChatUpdated]);
+
+  // Surface stream failures when this conversation is being watched.
+  useEffect(() => {
+    if (error) {
+      toast.error(error.message);
+    }
+  }, [error]);
 
   function handleMessageSubmit(message: PromptInputMessage) {
     if (pendingQuestions !== null) {
