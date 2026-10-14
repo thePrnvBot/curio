@@ -7,9 +7,13 @@ import {
   PlusIcon,
   TrashIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 
+import {
+  getStreamingChatsSnapshot,
+  subscribeToChatActivity,
+} from "@/utils/chat-runtime";
 import { useTRPC } from "@/utils/trpc";
 
 export default function ChatSidebar() {
@@ -19,6 +23,17 @@ export default function ChatSidebar() {
   const params = useParams({ strict: false });
   const activeChatId = params.chatId ?? null;
   const [isCollapsed, setIsCollapsed] = useState(false);
+
+  // Live activity store: which conversations have a Director stream running
+  // right now, even the ones nobody is watching.
+  const streamingChats = useSyncExternalStore(
+    subscribeToChatActivity,
+    getStreamingChatsSnapshot,
+    getStreamingChatsSnapshot
+  );
+  const streamingChatIds = new Set(
+    streamingChats.map((streamingChat) => streamingChat.chatId)
+  );
 
   const chatsQuery = useQuery(trpc.chats.list.queryOptions());
 
@@ -74,6 +89,14 @@ export default function ChatSidebar() {
           <PlusIcon />
           <span className="sr-only">New chat</span>
         </Button>
+        {streamingChats.length > 0 && (
+          <div
+            className="bg-muted relative mx-auto mt-auto h-1 w-6 overflow-hidden rounded-full"
+            title={`${streamingChats.length} chat${streamingChats.length === 1 ? "" : "s"} working`}
+          >
+            <div className="animate-chat-activity-sweep from-transparent via-primary to-transparent absolute inset-y-0 left-0 h-full w-1/3 rounded-full bg-gradient-to-r" />
+          </div>
+        )}
       </aside>
     );
   }
@@ -109,36 +132,63 @@ export default function ChatSidebar() {
             No chats yet. Start a conversation!
           </div>
         )}
-        {chatsQuery.data?.map((chat) => (
-          <div className="group/link flex items-center" key={chat.id}>
-            <Link
-              className={`hover:bg-muted min-w-0 flex-1 truncate px-2 py-1.5 text-xs ${
-                activeChatId === chat.id
-                  ? "bg-muted font-medium"
-                  : "text-muted-foreground"
-              }`}
-              to="/chat/$chatId"
-              params={{ chatId: chat.id }}
+        {chatsQuery.data?.map((chat) => {
+          const isStreamingRow = streamingChatIds.has(chat.id);
+          return (
+            <div
+              className={
+                isStreamingRow
+                  ? "border-primary/20 bg-primary/5 group/link relative flex items-center overflow-hidden border-b"
+                  : "group/link flex items-center"
+              }
+              key={chat.id}
             >
-              {chat.title}
-            </Link>
-            <Button
-              aria-label={`Delete chat ${chat.title}`}
-              className={`opacity-0 transition-opacity group-hover/link:opacity-100 ${
-                activeChatDeletion ? "invisible" : ""
-              }`}
-              disabled={deleteChatMutation.isPending}
-              onClick={() => {
-                deleteChatMutation.mutate({ chatId: chat.id });
-              }}
-              size="xs"
-              variant="ghost"
-            >
-              <TrashIcon />
-              <span className="sr-only">Delete chat</span>
-            </Button>
-          </div>
-        ))}
+              {isStreamingRow && (
+                <div className="bg-muted/50 absolute inset-x-0 bottom-0 h-0.5 overflow-hidden rounded-full">
+                  <div className="animate-chat-activity-sweep from-transparent via-primary to-transparent absolute inset-y-0 left-0 h-full w-1/3 bg-gradient-to-r" />
+                </div>
+              )}
+              <Link
+                className={`hover:bg-muted min-w-0 flex-1 truncate px-2 py-1.5 text-xs ${
+                  activeChatId === chat.id
+                    ? "bg-muted font-medium"
+                    : isStreamingRow
+                      ? "text-foreground"
+                      : "text-muted-foreground"
+                }`}
+                to="/chat/$chatId"
+                params={{ chatId: chat.id }}
+              >
+                {chat.title}
+              </Link>
+              {isStreamingRow ? (
+                <span
+                  aria-hidden="true"
+                  className="text-muted-foreground mr-1 text-[10px]"
+                  title="Director is working…"
+                >
+                  ···
+                </span>
+              ) : (
+                <Button
+                  aria-label={`Delete chat ${chat.title}`}
+                  className={`opacity-0 transition-opacity group-hover/link:opacity-100 ${
+                    activeChatDeletion ? "invisible" : ""
+                  }`}
+                  disabled={deleteChatMutation.isPending}
+                  onClick={() => {
+                    deleteChatMutation.mutate({ chatId: chat.id });
+                  }}
+                  size="xs"
+                  variant="ghost"
+                >
+                  <TrashIcon />
+                  <span className="sr-only">Delete chat</span>
+                </Button>
+              )}
+            </div>
+          );
+        })}
       </nav>
     </aside>
   );

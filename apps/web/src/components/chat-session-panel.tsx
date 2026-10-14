@@ -11,13 +11,9 @@ import {
   MusicIcon,
   PackageIcon,
 } from "lucide-react";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 
-import {
-  getStreamingChatsSnapshot,
-  subscribeToChatActivity,
-  subscribeToChatFinish,
-} from "@/utils/chat-runtime";
+import { subscribeToChatFinish } from "@/utils/chat-runtime";
 import { useTRPC } from "@/utils/trpc";
 import {
   toArtifactToolEntry,
@@ -301,11 +297,6 @@ export default function ChatSessionPanel({
   const [selectedKind, setSelectedKind] = useState<SessionEntryKind | null>(
     null
   );
-  const streamingChats = useSyncExternalStore(
-    subscribeToChatActivity,
-    getStreamingChatsSnapshot,
-    getStreamingChatsSnapshot
-  );
   const trpc = useTRPC();
   const queryClient = useQueryClient();
 
@@ -341,26 +332,6 @@ export default function ChatSessionPanel({
         onSelectKind={setSelectedKind}
         selectedKind={selectedKind}
       />
-      {streamingChats.length > 0 && (
-        <div className="border-border/70 space-y-2 border-b px-2 pb-3">
-          {streamingChats.map((streamingChat) => (
-            <div
-              className="border-primary/20 bg-primary/5 relative overflow-hidden rounded-lg border p-3"
-              key={streamingChat.chatId}
-            >
-              <div className="bg-muted mb-2 h-1 w-full overflow-hidden rounded-full">
-                <div className="animate-chat-activity-sweep from-transparent via-primary to-transparent absolute inset-y-0 left-0 h-full w-1/3 rounded-full bg-gradient-to-r" />
-              </div>
-              <p className="truncate text-xs font-medium">
-                {streamingChat.title}
-              </p>
-              <p className="text-muted-foreground text-[11px]">
-                Director is working…
-              </p>
-            </div>
-          ))}
-        </div>
-      )}
       <div className="flex-1 space-y-3 overflow-y-auto px-2 pb-2">
         {visibleKindOrder.map((entryKind) => {
           const kindEntries = visibleEntries.filter(
