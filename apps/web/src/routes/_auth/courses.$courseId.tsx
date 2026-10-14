@@ -226,7 +226,6 @@ function CoursePageRoute() {
               content={lessonQuery.data.content}
               courseId={courseId}
               lessonId={lessonQuery.data.id}
-              lessonTitle={lessonQuery.data.title}
               nextLessonId={nextLesson?.id ?? null}
               nextLessonTitle={nextLesson?.title ?? null}
               onGoToLesson={goToLesson}
@@ -500,7 +499,6 @@ function GuidedMarkdownStage(props: { source: string }): ReactElement {
 
 function GuidedExplanationPlayer(props: {
   content: GuidedExplanationLessonContent;
-  lessonTitle: string;
   completed: boolean;
   courseId: string;
   lessonId: string;
@@ -646,16 +644,8 @@ function GuidedExplanationPlayer(props: {
   const transcript = (
     <aside className="border-border/70 w-full shrink-0 border-b lg:h-full lg:w-[360px] lg:border-b-0 lg:border-r">
       <div className="flex h-full flex-col">
-        <div className="px-6 pt-5 pb-3">
-          <p className="text-muted-foreground text-[11px] font-medium tracking-widest uppercase">
-            Guided explanation
-          </p>
-          <h2 className="text-foreground mt-1 text-sm font-semibold">
-            {props.lessonTitle}
-          </h2>
-        </div>
         <div
-          className="min-h-0 flex-1 overflow-y-auto px-6 pb-6"
+          className="min-h-0 flex-1 overflow-y-auto px-6 pt-5 pb-6"
           ref={transcriptRef}
         >
           <p className="text-[15px] leading-7">
