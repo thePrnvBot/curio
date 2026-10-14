@@ -641,6 +641,34 @@ function GuidedExplanationPlayer(props: {
 
   const currentStep = steps[stepIndex];
 
+  // Long narrations are broken into sub-lesson modules - contiguous step
+  // groups kept short enough that the transcript never grows tall enough to
+  // need heavy wheel scrolling. Playback crosses module boundaries on its
+  // own as steps advance.
+  const transcriptModules = useMemo(() => {
+    const modules: Array<{ endStep: number; startStep: number }> = [];
+    let moduleStartStep = 0;
+    let moduleCharacters = 0;
+    steps.forEach((step, stepIdx) => {
+      moduleCharacters += step.narration.length;
+      if (moduleCharacters >= 900 && stepIdx + 1 < steps.length) {
+        modules.push({ endStep: stepIdx + 1, startStep: moduleStartStep });
+        moduleStartStep = stepIdx + 1;
+        moduleCharacters = 0;
+      }
+    });
+    modules.push({ endStep: steps.length, startStep: moduleStartStep });
+    return modules;
+  }, [steps]);
+  const activeModule =
+    transcriptModules.find(
+      (module) => stepIndex >= module.startStep && stepIndex < module.endStep
+    ) ?? transcriptModules[0];
+  const activeModuleIndex = transcriptModules.indexOf(activeModule);
+  useEffect(() => {
+    transcriptRef.current?.scrollTo({ top: 0 });
+  }, [activeModuleIndex]);
+
   const transcript = (
     <aside className="border-border/70 w-full shrink-0 border-b lg:h-full lg:w-[360px] lg:border-b-0 lg:border-r">
       <div className="flex h-full flex-col">
@@ -648,37 +676,68 @@ function GuidedExplanationPlayer(props: {
           className="min-h-0 flex-1 overflow-y-auto px-6 pt-5 pb-6"
           ref={transcriptRef}
         >
+          {/* Only the active sub-lesson module is on the page; the rest are
+           * reached through the continuar buttons below. */}
           <p className="text-[15px] leading-7">
-            {transcriptSentences.map(
-              (sentence, sentenceRefIndex) => {
-                const isPast = sentenceRefIndex < activeSentenceIndex;
-                const isActive = sentenceRefIndex === activeSentenceIndex;
-                return (
-                  <span key={sentenceRefIndex}>
-                    <span
-                      aria-current={isActive || undefined}
-                      className={
-                        isActive
-                          ? "bg-primary/10 text-foreground cursor-pointer rounded-sm px-0.5 -mx-0.5 font-medium [box-decoration-break:clone] transition-colors duration-200"
-                          : isPast
-                            ? "text-foreground/55 cursor-pointer [box-decoration-break:clone] transition-colors duration-200 hover:text-foreground/80"
-                            : "text-foreground/25 cursor-pointer [box-decoration-break:clone] transition-colors duration-200 hover:text-foreground/60"
-                      }
-                      data-transcript-sentence={sentenceRefIndex}
-                      onClick={() => {
-                        goToStep(sentence.stepIndex);
-                      }}
-                    >
-                      {sentence.text}
-                    </span>
-                    {sentenceRefIndex < transcriptSentences.length - 1
-                      ? " "
-                      : null}
-                  </span>
-                );
+            {transcriptSentences.map((sentence, sentenceRefIndex) => {
+              if (
+                sentence.stepIndex < activeModule.startStep ||
+                sentence.stepIndex >= activeModule.endStep
+              ) {
+                return null;
               }
-            )}
+              const isPast = sentenceRefIndex < activeSentenceIndex;
+              const isActive = sentenceRefIndex === activeSentenceIndex;
+              return (
+                <span key={sentenceRefIndex}>
+                  <span
+                    aria-current={isActive || undefined}
+                    className={
+                      isActive
+                        ? "bg-primary/10 text-foreground cursor-pointer rounded-sm px-0.5 -mx-0.5 font-medium [box-decoration-break:clone] transition-colors duration-200"
+                        : isPast
+                          ? "text-foreground/55 cursor-pointer [box-decoration-break:clone] transition-colors duration-200 hover:text-foreground/80"
+                          : "text-foreground/35 cursor-pointer [box-decoration-break:clone] transition-colors duration-200 hover:text-foreground/60"
+                    }
+                    data-transcript-sentence={sentenceRefIndex}
+                    onClick={() => {
+                      goToStep(sentence.stepIndex);
+                    }}
+                  >
+                    {sentence.text}
+                  </span>{" "}
+                </span>
+              );
+            })}
           </p>
+          {transcriptModules.length > 1 ? (
+            <div className="mt-5 flex items-center justify-center gap-2">
+              <button
+                aria-label="Previous sub-lesson"
+                className="bg-background text-muted-foreground hover:text-foreground hover:border-ring flex size-7 items-center justify-center rounded-full border transition-colors disabled:opacity-40 disabled:hover:text-muted-foreground"
+                disabled={activeModuleIndex === 0}
+                onClick={() => {
+                  goToStep(
+                    transcriptModules[activeModuleIndex - 1].startStep
+                  );
+                }}
+                type="button"
+              >
+                <ArrowLeftIcon aria-hidden="true" className="size-3.5" />
+              </button>
+              <button
+                aria-label="Next sub-lesson"
+                className="bg-background text-muted-foreground hover:text-foreground hover:border-ring flex size-7 items-center justify-center rounded-full border transition-colors disabled:opacity-40 disabled:hover:text-muted-foreground"
+                disabled={activeModuleIndex === transcriptModules.length - 1}
+                onClick={() => {
+                  goToStep(transcriptModules[activeModuleIndex + 1].startStep);
+                }}
+                type="button"
+              >
+                <ChevronRightIcon aria-hidden="true" className="size-3.5" />
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
     </aside>
