@@ -710,8 +710,12 @@ function GuidedExplanationPlayer(props: {
               );
             })}
           </p>
-          {transcriptModules.length > 1 ? (
-            <div className="mt-5 flex items-center justify-center gap-2">
+        </div>
+        {transcriptModules.length > 1 ? (
+          // Fixed footer below the scroll area: the pager never drifts
+          // with content length.
+          <div className="border-border/70 border-t px-6 py-3">
+            <div className="flex items-center justify-center gap-2">
               <button
                 aria-label="Previous sub-lesson"
                 className="bg-background text-muted-foreground hover:text-foreground hover:border-ring flex size-7 items-center justify-center rounded-full border transition-colors disabled:opacity-40 disabled:hover:text-muted-foreground"
@@ -737,8 +741,8 @@ function GuidedExplanationPlayer(props: {
                 <ChevronRightIcon aria-hidden="true" className="size-3.5" />
               </button>
             </div>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
       </div>
     </aside>
   );
