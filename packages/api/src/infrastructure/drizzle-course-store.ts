@@ -18,7 +18,11 @@ import type {
   CourseSummary,
   LessonCompletionResult,
 } from "../domain/course";
-import { CourseNotFound, LessonNotFound } from "../services/course-store";
+import {
+  BadgeNotFound,
+  CourseNotFound,
+  LessonNotFound,
+} from "../services/course-store";
 import type { CourseStoreContract } from "../services/course-store";
 import { CourseOperationFailed } from "../domain/course-operation-failed";
 
@@ -495,6 +499,24 @@ export function createDrizzleCourseStore(
             throw new Error("Badge insert returned no rows");
           }
           return toBadgeRecord(insertedBadgeRow);
+        })
+      ),
+
+    deleteBadge: (badgeId, userId) =>
+      withCourseError("deleteBadge")(
+        Effect.gen(function* removeBadge() {
+          const deletedBadgeRows = yield* Effect.tryPromise(() =>
+            database
+              .delete(courseBadge)
+              .where(
+                and(eq(courseBadge.id, badgeId), eq(courseBadge.userId, userId))
+              )
+              .returning({ id: courseBadge.id })
+          );
+          if (deletedBadgeRows.length === 0) {
+            return yield* Effect.fail(new BadgeNotFound({ badgeId }));
+          }
+          return yield* Effect.void;
         })
       ),
   };

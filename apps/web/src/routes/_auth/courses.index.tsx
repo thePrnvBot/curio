@@ -11,10 +11,12 @@ import {
   BookOpenCheckIcon,
   CompassIcon,
   LoaderIcon,
+  PencilIcon,
   Share2Icon,
   SparklesIcon,
   Trash2Icon,
   TrophyIcon,
+  XIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useState, type ReactElement } from "react";
@@ -335,7 +337,8 @@ function CardActions({
   );
 }
 
-/** Earned medal row, or an invite to earn the first one. */
+/** Earned medal row, or an invite to earn the first one. The pencil at the
+ * header's right end toggles an edit mode that lets each badge be removed. */
 function BadgeShowcaseSection({
   badges,
   empty,
@@ -345,9 +348,54 @@ function BadgeShowcaseSection({
   empty: React.ReactNode;
   loading: boolean;
 }) {
+  const trpc = useTRPC();
+  const queryClient = useQueryClient();
+  const [isEditing, setIsEditing] = useState(false);
+  const deleteBadge = useMutation(trpc.courses.deleteBadge.mutationOptions());
+
+  function removeBadge(badgeId: string, badgeLabel: string): void {
+    deleteBadge.mutate(
+      { badgeId },
+      {
+        onError: (mutationError) => {
+          toast.error(mutationError.message);
+        },
+        onSuccess: () => {
+          void queryClient.invalidateQueries({
+            queryKey: trpc.courses.pathKey(),
+          });
+          playInteractionCue("close", { emphasis: "strong" });
+          toast.success(`Badge "${badgeLabel}" removed`);
+          // Nothing left to edit: drop out of edit mode.
+          if (badges.length <= 1) {
+            setIsEditing(false);
+          }
+        },
+      }
+    );
+  }
+
+  const canEdit = !loading && badges.length > 0;
+
   return (
     <section>
-      <SectionHeader>Badge showcase</SectionHeader>
+      <div className="flex items-end justify-between gap-3">
+        <SectionHeader>Badge showcase</SectionHeader>
+        {canEdit ? (
+          <button
+            aria-pressed={isEditing}
+            className="text-muted-foreground hover:bg-accent hover:text-foreground inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors"
+            onClick={() => {
+              playInteractionCue("toggle");
+              setIsEditing((currentlyEditing) => !currentlyEditing);
+            }}
+            type="button"
+          >
+            <PencilIcon aria-hidden="true" className="size-3.5" />
+            {isEditing ? "Done" : "Edit"}
+          </button>
+        ) : null}
+      </div>
       {loading ? (
         <div className="flex flex-wrap gap-x-7 gap-y-5">
           {BADGE_SKELETONS.map((index) => (
@@ -365,7 +413,7 @@ function BadgeShowcaseSection({
         <div className="flex flex-wrap gap-x-7 gap-y-5">
           {badges.map((badge) => (
             <div
-              className="flex w-16 flex-col items-center gap-2 text-center"
+              className="relative flex w-16 flex-col items-center gap-2 text-center"
               key={badge.id}
             >
               <span className="ring-primary/20 bg-primary/10 text-primary flex size-14 items-center justify-center rounded-full ring-4">
@@ -374,6 +422,22 @@ function BadgeShowcaseSection({
               <span className="text-foreground text-xs leading-tight font-medium">
                 {badge.label}
               </span>
+              {isEditing ? (
+                <button
+                  aria-label={`Delete badge ${badge.label}`}
+                  className={deleteBadge.isPending
+                    ? "bg-background border-destructive/50 text-destructive absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full border shadow-xs"
+                    : "bg-background hover:bg-destructive hover:text-destructive-foreground hover:border-destructive absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full border shadow-xs transition-colors"}
+                  disabled={deleteBadge.isPending}
+                  onClick={() => {
+                    removeBadge(badge.id, badge.label);
+                  }}
+                  title={`Delete badge ${badge.label}`}
+                  type="button"
+                >
+                  <XIcon aria-hidden="true" className="size-3" />
+                </button>
+              ) : null}
             </div>
           ))}
         </div>

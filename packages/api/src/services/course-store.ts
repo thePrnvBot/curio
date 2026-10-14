@@ -48,6 +48,17 @@ export interface CourseStoreContract {
     readonly label: string;
     readonly userId: string;
   }) => Effect.Effect<CourseBadgeRecord, CourseOperationFailed>;
+  readonly deleteBadge: (
+    badgeId: string,
+    userId: string
+  ) => Effect.Effect<void, CourseOperationFailed | BadgeNotFound>;
+}
+
+export class BadgeNotFound extends Error {
+  constructor(params: { readonly badgeId: string }) {
+    super(`Badge ${params.badgeId} was not found`);
+    this.name = "BadgeNotFound";
+  }
 }
 
 export class CourseNotFound extends Error {

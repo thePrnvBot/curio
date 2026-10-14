@@ -4,7 +4,11 @@ import { z } from "zod";
 
 import { COURSE_LESSON_KINDS } from "../domain/course";
 import type { CurioRuntime } from "../composition/runtime";
-import { CourseNotFound, LessonNotFound } from "../services/course-store";
+import {
+  BadgeNotFound,
+  CourseNotFound,
+  LessonNotFound,
+} from "../services/course-store";
 import { CourseOperationFailed } from "../domain/course-operation-failed";
 import { protectedProcedure, router } from "../index";
 import { CourseStore } from "../services/course-store";
@@ -147,6 +151,13 @@ async function unwrap<T>(value: Promise<T>): Promise<T> {
         message: error.message,
       });
     }
+    if (error instanceof BadgeNotFound) {
+      throw new TRPCError({
+        cause: error,
+        code: "NOT_FOUND",
+        message: error.message,
+      });
+    }
     if (error instanceof CourseOperationFailed) {
       throw new TRPCError({
         cause: error,
@@ -257,7 +268,7 @@ export function createCoursesRouter(runtime: CurioRuntime) {
               if (completion.courseCompleted) {
                 awardedBadge = yield* courseStore.awardBadge({
                   courseId: completion.course.id,
-                  label: `Course complete: ${completion.course.title}`,
+                  label: completion.course.title,
                   userId: ctx.session.user.id,
                 });
               }
@@ -304,6 +315,27 @@ export function createCoursesRouter(runtime: CurioRuntime) {
                 label: input.label,
                 userId: ctx.session.user.id,
               });
+            })
+          )
+        )
+      ),
+
+    deleteBadge: protectedProcedure
+      .input(
+        z.object({
+          badgeId: z.string().min(1).max(64),
+        })
+      )
+      .mutation(({ ctx, input }) =>
+        unwrap(
+          runtime.runPromise(
+            Effect.gen(function* deleteBadge() {
+              const courseStore = yield* CourseStore;
+              yield* courseStore.deleteBadge(
+                input.badgeId,
+                ctx.session.user.id
+              );
+              return { deleted: true };
             })
           )
         )
