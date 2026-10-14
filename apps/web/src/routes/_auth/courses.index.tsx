@@ -397,20 +397,25 @@ function BadgeShowcaseSection({
         ) : null}
       </div>
       {loading ? (
-        <div className="flex flex-wrap gap-x-7 gap-y-5">
-          {BADGE_SKELETONS.map((index) => (
-            <div
-              key={index}
-              className="flex w-16 flex-col items-center gap-2"
-              aria-hidden="true"
-            >
-              <Skeleton className="size-14 rounded-full" />
-              <Skeleton className="h-3 w-12" />
-            </div>
-          ))}
+        // Same card chrome as the empty and earned states, so stepping
+        // between skeleton → earned badges never changes layout language.
+        <div className="bg-card/50 rounded-xl border p-5 md:p-6">
+          <div className="flex flex-wrap gap-x-7 gap-y-5">
+            {BADGE_SKELETONS.map((index) => (
+              <div
+                key={index}
+                className="flex w-16 flex-col items-center gap-2"
+                aria-hidden="true"
+              >
+                <Skeleton className="size-14 rounded-full" />
+                <Skeleton className="h-3 w-12" />
+              </div>
+            ))}
+          </div>
         </div>
       ) : badges.length > 0 ? (
-        <div className="flex flex-wrap gap-x-7 gap-y-5">
+        <div className="bg-card/50 rounded-xl border p-5 md:p-6">
+          <div className="flex flex-wrap gap-x-7 gap-y-5">
           {badges.map((badge) => (
             <div
               className="relative flex w-16 flex-col items-center gap-2 text-center"
@@ -440,6 +445,7 @@ function BadgeShowcaseSection({
               ) : null}
             </div>
           ))}
+          </div>
         </div>
       ) : (
         empty
