@@ -61,7 +61,14 @@ export interface ActiveChatActivity {
 const activity = new Map<string, ActiveChatActivity>();
 const activityListeners = new Set<() => void>();
 
+/** Snapshot must be referentially stable between store changes or
+ * useSyncExternalStore re-renders forever (maximum update depth). */
+const EMPTY_STREAMING_SNAPSHOT: readonly ActiveChatActivity[] = [];
+let streamingSnapshot: readonly ActiveChatActivity[] = EMPTY_STREAMING_SNAPSHOT;
+let streamingSnapshotDirty = true;
+
 function emitActivityChange(): void {
+  streamingSnapshotDirty = true;
   for (const listener of activityListeners) {
     listener();
   }
@@ -74,11 +81,16 @@ export function subscribeToChatActivity(listener: () => void): () => void {
   };
 }
 
-/** Snapshot consumed through React's useSyncExternalStore. */
+/** Snapshot consumed through React's useSyncExternalStore. Rebuilt only when
+ * the activity store changed since the previous call. */
 export function getStreamingChatsSnapshot(): readonly ActiveChatActivity[] {
-  return [...activity.values()].filter(
-    (entry) => entry.streaming,
-  );
+  if (streamingSnapshotDirty) {
+    streamingSnapshot = [...activity.values()].filter(
+      (entry) => entry.streaming,
+    );
+    streamingSnapshotDirty = false;
+  }
+  return streamingSnapshot;
 }
 
 export function markChatStreaming(chatId: string, title: string): void {
