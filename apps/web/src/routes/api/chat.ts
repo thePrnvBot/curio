@@ -2,6 +2,7 @@ import { toUIMessage } from "@curio/api/domain/chat";
 import { createArtifactTool } from "@curio/api/infrastructure/artifact-create-tool";
 import { createAskUserTool } from "@curio/api/infrastructure/ask-user-tool";
 import { createCourseTool } from "@curio/api/infrastructure/course-create-tool";
+import { createWebTools } from "@curio/api/infrastructure/web-tools";
 import type { LanguageModel } from "ai";
 import { ChatStore } from "@curio/api/services/chat-store";
 import { ChatTitleComposer } from "@curio/api/services/chat-title-composer";
@@ -96,7 +97,10 @@ const CHAT_INSTRUCTIONS =
   "narration and one focused code excerpt per step; split longer walkthroughs across steps). " +
   "Include real teaching content in every lesson; never leave lessons empty. Tell the " +
   "user their course is ready in the Courses tab. Never invent course creation results: only report " +
-  "courses that the create_course tool actually created.";
+  "courses that the create_course tool actually created. " +
+  "Use web_search when fresh or external facts matter (releases, versions, prices, news): search first, then " +
+  "web_read only the most promising urls started from web_search results, and cite sources as links in your " +
+  "answer or lesson prose.";
 
 const MAX_STREAM_STEPS = 8;
 
@@ -429,6 +433,7 @@ export const Route = createFileRoute("/api/chat")({
           createScopedCourse(userId, creationRequest)
         );
         const questionTools = createAskUserTool();
+        const webTools = createWebTools();
 
         const sanitizedConversation =
           sanitizePendingQuestionTools(conversation);
@@ -438,7 +443,12 @@ export const Route = createFileRoute("/api/chat")({
           chatId,
           chatModel: await createScopedModel(userId, chatId),
           conversation: sanitizedConversation,
-          tools: { ...courseTools, ...questionTools, ...artifactTools },
+          tools: {
+            ...courseTools,
+            ...questionTools,
+            ...artifactTools,
+            ...webTools,
+          },
           userId,
         });
       },
