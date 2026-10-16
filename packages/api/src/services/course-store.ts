@@ -3,9 +3,13 @@ import { Context } from "effect";
 
 import type {
   CourseBadgeRecord,
+  CourseChunkPlanInput,
+  CourseLessonContentInput,
+  CourseLessonWrittenResult,
   CourseCreationInput,
   CourseDetail,
   CourseLessonDetail,
+  CourseScaffoldResult,
   CourseSummary,
   LessonCompletionResult,
 } from "../domain/course";
@@ -25,6 +29,19 @@ export interface CourseStoreContract {
   readonly createCourse: (
     creationInput: CourseCreationInput
   ) => Effect.Effect<CourseSummary, CourseOperationFailed>;
+  /** Streamed creation, step 1: persist the outline (title + section +
+   * lesson shells without content) and hand back the lesson identifiers the
+   * model fills one `create_lesson` call at a time. */
+  readonly createCourseScaffold: (
+    planInput: CourseChunkPlanInput
+  ) => Effect.Effect<CourseScaffoldResult, CourseOperationFailed>;
+  /** Streamed creation, step 2..N: fill one lesson's finished content. */
+  readonly writeCourseLessonContent: (
+    writeInput: CourseLessonContentInput
+  ) => Effect.Effect<
+    CourseLessonWrittenResult,
+    CourseOperationFailed | CourseNotFound | LessonNotFound
+  >;
   /** Sidebar structure for the course page; empty for unknown/no-owner. */
   readonly getCourseStructure: (
     courseId: string,

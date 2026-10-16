@@ -1,8 +1,9 @@
-import { tool } from "ai";
+﻿import { tool } from "ai";
 import type { ToolSet } from "ai";
 import { z } from "zod";
 
 export const CREATE_COURSE_TOOL_NAME = "create_course";
+export const CREATE_LESSON_TOOL_NAME = "create_lesson";
 
 const teachingProseSchema = z
   .string()
@@ -104,83 +105,116 @@ const lessonContentSchema = z.discriminatedUnion("kind", [
 ]);
 
 /**
- * Matches the CourseCreationInput the CourseStore accepts — sections of
- * lessons, each lesson shipping its own structured content.
+ * Chunked creation: `create_course` carries an outline (no lesson content)
+ * and persists the course shell immediately; `create_lesson` streams each
+ * lesson's finished content in a follow-up call, so the learner's course
+ * page builds up live instead of one giant generation.
  */
-export interface CourseCreationToolRequest {
-  readonly description: string | undefined;
-  readonly sections: readonly {
-    readonly lessons: readonly {
-      readonly content:
-        | { readonly kind: "video"; body: string; videoUrl?: string }
-        | { readonly kind: "cards"; body?: string; cards: readonly { title: string; body: string }[] }
-        | { readonly kind: "animation"; body: string; html: string }
-        | {
-            readonly kind: "recap";
-            readonly questions: readonly {
-              readonly answerIndex: number;
-              readonly explanation?: string;
-              readonly options: readonly string[];
-              readonly prompt: string;
-            }[];
-          }
-        | {
-            readonly kind: "guided-explanation";
-            readonly intro?: string;
-            readonly steps: readonly {
-              readonly durationMs?: number;
-              readonly narration: string;
-              readonly visual: {
-                readonly kind: "code" | "markdown";
-                readonly language?: string;
-                readonly source: string;
-              };
-            }[];
-          };
-      readonly kind: string;
-      readonly title: string;
-    }[];
+export interface CourseChunkPlanToolSection {
+  readonly lessons: readonly {
+    readonly kind: string;
     readonly title: string;
   }[];
   readonly title: string;
 }
 
-export interface CourseCreationToolResult {
+export interface CourseChunkPlanToolRequest {
+  readonly description: string | undefined;
+  readonly sections: readonly CourseChunkPlanToolSection[];
+  readonly title: string;
+}
+
+export interface CourseScaffoldToolResult {
   readonly course: {
     readonly id: string;
     readonly lessonCount: number;
     readonly title: string;
   };
+  readonly lessons: readonly {
+    readonly courseId: string;
+    readonly id: string;
+    readonly kind: string;
+    readonly position: number;
+    readonly sectionTitle: string;
+    readonly title: string;
+  }[];
+}
+
+/** The structured content payload for one lesson, zod-validated upstream. */
+export type LessonContentToolPayload = {
+  readonly kind: "video";
+  readonly body: string;
+  readonly videoUrl?: string;
+} | {
+  readonly kind: "cards";
+  readonly body?: string;
+  readonly cards: readonly { readonly body: string; readonly title: string }[];
+} | {
+  readonly kind: "animation";
+  readonly body: string;
+  readonly html: string;
+} | {
+  readonly kind: "recap";
+  readonly questions: readonly {
+    readonly answerIndex: number;
+    readonly explanation?: string;
+    readonly options: readonly string[];
+    readonly prompt: string;
+  }[];
+} | {
+  readonly kind: "guided-explanation";
+  readonly intro?: string;
+  readonly steps: readonly {
+    readonly durationMs?: number;
+    readonly narration: string;
+    readonly visual: {
+      readonly kind: "code" | "markdown";
+      readonly language?: string;
+      readonly source: string;
+    };
+  }[];
+};
+
+export interface CreateLessonToolRequest {
+  readonly content: LessonContentToolPayload;
+  readonly courseId: string;
+  readonly lessonId: string;
+}
+
+export interface CreateLessonToolResult {
+  readonly done: boolean;
+  readonly lessonId: string;
+  readonly position: number;
+  readonly title: string;
 }
 
 /**
- * Wires the Director's course creation into the chat toolset. The callback is
- * provided by the web app, which scopes the CourseStore to the logged-in user
- * through the Curio runtime.
+ * Wires the Director's chunked course creation into the chat toolset. The
+ * callbacks are provided by the web app, which scopes the CourseStore to the
+ * logged-in user through the Curio runtime.
  */
-export function createCourseTool(
-  createScopedCourse: (
-    creationRequest: CourseCreationToolRequest
-  ) => Promise<CourseCreationToolResult>
-): ToolSet {
+export function createCourseTool(chunks: {
+  createScopedCourseLesson: (
+    createLessonRequest: CreateLessonToolRequest
+  ) => Promise<CreateLessonToolResult>;
+  createScopedCourseScaffold: (
+    planRequest: CourseChunkPlanToolRequest
+  ) => Promise<CourseScaffoldToolResult>;
+}): ToolSet {
   return {
     [CREATE_COURSE_TOOL_NAME]: tool({
       description:
-        "Create a full course for the learner: an LMS-style course page with " +
-        "sections (sidebar headings), lessons (subheadings) and finished " +
-        "content for every lesson. Use it when the user asks to learn " +
-        "something or asks for a course. Build 3 to 6 sections " +
-        "(each a coherent theme) with 8 to 12 lessons total, mixing kinds: " +
-        "'video' for taught walkthroughs (body prose, optional videoUrl), " +
-        "'cards' for bite-sized reads (a deck of title+body cards), " +
-        "'animation' for an interactive explainer (self-contained HTML with " +
-        "inline styles/scripts shown on an iframe), 'recap' for graded " +
-        "recall exercises (2-4 questions with options and answerIndex), and " +
-        "'guided-explanation' for concept or code walkthroughs taught step " +
-        "by step - 3 to 10 narration beats, each showing the code or prose " +
-        "on screen while the narration reads it. " +
-        "Every lesson MUST include content: never create lessons without it.",
-      execute: async (input) => createScopedCourse(input),
+        "Step 1 of course creation: register the course SKELETON - just the " +
+        "outline. Use it when the user asks to learn something or asks for a " +
+        "course. Plan 3 to 6 sections (each a coherent theme) holding 8 to 12 " +
+        "lessons total, mixing kinds: 'video' (taught walkthroughs), 'cards' " +
+        "(bite-sized reads), 'animation' (interactive HTML explainer), " +
+        "'recap' (graded quiz), 'guided-explanation' (narrated step-by-step " +
+        "reveal). This call must NOT contain lesson content. Immediately " +
+        "afterwards call create_lesson once per lesson id IN ORDER, passing " +
+        "the finished content for that lesson each time, until every lesson " +
+        "is filled; then tell the user the course is ready in the Courses tab.",
+      execute: async (input) => chunks.createScopedCourseScaffold(input),
       inputSchema: z.object({
         description: z
           .string()
@@ -193,7 +227,6 @@ export function createCourseTool(
               lessons: z
                 .array(
                   z.object({
-                    content: lessonContentSchema,
                     kind: z
                       .enum([
                         "video",
@@ -202,12 +235,14 @@ export function createCourseTool(
                         "recap",
                         "guided-explanation",
                       ])
-                      .describe("How this lesson is delivered"),
+                      .describe("How this lesson will be delivered"),
                     title: z
                       .string()
                       .min(1)
                       .max(200)
-                      .describe("Concrete lesson title, e.g. 'Recap: naming rules'"),
+                      .describe(
+                        "Concrete lesson title, e.g. 'Recap: naming rules'"
+                      ),
                   })
                 )
                 .min(1)
@@ -221,12 +256,25 @@ export function createCourseTool(
           )
           .min(1)
           .max(12)
-          .describe("Ordered course sections; each holds the lessons beneath that heading"),
+          .describe(
+            "Ordered course sections; each holds the lessons beneath that heading"
+          ),
         title: z
           .string()
           .min(1)
           .max(200)
           .describe("Short course title, e.g. 'Prompt Engineering Basics'"),
+      }),
+    }),
+    [CREATE_LESSON_TOOL_NAME]: tool({
+      description:
+        "Step 2 of course creation: fill ONE lesson (by id from create_course) " +
+        "with its finished content. Call once per lesson, in order.",
+      execute: async (input) => chunks.createScopedCourseLesson(input),
+      inputSchema: z.object({
+        content: lessonContentSchema,
+        courseId: z.string().min(1).max(64),
+        lessonId: z.string().min(1).max(64),
       }),
     }),
   };

@@ -54,6 +54,59 @@ export interface CourseCreationInput {
   readonly sections: readonly CourseSectionInput[];
 }
 
+/* ------------------------- chunked course streaming ------------------------- */
+
+/** Outline-level plan (no lesson content) that opens the streamed flow. */
+export interface CourseChunkPlanSection {
+  readonly title: string;
+  readonly lessons: readonly CourseChunkPlanLesson[];
+}
+
+export interface CourseChunkPlanLesson {
+  readonly kind: CourseLessonKind;
+  readonly title: string;
+}
+
+export interface CourseChunkPlanInput {
+  readonly description: string;
+  readonly sections: readonly CourseChunkPlanSection[];
+  readonly title: string;
+  readonly userId: string;
+}
+
+/** What the plan tool hands back so the model can fill lessons one at a
+ * time with `create_lesson`. */
+export interface CourseScaffoldLesson {
+  readonly courseId: string;
+  readonly id: string;
+  readonly kind: CourseLessonKind;
+  readonly position: number;
+  readonly sectionTitle: string;
+  readonly title: string;
+}
+
+export interface CourseScaffoldResult {
+  readonly course: {
+    readonly id: string;
+    readonly lessonCount: number;
+    readonly title: string;
+  };
+  readonly lessons: readonly CourseScaffoldLesson[];
+}
+
+export interface CourseLessonContentInput {
+  readonly content: LessonContent;
+  readonly courseId: string;
+  readonly lessonId: string;
+  readonly userId: string;
+}
+
+export interface CourseLessonWrittenResult {
+  readonly lessonId: string;
+  readonly position: number;
+  readonly title: string;
+}
+
 export interface CourseSectionInput {
   readonly title: string;
   readonly lessons: readonly CourseLessonInput[];

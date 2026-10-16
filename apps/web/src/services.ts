@@ -1,6 +1,12 @@
 import { createCurioRuntime } from "@curio/api/composition/runtime";
 import { ArtifactPublishFailed } from "@curio/api/domain/artifact-publish-failed";
-import type { CourseCreationToolRequest, CourseCreationToolResult } from "@curio/api/infrastructure/course-create-tool";
+import type {
+  CreateLessonToolRequest,
+  CreateLessonToolResult,
+  CourseChunkPlanToolRequest,
+  CourseScaffoldToolResult,
+  LessonContentToolPayload,
+} from "@curio/api/infrastructure/course-create-tool";
 import { createDrizzleChatStore } from "@curio/api/infrastructure/drizzle-chat-store";
 import { createDrizzleCourseStore } from "@curio/api/infrastructure/drizzle-course-store";
 import { createDrizzleModelSettingsStore } from "@curio/api/infrastructure/drizzle-model-settings-store";
@@ -76,38 +82,60 @@ export const curioFeatures = {
 } as const;
 
 /**
- * Creates a course for the given user through the Curio runtime. Bound to the
- * Director's `create_course` chat tool per request, where the session user is
- * already resolved.
+ * Streamed chunk 1: creates the course shell (sections + empty lesson
+ * placeholders) for the Director's `create_course` plan call.
  */
-export async function createScopedCourse(
+export async function createScopedCourseScaffold(
   userId: string,
-  creationRequest: CourseCreationToolRequest
-): Promise<CourseCreationToolResult> {
-  const createdCourse = await curioRuntime.runPromise(
-    Effect.gen(function* createScopedCourse() {
+  planRequest: CourseChunkPlanToolRequest
+): Promise<CourseScaffoldToolResult> {
+  const scaffold = await curioRuntime.runPromise(
+    Effect.gen(function* createScopedScaffold() {
       const courseStoreService = yield* CourseStore;
-      return yield* courseStoreService.createCourse({
-        description: creationRequest.description ?? "",
-        sections: creationRequest.sections.map((section) => ({
+      return yield* courseStoreService.createCourseScaffold({
+        description: planRequest.description ?? "",
+        sections: planRequest.sections.map((section) => ({
           lessons: section.lessons.map((lesson) => ({
-            content: toLessonContent(lesson),
             kind: normalizeLessonKind(lesson.kind),
             title: lesson.title,
           })),
           title: section.title,
         })),
-        title: creationRequest.title,
+        title: planRequest.title,
+        userId,
+      });
+    })
+  );
+  return scaffold;
+}
+
+/**
+ * Streamed chunk 2..N: fills one lesson's finished content for the
+ * Director's `create_lesson` calls.
+ */
+export async function createScopedCourseLesson(
+  userId: string,
+  createLessonRequest: CreateLessonToolRequest
+): Promise<CreateLessonToolResult> {
+  const storedContent = toStoredLessonContent(
+    createLessonRequest.content
+  );
+  const written = await curioRuntime.runPromise(
+    Effect.gen(function* createScopedLesson() {
+      const courseStoreService = yield* CourseStore;
+      return yield* courseStoreService.writeCourseLessonContent({
+        content: storedContent,
+        courseId: createLessonRequest.courseId,
+        lessonId: createLessonRequest.lessonId,
         userId,
       });
     })
   );
   return {
-    course: {
-      id: createdCourse.id,
-      lessonCount: createdCourse.lessonCount,
-      title: createdCourse.title,
-    },
+    done: true,
+    lessonId: written.lessonId,
+    position: written.position,
+    title: written.title,
   };
 }
 
@@ -154,13 +182,9 @@ export async function createScopedModel(
 
 /** Tool content is already validated by the tool's zod schema; this only
  * normalizes kinds/defaults into the stored `LessonContent` union. */
-function toLessonContent(
-  lesson: CourseCreationToolRequest["sections"][number]["lessons"][number]
-): LessonContent | undefined {
-  const rawContent = lesson.content;
-  if (rawContent === undefined) {
-    return undefined;
-  }
+function toStoredLessonContent(
+  rawContent: LessonContentToolPayload
+): LessonContent {
   switch (rawContent.kind) {
     case "animation": {
       return {

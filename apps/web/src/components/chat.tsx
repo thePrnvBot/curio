@@ -29,6 +29,7 @@ import {
   PromptInputTools,
 } from "@curio/ui/components/ai-elements/prompt-input";
 import type { PromptInputMessage } from "@curio/ui/components/ai-elements/prompt-input";
+import { useTRPC } from "@/utils/trpc";
 import {
   Reasoning,
   ReasoningContent,
@@ -40,6 +41,7 @@ import {
 } from "@curio/ui/components/ai-elements/suggestion";
 import { isToolUIPart } from "ai";
 import type { UIMessage } from "ai";
+import { useQueryClient } from "@tanstack/react-query";
 import { CopyIcon, RefreshCwIcon, SparklesIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -54,6 +56,7 @@ import {
 import {
   ChatSkeleton,
   CourseCreatedNote,
+  LessonChunkNote,
 } from "@/components/chat/chat-notes";
 import {
   extractPendingQuestions,
@@ -86,6 +89,7 @@ export interface PersistedChatMessageRecord {
 }
 
 const CREATE_COURSE_TOOL_NAME = "create_course";
+const CREATE_LESSON_TOOL_NAME = "create_lesson";
 
 const CHAT_STARTER_SUGGESTIONS = [
   "Build a landing page artifact and publish it for review",
@@ -164,6 +168,33 @@ function ChatConversation({
     () => extractPendingQuestions(messages),
     [messages]
   );
+  const trpc = useTRPC();
+  const queryClient = useQueryClient();
+
+  // Streamed course chunks: every scaffold/lesson tool completion refreshes
+  // the Courses queries, so the course page fills in live while the Director
+  // works instead of waiting for the whole stream to end.
+  const courseChunkInvalidationRef = useRef(0);
+  useEffect(() => {
+    const chunkCount = messages.reduce((count, message) => {
+      return (
+        count +
+        message.parts.filter(
+          (part) =>
+            isToolUIPart(part) &&
+            (part.type === "tool-create_course" ||
+              part.type === "tool-create_lesson") &&
+            part.state === "output-available"
+        ).length
+      );
+    }, 0);
+    if (chunkCount > courseChunkInvalidationRef.current) {
+      courseChunkInvalidationRef.current = chunkCount;
+      void queryClient.invalidateQueries({
+        queryKey: trpc.courses.pathKey(),
+      });
+    }
+  }, [messages, queryClient, trpc]);
 
   // Show the left-to-right pulse in the right sidebar while this stream
   // runs, and fire the data-refresh once it settles (even on stop/error).
@@ -287,7 +318,7 @@ function ChatConversation({
 
                       if (part.type === "reasoning") {
                         // No thought traces yet (either not streamed or the
-                        // model emits none) â€” don't render the thinking dropdown.
+                        // model emits none) — don't render the thinking dropdown.
                         if (part.text.trim().length === 0) {
                           return null;
                         }
@@ -361,6 +392,36 @@ function ChatConversation({
                         return (
                           <div className="w-full" key={structuralKey}>
                             <CourseCreatedNote courseData={createdCourseData} />
+                          </div>
+                        );
+                      }
+                      if (part.type === `tool-${CREATE_LESSON_TOOL_NAME}`) {
+                        // Streaming chunk progress: each filled lesson is its
+                        // own tiny note while the course builds up.
+                        if (part.state !== "output-available") {
+                          return null;
+                        }
+                        const lessonOutput = part.output as
+                          | {
+                              done?: boolean;
+                              position?: number;
+                              title?: string;
+                            }
+                          | null
+                          | undefined;
+                        if (
+                          lessonOutput === null ||
+                          lessonOutput === undefined ||
+                          lessonOutput.done !== true
+                        ) {
+                          return null;
+                        }
+                        return (
+                          <div className="w-full" key={structuralKey}>
+                            <LessonChunkNote
+                              position={lessonOutput.position ?? 0}
+                              title={lessonOutput.title ?? ""}
+                            />
                           </div>
                         );
                       }

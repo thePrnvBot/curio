@@ -1,4 +1,4 @@
-import type { Database } from "@curio/db";
+﻿import type { Database } from "@curio/db";
 import {
   course,
   courseBadge,
@@ -11,10 +11,12 @@ import { Effect } from "effect";
 
 import type {
   CourseBadgeRecord,
+  CourseLessonWrittenResult,
   CourseDetail,
   CourseLessonDetail,
   CourseLessonKind,
   CourseLessonSummary,
+  CourseScaffoldResult,
   CourseSummary,
   LessonCompletionResult,
 } from "../domain/course";
@@ -247,6 +249,156 @@ export function createDrizzleCourseStore(
           }
           return toCourseSummary(createdCourseRow);
         })
+      ),
+
+    createCourseScaffold: ({ description, sections, title, userId }) =>
+      withCourseError("createCourseScaffold")(
+        Effect.tryPromise(async () => {
+          const courseId = generateId("course");
+          const lessonInputs = sections.flatMap((section) => section.lessons);
+          const now = new Date();
+          const scaffoldLessons: Array<{
+            id: string;
+            kind: string;
+            position: number;
+            sectionTitle: string;
+            title: string;
+          }> = [];
+
+          await database.transaction(async (transactionDatabase) => {
+            const createdCourseRows = await transactionDatabase
+              .insert(course)
+              .values({
+                completedLessonCount: 0,
+                createdAt: now,
+                description,
+                id: courseId,
+                lessonCount: lessonInputs.length,
+                title,
+                updatedAt: now,
+                userId,
+              })
+              .returning(courseSelection);
+            const courseRow = createdCourseRows.at(0);
+            if (courseRow === undefined) {
+              throw new Error("Course scaffold insert returned no rows");
+            }
+
+            for (
+              let sectionIndex = 0;
+              sectionIndex < sections.length;
+              sectionIndex++
+            ) {
+              const sectionInput = sections.at(sectionIndex);
+              if (sectionInput === undefined) {
+                throw new Error("Course section vanished mid-scaffold-transaction");
+              }
+              if (sectionInput.lessons.length === 0) {
+                continue;
+              }
+              const sectionId = generateId("section");
+              await transactionDatabase.insert(courseSection).values({
+                courseId,
+                id: sectionId,
+                position: sectionIndex + 1,
+                title: sectionInput.title,
+              });
+              const insertedLessonRows = await transactionDatabase
+                .insert(courseLesson)
+                .values(
+                  sectionInput.lessons.map((lesson, lessonIndex) => ({
+                    content: null,
+                    courseId,
+                    id: generateId("lesson"),
+                    kind: lesson.kind,
+                    position: lessonIndex + 1,
+                    sectionId,
+                    title: lesson.title,
+                  }))
+                )
+                .returning({
+                  id: courseLesson.id,
+                  kind: courseLesson.kind,
+                  position: courseLesson.position,
+                  title: courseLesson.title,
+                });
+              for (const insertedLesson of insertedLessonRows) {
+                scaffoldLessons.push({
+                  id: insertedLesson.id,
+                  kind: insertedLesson.kind,
+                  position: insertedLesson.position,
+                  sectionTitle: sectionInput.title,
+                  title: insertedLesson.title,
+                });
+              }
+            }
+          });
+
+          return {
+            course: { id: courseId, lessonCount: scaffoldLessons.length, title },
+            lessons: scaffoldLessons.map((scaffoldLesson) => ({
+              courseId,
+              id: scaffoldLesson.id,
+              kind: normalizeLessonKind(scaffoldLesson.kind),
+              position: scaffoldLesson.position,
+              sectionTitle: scaffoldLesson.sectionTitle,
+              title: scaffoldLesson.title,
+            })),
+          } satisfies CourseScaffoldResult;
+        })
+      ),
+
+    writeCourseLessonContent: ({ content, courseId, lessonId, userId }) =>
+      withCourseError("writeCourseLessonContent")(
+        Effect.gen(function* writeLessonContent() {
+          const courseRows = yield* Effect.tryPromise(() =>
+            database
+              .select({ id: course.id })
+              .from(course)
+              .where(and(eq(course.id, courseId), eq(course.userId, userId)))
+              .limit(1)
+          );
+          if (courseRows.at(0) === undefined) {
+            return yield* Effect.fail(new CourseNotFound({ courseId }));
+          }
+
+          const lessonRows = yield* Effect.tryPromise(() =>
+            database
+              .select(lessonSelection)
+              .from(courseLesson)
+              .where(
+                and(
+                  eq(courseLesson.id, lessonId),
+                  eq(courseLesson.courseId, courseId),
+                )
+              )
+              .limit(1),
+          );
+          const lessonRow = lessonRows.at(0);
+          if (lessonRow === undefined) {
+            return yield* Effect.fail(new LessonNotFound({ courseId, lessonId }));
+          }
+
+          const now = new Date();
+          yield* Effect.tryPromise(async () => {
+            await database.transaction(async (transactionDatabase) => {
+              await transactionDatabase
+                .update(courseLesson)
+                .set({ content })
+                .where(eq(courseLesson.id, lessonId));
+              await transactionDatabase
+                .update(course)
+                .set({ updatedAt: now })
+                .where(eq(course.id, courseId));
+            });
+          });
+
+          return {
+            lessonId: lessonRow.id,
+            position: normalizeLessonPosition(lessonRow.position),
+            title: lessonRow.title,
+          } satisfies CourseLessonWrittenResult;
+        }),
       ),
 
     getCourseStructure: (courseId, userId) =>
