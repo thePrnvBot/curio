@@ -133,7 +133,7 @@ export default function Header() {
                   ? "text-primary-foreground relative z-10 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors"
                   : "text-muted-foreground hover:text-foreground relative z-10 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors"
               }
-              data-cuelume-navigate="navigate"
+              data-cue="navigate"
               key={navLink.to}
               onMouseEnter={() => {
                 setHoveredIndex(navLinkIndex);
