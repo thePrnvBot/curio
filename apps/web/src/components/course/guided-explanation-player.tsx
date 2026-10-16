@@ -26,7 +26,11 @@ import { toast } from "sonner";
 
 import { highlightCode } from "@curio/ui/components/ai-elements/code-block";
 import { playInteractionCue } from "@/utils/sound";
-import { createNarrationChannel, type NarrationChannel } from "@/utils/voice/voice-playback";
+import {
+  createNarrationChannel,
+  narrationLog,
+  type NarrationChannel,
+} from "@/utils/voice/voice-playback";
 import {
   countCachedUtterances,
   getOrSynthesizeUtterance,
@@ -343,17 +347,19 @@ export function GuidedExplanationPlayer(props: {
     return narrationChannelRef.current;
   }
 
-  function stopActiveNarration(): void {
+  function stopActiveNarration(reason: string): void {
+    narrationLog("stop narration:", reason);
     getNarrationChannel().stop();
     narratedSentenceRef.current = -1;
   }
 
   // Restart the explanation when a different guided lesson is opened.
   useEffect(() => {
+    narrationLog("lesson changed -> restart at step 0");
     setStepIndex(0);
     setStepProgress(0);
     setIsPlaying(true);
-    stopActiveNarration();
+    stopActiveNarration("lesson restarted");
     sentenceDurationsRef.current = new Map();
     setDurationsVersion((version) => version + 1);
   }, [props.lessonId]);
@@ -368,7 +374,8 @@ export function GuidedExplanationPlayer(props: {
         emphasis: "subtle",
       });
     }
-    stopActiveNarration();
+    narrationLog("go to step", boundedIndex);
+    stopActiveNarration("step seek");
     setStepIndex(boundedIndex);
     setStepProgress(0);
   }
@@ -385,6 +392,10 @@ export function GuidedExplanationPlayer(props: {
       }
       if (keyboardEvent.code === "Space") {
         keyboardEvent.preventDefault();
+        narrationLog(
+          "spacebar ->",
+          isPlaying ? "pausing" : "playing"
+        );
         playInteractionCue("toggle");
         setIsPlaying((currentlyPlaying) => !currentlyPlaying);
         return;
@@ -403,7 +414,7 @@ export function GuidedExplanationPlayer(props: {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [stepIndex, steps.length]);
+  }, [isPlaying, stepIndex, steps.length]);
 
   // Transcript: the narration reads as one continuous paragraph; the sentence
   // currently being narrated lights up. Sentences are flattened step by step
@@ -433,6 +444,9 @@ export function GuidedExplanationPlayer(props: {
       voicePreferences
     ).then((cachedCount) => {
       if (cacheGeneration.current === generation) {
+        narrationLog(
+          `voice lines ready: ${cachedCount}/${transcriptSentences.length}`
+        );
         setVoiceLineCounts(cachedCount);
       }
     });
@@ -539,7 +553,7 @@ export function GuidedExplanationPlayer(props: {
   // before the clock reaches each line.
   useEffect(() => {
     if (!voicePreferences.enabled) {
-      stopActiveNarration();
+      stopActiveNarration("voice disabled (prefetch)");
       return;
     }
     let cancelled = false;
@@ -589,28 +603,49 @@ export function GuidedExplanationPlayer(props: {
   // autoplay permission once the learner has interacted with the page at all.
   useEffect(() => {
     if (!isPlaying || !voicePreferences.enabled) {
-      stopActiveNarration();
+      if (isPlaying && !voicePreferences.enabled) {
+        narrationLog("say skipped: narration disabled in preferences");
+      }
+      stopActiveNarration(isPlaying ? "voice disabled" : "paused");
       return;
     }
     const activeSentence = transcriptSentences[activeSentenceIndex];
     if (activeSentence === undefined) {
-      stopActiveNarration();
+      stopActiveNarration("no active sentence");
       return;
     }
     if (narratedSentenceRef.current === activeSentenceIndex) {
       return;
     }
+    narrationLog(
+      `say sentence ${activeSentenceIndex + 1}/${transcriptSentences.length}:`,
+      JSON.stringify(activeSentence.text.slice(0, 60))
+    );
     let cancelled = false;
     void getOrSynthesizeUtterance(activeSentence.text, voicePreferences).then(
       (utterance) => {
-        if (
-          cancelled ||
-          utterance === null ||
-          narratedSentenceRef.current !== activeSentenceIndex
-        ) {
+        if (cancelled) {
+          narrationLog(`sentence ${activeSentenceIndex + 1} abandoned (effect cleaned up)`);
           return;
         }
-        stopActiveNarration();
+        if (utterance === null) {
+          narrationLog(`sentence ${activeSentenceIndex + 1}: NO utterance (synthesis failed)`);
+          return;
+        }
+        if (narratedSentenceRef.current !== activeSentenceIndex) {
+          narrationLog(
+            `sentence ${activeSentenceIndex + 1} arrived late (now at ${
+              narratedSentenceRef.current + 1
+            })`
+          );
+          return;
+        }
+        narrationLog(
+          `speaking sentence ${activeSentenceIndex + 1}:`,
+          `bytes=${utterance.wav.byteLength}`,
+          `durationMs=${utterance.durationMs}`
+        );
+        stopActiveNarration("new sentence");
         narratedSentenceRef.current = activeSentenceIndex;
         sentenceDurationsRef.current.set(
           activeSentenceIndex,
@@ -803,6 +838,10 @@ export function GuidedExplanationPlayer(props: {
               aria-label={isPlaying ? "Pause explanation" : "Play explanation"}
               disabled={isLastStep && !isPlaying}
               onClick={() => {
+                narrationLog(
+                  "play button clicked ->",
+                  isPlaying ? "pausing" : "playing"
+                );
                 playInteractionCue("toggle");
                 setIsPlaying((currentlyPlaying) => !currentlyPlaying);
               }}

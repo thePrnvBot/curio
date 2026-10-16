@@ -16,6 +16,7 @@ import {
   utteranceCacheKey,
   writeCachedUtterance,
 } from "./voice-cache";
+import { narrationLog } from "./voice-playback";
 import { KOKORO_VOICE_CATALOG } from "./voice-catalog";
 import type {
   VoiceCatalogEntry,
@@ -384,6 +385,12 @@ async function synthesizeUncached(
     )
   );
   if (cached !== null) {
+    narrationLog(
+      "cache hit:",
+      key.slice(0, 40),
+      `bytes=${cached.wav.byteLength}`,
+      `durationMs=${cached.durationMs}`
+    );
     return {
       cacheKey: key,
       durationMs: cached.durationMs,
@@ -393,6 +400,11 @@ async function synthesizeUncached(
     };
   }
 
+  narrationLog(
+    "cache miss, synthesizing:",
+    key.slice(0, 40),
+    JSON.stringify(text.slice(0, 60))
+  );
   setStatus({ kind: "synthesizing" });
   try {
     const utterance = await Effect.runPromise(
@@ -400,6 +412,12 @@ async function synthesizeUncached(
         speed: preferences.speed,
         voiceId: preferences.voiceId,
       })
+    );
+    narrationLog(
+      "synthesized:",
+      `bytes=${utterance.wav.byteLength}`,
+      `durationMs=${utterance.durationMs}`,
+      `sampleRate=${utterance.sampleRate}`
     );
     const textHash = key.split(":").at(-1) ?? "";
     void Effect.runPromise(

@@ -15,6 +15,12 @@
 let playbackContext: AudioContext | null = null;
 let unlockBound = false;
 
+/** Diagnostic logging for the narration chain (button -> utterance -> audio).
+ * Temporary scaffolding while tracking down silent playback. */
+export function narrationLog(...parts: readonly unknown[]): void {
+  console.info("[narration]", ...parts);
+}
+
 function getPlaybackContext(): AudioContext | null {
   if (typeof window === "undefined") {
     return null;
@@ -25,12 +31,29 @@ function getPlaybackContext(): AudioContext | null {
       (window as unknown as { webkitAudioContext?: typeof AudioContext })
         .webkitAudioContext;
     if (ContextConstructor === undefined) {
+      narrationLog("no AudioContext constructor available");
       return null;
     }
     playbackContext = new ContextConstructor();
+    narrationLog("audio context created, state:", playbackContext.state);
   }
   return playbackContext;
 }
+
+const unlockPlaybackContext = (): void => {
+  const context = getPlaybackContext();
+  if (context !== null && context.state === "suspended") {
+    narrationLog("unlock gesture: resuming suspended context");
+    void (async () => {
+      try {
+        await context.resume();
+        narrationLog("unlock resume settled, state:", context.state);
+      } catch (resumeError: unknown) {
+        narrationLog("unlock resume failed:", resumeError);
+      }
+    })();
+  }
+};
 
 /** Resume the context on the first interaction; bound once per page. */
 function ensureUnlockBinding(): void {
@@ -38,21 +61,17 @@ function ensureUnlockBinding(): void {
     return;
   }
   unlockBound = true;
-  const unlock = (): void => {
-    const context = getPlaybackContext();
-    if (context !== null && context.state === "suspended") {
-      void context.resume().catch(() => {});
-    }
-  };
-  window.addEventListener("pointerdown", unlock, { passive: true });
-  window.addEventListener("keydown", unlock, { passive: true });
+  window.addEventListener("pointerdown", unlockPlaybackContext, {
+    passive: true,
+  });
+  window.addEventListener("keydown", unlockPlaybackContext, { passive: true });
 }
 
 export interface NarrationChannel {
   /** Speaks one utterance, replacing whatever the channel was speaking. */
-  play(cacheKey: string, wav: ArrayBuffer): void;
+  play: (cacheKey: string, wav: ArrayBuffer) => void;
   /** Silence the channel and invalidate in-flight decodes. */
-  stop(): void;
+  stop: () => void;
 }
 
 /** Decoded audio per utterance cache key, so revisits skip re-decoding. */
@@ -66,6 +85,7 @@ export function createNarrationChannel(): NarrationChannel {
 
   const stopCurrentSource = (): void => {
     if (currentSource !== null) {
+      narrationLog("stopping current source");
       try {
         currentSource.stop();
       } catch {
@@ -82,20 +102,52 @@ export function createNarrationChannel(): NarrationChannel {
       const playEpoch = epoch;
       stopCurrentSource();
       const context = getPlaybackContext();
+      narrationLog(
+        "channel play:",
+        cacheKey.slice(0, 40),
+        `bytes=${wav.byteLength}`,
+        `ctx=${context?.state ?? "unavailable"}`,
+        `epoch=${playEpoch}`
+      );
       if (context === null) {
+        narrationLog("channel play aborted: no AudioContext");
         return;
       }
       if (context.state === "suspended") {
-        void context.resume().catch(() => {});
+        narrationLog("context suspended at play; requesting resume");
+        void (async () => {
+          try {
+            await context.resume();
+            narrationLog("play-time resume settled, state:", context.state);
+          } catch (resumeError: unknown) {
+            narrationLog("play-time resume failed:", resumeError);
+          }
+        })();
       }
       void (async () => {
         let buffer = decodedBuffers.get(cacheKey);
         if (buffer === undefined) {
           try {
+            narrationLog(
+              "decoding wav bytes:",
+              wav.byteLength,
+              "at ctx rate:",
+              context.sampleRate
+            );
             // decodeAudioData detaches the buffer it is given; always hand
             // it a copy so the caller's (cache-backed) source stays intact.
-            buffer = await context.decodeAudioData(wav.slice(0));
-          } catch {
+            const wavCopy = await new Blob([wav]).arrayBuffer();
+            buffer = await context.decodeAudioData(wavCopy);
+            narrationLog(
+              "decode ok: duration=",
+              Math.round(buffer.duration * 1000),
+              "ms, channels=",
+              buffer.numberOfChannels,
+              "rate=",
+              buffer.sampleRate
+            );
+          } catch (decodeError: unknown) {
+            narrationLog("decode FAILED:", decodeError);
             return;
           }
           decodedBuffers.set(cacheKey, buffer);
@@ -106,20 +158,39 @@ export function createNarrationChannel(): NarrationChannel {
             }
             decodedBuffers.delete(oldestKey);
           }
+        } else {
+          narrationLog("decode cache hit:", cacheKey.slice(0, 40));
         }
         if (epoch !== playEpoch) {
           // A newer line (or stop) superseded this one while decoding.
+          narrationLog("decode finished but superseded (epoch mismatch)");
           return;
         }
         const source = context.createBufferSource();
         source.buffer = buffer;
         source.connect(context.destination);
         currentSource = source;
+        source.addEventListener("ended", () => {
+          narrationLog("source ended naturally:", cacheKey.slice(0, 40));
+        });
         source.start();
+        narrationLog(
+          "source started, ctx.currentTime=",
+          Math.round(context.currentTime * 100) / 100,
+          "state=",
+          context.state
+        );
+        narrationLog(
+          "source started, ctx.currentTime=",
+          Math.round(context.currentTime * 100) / 100,
+          "state=",
+          context.state
+        );
       })();
     },
     stop() {
       epoch += 1;
+      narrationLog("channel stop (epoch", epoch, ")");
       stopCurrentSource();
     },
   };
