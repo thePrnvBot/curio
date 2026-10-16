@@ -624,19 +624,21 @@ export function GuidedExplanationPlayer(props: {
     let cancelled = false;
     void getOrSynthesizeUtterance(activeSentence.text, voicePreferences).then(
       (utterance) => {
+        // The stale-check is the effect cleanup (`cancelled`): it runs whenever
+        // the active sentence, playing state or preferences change. There is no
+        // separate "currently narrating" comparison here — `narratedSentenceRef`
+        // starts at -1 (nothing spoken yet) and is only set once audio starts,
+        // so comparing against it discarded every utterance before its first
+        // play and narration stayed silent forever.
         if (cancelled) {
-          narrationLog(`sentence ${activeSentenceIndex + 1} abandoned (effect cleaned up)`);
+          narrationLog(
+            `sentence ${activeSentenceIndex + 1} abandoned (effect cleaned up)`
+          );
           return;
         }
         if (utterance === null) {
-          narrationLog(`sentence ${activeSentenceIndex + 1}: NO utterance (synthesis failed)`);
-          return;
-        }
-        if (narratedSentenceRef.current !== activeSentenceIndex) {
           narrationLog(
-            `sentence ${activeSentenceIndex + 1} arrived late (now at ${
-              narratedSentenceRef.current + 1
-            })`
+            `sentence ${activeSentenceIndex + 1}: NO utterance (synthesis failed)`
           );
           return;
         }
