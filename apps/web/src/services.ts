@@ -8,6 +8,7 @@ import type {
   LessonContentToolPayload,
 } from "@curio/api/infrastructure/course-create-tool";
 import { createDrizzleChatStore } from "@curio/api/infrastructure/drizzle-chat-store";
+import { createDrizzleChatRunStore } from "@curio/api/infrastructure/drizzle-chat-run-store";
 import { createDrizzleCourseStore } from "@curio/api/infrastructure/drizzle-course-store";
 import { createDrizzleModelSettingsStore } from "@curio/api/infrastructure/drizzle-model-settings-store";
 import { createMcpArtifactPublisher } from "@curio/api/infrastructure/mcp-artifact-publisher";
@@ -31,6 +32,7 @@ export const db = createDb(ENV);
 export const auth = createAuth(ENV, db);
 
 const chatStore = createDrizzleChatStore(db);
+const chatRunStore = createDrizzleChatRunStore(db);
 const courseStore = createDrizzleCourseStore(db);
 
 const chatModelProvider = createOpenAiCompatibleChatModelProvider({
@@ -54,6 +56,7 @@ const artifactPublisher = ENV.ARTIFACT_SERVER_URL
 export const curioRuntime = createCurioRuntime({
   artifactPublisher,
   chatModelProvider,
+  chatRunStore,
   chatStore,
   courseStore,
   modelSettingsStore: createDrizzleModelSettingsStore(db),

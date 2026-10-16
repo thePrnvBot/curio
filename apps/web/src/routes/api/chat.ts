@@ -1,7 +1,14 @@
 import { toUIMessage } from "@curio/api/domain/chat";
-import { createArtifactTool } from "@curio/api/infrastructure/artifact-create-tool";
-import { createAskUserTool } from "@curio/api/infrastructure/ask-user-tool";
-import { createCourseTool } from "@curio/api/infrastructure/course-create-tool";
+import {
+  createArtifactTool,
+} from "@curio/api/infrastructure/artifact-create-tool";
+import {
+  createAskUserTool,
+} from "@curio/api/infrastructure/ask-user-tool";
+import {
+  CREATE_LESSON_TOOL_NAME,
+  createCourseTool,
+} from "@curio/api/infrastructure/course-create-tool";
 import { createWebTools } from "@curio/api/infrastructure/web-tools";
 import type { LanguageModel } from "ai";
 import { ChatStore } from "@curio/api/services/chat-store";
@@ -21,12 +28,21 @@ import { z } from "zod";
 
 import {
   auth,
-  createScopedCourse,
+  createScopedCourseLesson,
+  createScopedCourseScaffold,
   createScopedModel,
   curioFeatures,
   curioRuntime,
   runtimeScopedArtifactPublisher,
 } from "../../services";
+import {
+  chatRunInFlight,
+  commitChatRunChunks,
+  createDurableRun,
+  markRunAborted,
+  releaseRunRegistration,
+  registerRunAbortController,
+} from "../../utils/durable-chat";
 
 const ASK_USER_TOOL_NAME = "ask_user";
 
@@ -88,21 +104,74 @@ const CHAT_INSTRUCTIONS =
   "the chat renders the published artifact itself as an interactive card directly below your message. " +
   "When the user wants to learn something or asks you to create a course: first use the ask_user " +
   "tool with at most four multiple-choice questions about their level, goal, and preferred pace; " +
-  "the UI collects the answers and they arrive in the next user message. Then use the create_course " +
-  "tool to build a complete course page: 3 to 6 sections (sidebar headings, each a coherent theme) " +
-  "holding 8 to 12 lessons total, mixing kinds - video walkthroughs with teaching prose, card decks " +
-  "for condensed reads, one or two interactive HTML animations, recaps with 2-4 crafted quiz " +
-  "questions, and guided explanations for the concept or code walkthroughs that deserve a " +
-  "narrated, step-by-step reveal (guided explanation steps stay short: a two-sentence " +
-  "narration and one focused code excerpt per step; split longer walkthroughs across steps). " +
-  "Include real teaching content in every lesson; never leave lessons empty. Tell the " +
-  "user their course is ready in the Courses tab. Never invent course creation results: only report " +
-  "courses that the create_course tool actually created. " +
+  "the UI collects the answers and they arrive in the next user message. Then create the course in " +
+  "two phases. Phase 1 - call create_course with the OUTLINE ONLY: a title, a short description, 3 to 6 " +
+  "sections (3 to 6 coherent sidebar themes) and 8 to 12 lessons (8 to 12 lesson titles with kinds " +
+  "'video', 'cards', 'animation', 'recap' or 'guided-explanation' mixed sensibly); it returns every " +
+  "lesson id. NO lesson content in this call. Phase 2 - call create_lesson once per lesson id, IN " +
+  "ORDER, passing that lesson's finished content: video walkthroughs with teaching prose (optional " +
+  "videoUrl), card decks for condensed reads, one or two interactive HTML animations across the whole " +
+  "course, recaps with 2-4 crafted quiz questions, and guided explanations for the concept or code " +
+  "walkthroughs that deserve a narrated, step-by-step reveal (guided explanation steps stay short: a " +
+  "two-sentence narration and one focused code excerpt per step). Stream the whole build without " +
+  "stopping: immediately after each create_lesson result, call create_lesson again for the next " +
+  "lesson - do not write prose between lesson calls, do not ask for confirmation, and do not end your " +
+  "turn until every lesson id from the scaffold is filled exactly once. Never skip or reorder lessons. " +
+  "Include real teaching content in every " +
+  "lesson; never leave lessons empty. When all lessons are filled, confirm to the user that the course " +
+  "is ready in the Courses tab. Never invent course creation results: only report courses that the " +
+  "create_course tool actually created. " +
   "Use web_search when fresh or external facts matter (releases, versions, prices, news): search first, then " +
   "web_read only the most promising urls started from web_search results, and cite sources as links in your " +
   "answer or lesson prose.";
 
-const MAX_STREAM_STEPS = 8;
+const MAX_STREAM_STEPS = 40;
+
+const CREATE_COURSE_TOOL_NAME = "create_course";
+
+/**
+ * Keeps the Director streaming the course without pause: once a scaffold
+ * exists and lessons are still unfilled, every intermediate step is locked
+ * to the `create_lesson` tool (no prose interludes, no early turn ends) so
+ * the course page fills live while the model works. Returns undefined to
+ * restore normal flow once every lesson is filled (or no course is being
+ * built).
+ */
+function prepareCourseChunkStep({
+  stepNumber,
+  steps,
+}: {
+  stepNumber: number;
+  steps: Array<{
+    readonly toolResults: ReadonlyArray<{ toolName: string; output: unknown }>;
+  }>;
+}): { activeTools: [string]; toolChoice: "required" } | undefined {
+  if (stepNumber === 0) {
+    return undefined;
+  }
+  let scaffoldLessonCount = 0;
+  let filledLessonCount = 0;
+  for (const step of steps) {
+    for (const toolResult of step.toolResults) {
+      if (toolResult.toolName === CREATE_COURSE_TOOL_NAME) {
+        const scaffoldOutput = toolResult.output as {
+          readonly course?: { readonly lessonCount?: number };
+        } | null;
+        scaffoldLessonCount += scaffoldOutput?.course?.lessonCount ?? 0;
+      }
+      if (toolResult.toolName === CREATE_LESSON_TOOL_NAME) {
+        filledLessonCount += 1;
+      }
+    }
+  }
+  if (scaffoldLessonCount === 0 || filledLessonCount >= scaffoldLessonCount) {
+    return undefined;
+  }
+  return {
+    activeTools: [CREATE_LESSON_TOOL_NAME],
+    toolChoice: "required",
+  };
+}
 
 const generateAssistantMessageId = createIdGenerator({
   prefix: "msg",
@@ -290,28 +359,35 @@ async function composeAndPersistChatTitle({
 }
 
 async function createChatResponse({
-  abortSignal,
   chatId,
   chatModel,
   conversation,
   tools,
   userId,
 }: {
-  abortSignal: AbortSignal;
   chatId: string;
   chatModel: LanguageModel;
   conversation: UIMessage[];
   tools: Parameters<typeof streamText>[0]["tools"];
   userId: string;
 }): Promise<Response> {
+  // Durable run: storage first. Nothing reaches a viewer before it is
+  // committed, and the run keeps going when clients disconnect.
+  const runId = await curioRuntime.runPromise(createDurableRun(chatId));
+  const runAbortController = new AbortController();
+  registerRunAbortController(runId, runAbortController);
+
   const streamResult = streamText({
-    abortSignal,
+    // Aborts come from the stop button via the abort route, not from the
+    // HTTP request: the agent keeps working when the chat is closed.
+    abortSignal: runAbortController.signal,
     instructions: CHAT_INSTRUCTIONS,
     messages: await convertToModelMessages(conversation),
     model: chatModel,
     // When the stop button aborts the stream, persist the user's message plus
     // any partial text so the saved history matches what the user saw.
     onAbort: ({ steps: partialSteps }) => {
+      markRunAborted(runId);
       void persistPartialMessages({
         chatId,
         conversation,
@@ -320,45 +396,58 @@ async function createChatResponse({
       });
     },
     stopWhen: isStepCount(MAX_STREAM_STEPS),
+    prepareStep: prepareCourseChunkStep,
     tools,
   });
 
-  return createUIMessageStreamResponse({
-    stream: toUIMessageStream({
-      generateMessageId: generateAssistantMessageId,
-      onError: (streamError) => {
-        if (typeof streamError === "string") {
-          return streamError;
-        }
-        return streamError instanceof Error
-          ? streamError.message
-          : JSON.stringify(streamError);
-      },
-      onEnd: ({ messages: generatedMessages }) => {
-        const isFirstExchange =
-          conversation.filter((message) => message.role === "user").length ===
-          1;
+  const uiStream = toUIMessageStream({
+    generateMessageId: generateAssistantMessageId,
+    onError: (streamError) => {
+      if (typeof streamError === "string") {
+        return streamError;
+      }
+      return streamError instanceof Error
+        ? streamError.message
+        : JSON.stringify(streamError);
+    },
+    onEnd: ({ messages: generatedMessages }) => {
+      const isFirstExchange =
+        conversation.filter((message) => message.role === "user").length === 1;
 
-        persistGeneratedMessages({
+      persistGeneratedMessages({
+        chatId,
+        chatTitle: isFirstExchange
+          ? deriveChatTitle(generatedMessages)
+          : null,
+        generatedMessages,
+        userId,
+      });
+
+      if (isFirstExchange) {
+        void composeAndPersistChatTitle({
           chatId,
-          chatTitle: isFirstExchange
-            ? deriveChatTitle(generatedMessages)
-            : null,
           generatedMessages,
           userId,
         });
+      }
+    },
+    originalMessages: conversation,
+    stream: streamResult.stream,
+  });
 
-        if (isFirstExchange) {
-          void composeAndPersistChatTitle({
-            chatId,
-            generatedMessages,
-            userId,
-          });
-        }
-      },
-      originalMessages: conversation,
-      stream: streamResult.stream,
-    }),
+  // One branch commits the stream to storage as a supervised background
+  // fiber (the durable transcript the resume endpoint replays); the other
+  // answers the submitting client live. Cancelling either branch never
+  // interrupts the other, or the generation itself.
+  const [writerStream, responseStream] = uiStream.tee();
+  curioRuntime.runFork(
+    commitChatRunChunks({ chunkStream: writerStream, runId }).pipe(
+      Effect.ensuring(releaseRunRegistration(runId))
+    )
+  );
+
+  return createUIMessageStreamResponse({
+    stream: responseStream,
   });
 }
 
@@ -429,17 +518,45 @@ export const Route = createFileRoute("/api/chat")({
           ? createArtifactTool(runtimeScopedArtifactPublisher)
           : undefined;
 
-        const courseTools = createCourseTool((creationRequest) =>
-          createScopedCourse(userId, creationRequest)
-        );
+        const courseTools = createCourseTool({
+          createScopedCourseLesson: (lessonRequest) =>
+            createScopedCourseLesson(userId, lessonRequest),
+          createScopedCourseScaffold: (planRequest) =>
+            createScopedCourseScaffold(userId, planRequest),
+        });
         const questionTools = createAskUserTool();
         const webTools = createWebTools();
 
         const sanitizedConversation =
           sanitizePendingQuestionTools(conversation);
 
+        // The agent must be idle before it is given more work; the UI's send
+        // button only submits from an idle Chat, so a 409 is a stale client.
+        const runningRun = await curioRuntime.runPromise(
+          chatRunInFlight(chatId, userId)
+        );
+        if (runningRun !== null) {
+          return Response.json(
+            { error: "The agent is still working on this chat" },
+            { status: 409 }
+          );
+        }
+
+        // Commit the submitted state before generating, so a reload or a
+        // reconnect mid-run sees the message that started the run.
+        const isFirstExchange =
+          sanitizedConversation.filter((candidate) => candidate.role === "user")
+            .length === 1;
+        await persistGeneratedMessages({
+          chatId,
+          chatTitle: isFirstExchange
+            ? deriveChatTitle(sanitizedConversation)
+            : null,
+          generatedMessages: sanitizedConversation,
+          userId,
+        });
+
         return await createChatResponse({
-          abortSignal: request.signal,
           chatId,
           chatModel: await createScopedModel(userId, chatId),
           conversation: sanitizedConversation,
