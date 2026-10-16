@@ -70,9 +70,11 @@ function RootDocument() {
       </head>
       <body suppressHydrationWarning>
         <ThemeProvider {...themeProviderProps}>
-          <div className="grid h-svh grid-rows-[auto_1fr]">
+          <div className="flex h-svh flex-col">
+            {/* Floating nav dock: fixed, so the content column owns the
+              full viewport height and clears the dock with pt-14. */}
             <Header />
-            <main className="flex min-h-0 flex-col">
+            <main className="flex min-h-0 flex-1 flex-col pt-14">
               <Outlet />
             </main>
           </div>

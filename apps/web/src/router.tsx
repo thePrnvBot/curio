@@ -51,6 +51,12 @@ export const getRouter = () => {
   const router = createTanStackRouter({
     routeTree,
     scrollRestoration: true,
+    // Hovering any Link preloads the destination route (loaders + query
+    // prefetched through the SSR query integration) so navigation feels
+    // instant; staleTime 0 keeps the prefetched data from being reused
+    // stale on real navigation.
+    defaultPreload: "intent",
+    defaultPreloadDelay: 80,
     defaultPreloadStaleTime: 0,
     context: { trpc, queryClient },
     defaultPendingComponent: () => <Loader />,
