@@ -1,4 +1,4 @@
-﻿import { Button } from "@curio/ui/components/button";
+import { Button } from "@curio/ui/components/button";
 import {
   MessageResponse,
 } from "@curio/ui/components/ai-elements/message";
@@ -15,6 +15,7 @@ import {
   SkipForwardIcon,
 } from "lucide-react";
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -40,14 +41,19 @@ import {
   subscribeToVoiceStatus,
   type VoiceManagerStatus,
   type VoicePreferences,
+  type VoiceUtterance,
 } from "@/utils/voice/voice-manager";
 
 import { LessonCompletionControls } from "./lesson-completion-controls";
 
 /** Breath between sentence audio takes so stitched lines don't collide. */
 const NARRATION_SENTENCE_GAP_MS = 260;
-/** Below this, the estimated pacing feels more natural than audio timings. */
-const MIN_AUDIBLE_STEP_MS = 2_400;
+
+const sleep = (ms: number): Promise<void> =>
+  // oxlint-disable-next-line promise/avoid-new
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 
 /** Narrated, step-sequenced explanation player: transcript on the left,
  * synced visuals on the right, timer-driven playback (no voice yet). */
@@ -63,9 +69,88 @@ function guidedStepDurationMs(step: GuidedExplanationStep): number {
  * while its step narrates, so the prose reads as one flowing paragraph. */
 export function narrationSentences(narration: string): string[] {
   return narration
-    .split(/(?<=[.!?])\s+/)
+    .split(/(?<=[.!?])\s+/u)
     .map((sentence) => sentence.trim())
     .filter((sentence) => sentence.length > 0);
+}
+
+interface SpeakStepOptions {
+  readonly firstSentenceIndex: number;
+  readonly isCancelled: () => boolean;
+  readonly onProgress: (percent: number) => void;
+  readonly onSentenceLit: (globalSentenceIndex: number) => void;
+  readonly onUtteranceReady: (
+    globalSentenceIndex: number,
+    durationMs: number
+  ) => void;
+  readonly play: (utterance: VoiceUtterance) => Promise<void>;
+  readonly sentences: readonly string[];
+  readonly speakFallbackMs: number;
+  readonly synthesize: (text: string) => Promise<VoiceUtterance | null>;
+}
+
+/** Speaks one step's lines in order, in full; resolves when the step's last
+ * line ends (or immediately once cancelled). Lines are synthesized one at a
+ * time, so a first pass may pause briefly per line while the engine renders —
+ * each line is cached afterwards and replays instantly. */
+// oxlint-disable-next-line promise(avoid-new) -- none used; annotation anchor
+async function speakStepLines(options: SpeakStepOptions): Promise<void> {
+  const progress = { completedLines: 0 };
+  const totalLines = Math.max(options.sentences.length, 1);
+  for (let index = 0; index < options.sentences.length; index += 1) {
+    if (options.isCancelled()) {
+      return;
+    }
+    const globalSentenceIndex = options.firstSentenceIndex + index;
+    options.onSentenceLit(globalSentenceIndex);
+    // Lines are spoken in order; parallelizing would overlap the voices.
+    // oxlint-disable-next-line no-await-in-loop
+    const utterance = await options.synthesize(options.sentences[index] ?? "");
+    if (options.isCancelled()) {
+      return;
+    }
+    if (utterance !== null) {
+      options.onUtteranceReady(globalSentenceIndex, utterance.durationMs);
+    }
+    const spokenMs = utterance?.durationMs ?? options.speakFallbackMs;
+    const sentenceStartedAt = performance.now();
+    let rafId = requestAnimationFrame(function tick() {
+      if (options.isCancelled()) {
+        return;
+      }
+      const lineFraction = Math.min(
+        (performance.now() - sentenceStartedAt) / spokenMs,
+        1
+      );
+      options.onProgress(
+        ((progress.completedLines + lineFraction) / totalLines) * 100
+      );
+      rafId = requestAnimationFrame(tick);
+    });
+    if (utterance === null) {
+      narrationLog(
+        `sentence ${globalSentenceIndex + 1}: synthesis failed, holding estimated window`
+      );
+      // oxlint-disable-next-line no-await-in-loop
+      await sleep(spokenMs);
+    } else {
+      narrationLog(
+        `speaking sentence ${globalSentenceIndex + 1}:`,
+        `bytes=${utterance.wav.byteLength}`,
+        `durationMs=${utterance.durationMs}`
+      );
+      // oxlint-disable-next-line no-await-in-loop
+      await options.play(utterance);
+    }
+    cancelAnimationFrame(rafId);
+    if (options.isCancelled()) {
+      return;
+    }
+    progress.completedLines += 1;
+    options.onProgress((progress.completedLines / totalLines) * 100);
+    // oxlint-disable-next-line no-await-in-loop
+    await sleep(NARRATION_SENTENCE_GAP_MS);
+  }
 }
 
 interface GuidedStageLine {
@@ -281,6 +366,9 @@ function GuidedMarkdownStage(props: { source: string }): ReactElement {
   );
 }
 
+// The narration state machine spans several effects; splitting it further
+// scattered related state without making any piece simpler.
+// oxlint-disable-next-line complexity
 export function GuidedExplanationPlayer(props: {
   content: GuidedExplanationLessonContent;
   completed: boolean;
@@ -327,31 +415,37 @@ export function GuidedExplanationPlayer(props: {
     }
   }, [voiceStatus, voicePreferences.enabled]);
 
-  // One sentence's narration channel + the sentence it is currently speaking.
+  // One sentence's narration channel + which sentence the voice is on.
   const narrationChannelRef = useRef<NarrationChannel | null>(null);
-  const narratedSentenceRef = useRef(-1);
+  const [narratedSentenceIndex, setNarratedSentenceIndex] = useState<
+    number | null
+  >(null);
   // How many of this lesson's sentences have stored audio — shown as
   // "N/M lines" next to Playing/Paused. Re-probed as steps advance and when
   // background sweeps finish writing lines (cache subscription).
   const [voiceLineCounts, setVoiceLineCounts] = useState<number | null>(null);
   const cacheGeneration = useRef(0);
-  // Global sentence index -> synthesized audio duration, populated lazily so
-  // step timing can match the actual narration pace once known.
+  // Global sentence index -> synthesized audio duration (diagnostics + the
+  // prefetch's skip guard).
   const sentenceDurationsRef = useRef<Map<number, number>>(new Map());
-  const [durationsVersion, setDurationsVersion] = useState(0);
+  // Generation counter for the narration loop: bumped on every cancel so a
+  // superseded loop's async steps abort instead of speaking over the new one.
+  const narrationGenerationRef = useRef(0);
 
-  function getNarrationChannel(): NarrationChannel {
+  const getNarrationChannel = useCallback((): NarrationChannel => {
     if (narrationChannelRef.current === null) {
       narrationChannelRef.current = createNarrationChannel();
     }
     return narrationChannelRef.current;
-  }
+  }, []);
 
-  function stopActiveNarration(reason: string): void {
-    narrationLog("stop narration:", reason);
-    getNarrationChannel().stop();
-    narratedSentenceRef.current = -1;
-  }
+  const stopActiveNarration = useCallback(
+    (reason: string): void => {
+      narrationLog("stop narration:", reason);
+      getNarrationChannel().stop();
+    },
+    [getNarrationChannel]
+  );
 
   // Restart the explanation when a different guided lesson is opened.
   useEffect(() => {
@@ -359,12 +453,24 @@ export function GuidedExplanationPlayer(props: {
     setStepIndex(0);
     setStepProgress(0);
     setIsPlaying(true);
+    setNarratedSentenceIndex(null);
     stopActiveNarration("lesson restarted");
     sentenceDurationsRef.current = new Map();
-    setDurationsVersion((version) => version + 1);
   }, [props.lessonId]);
 
   const isLastStep = stepIndex === steps.length - 1;
+
+  // Global index of each step's first sentence (the narration loop and the
+  // seek handler translate step indexes into transcript line indexes).
+  const stepSentenceOffsets = useMemo(() => {
+    const offsets: number[] = [];
+    let offset = 0;
+    for (const step of steps) {
+      offsets.push(offset);
+      offset += narrationSentences(step.narration).length;
+    }
+    return offsets;
+  }, [steps]);
 
   function goToStep(nextStepIndex: number): void {
     const boundedIndex = Math.max(0, Math.min(nextStepIndex, steps.length - 1));
@@ -376,6 +482,7 @@ export function GuidedExplanationPlayer(props: {
     }
     narrationLog("go to step", boundedIndex);
     stopActiveNarration("step seek");
+    setNarratedSentenceIndex(stepSentenceOffsets[boundedIndex] ?? null);
     setStepIndex(boundedIndex);
     setStepProgress(0);
   }
@@ -435,6 +542,7 @@ export function GuidedExplanationPlayer(props: {
   // status stays truthful while narration lines generate.
   useEffect(() => {
     let generation = ++cacheGeneration.current;
+    const totalLines = transcriptSentences.length;
     if (!voicePreferences.enabled) {
       setVoiceLineCounts(null);
       return;
@@ -444,9 +552,7 @@ export function GuidedExplanationPlayer(props: {
       voicePreferences
     ).then((cachedCount) => {
       if (cacheGeneration.current === generation) {
-        narrationLog(
-          `voice lines ready: ${cachedCount}/${transcriptSentences.length}`
-        );
+        narrationLog(`voice lines ready: ${cachedCount}/${totalLines}`);
         setVoiceLineCounts(cachedCount);
       }
     });
@@ -462,56 +568,17 @@ export function GuidedExplanationPlayer(props: {
       });
     });
   }, [transcriptSentences, voicePreferences]);
-  const stepSentenceOffsets = useMemo(() => {
-    const offsets: number[] = [];
-    let offset = 0;
-    for (const step of steps) {
-      offsets.push(offset);
-      offset += narrationSentences(step.narration).length;
-    }
-    return offsets;
-  }, [steps]);
-
-  // Effective step duration: when narration is enabled and every sentence of
-  // the step has a synthesized utterance, the step's clock matches the actual
-  // audio pace (sum of sentence durations + a small breath between lines) so
-  // the lit sentence tracks the voice; otherwise the text-based estimate.
-  const stepAudioDurationMs = useMemo(() => {
-    if (!voicePreferences.enabled) {
-      return null;
-    }
-    const stepFirst = stepSentenceOffsets[stepIndex];
-    const stepCount = narrationSentences(
-      steps[stepIndex]?.narration ?? ""
-    ).length;
-    let totalMs = 0;
-    for (
-      let sentenceOffset = 0;
-      sentenceOffset < stepCount;
-      sentenceOffset += 1
-    ) {
-      const sentenceDuration = sentenceDurationsRef.current.get(
-        stepFirst + sentenceOffset
-      );
-      if (sentenceDuration === undefined) {
-        return null;
-      }
-      totalMs += sentenceDuration + NARRATION_SENTENCE_GAP_MS;
-    }
-    return Math.max(totalMs, MIN_AUDIBLE_STEP_MS);
-    // durationsVersion participates so a late-arriving utterance recomputes.
-  }, [stepIndex, stepSentenceOffsets, steps, durationsVersion, voicePreferences]);
 
   // rAF-driven step clock: drives the per-step progress bar and advances to
-  // the next step when the current step's duration elapses. Pausing simply
-  // tears the clock down; progress freezes at the frozen frame.
+  // the next step when the current step's duration elapses. Only used when
+  // narration is OFF — with the voice on, the audio-driven loop below owns
+  // pacing (the estimate clock would cut sentences off mid-word).
   useEffect(() => {
-    if (!isPlaying) {
-      return undefined;
+    if (!isPlaying || voicePreferences.enabled) {
+      return;
     }
     setStepProgress(0);
-    const stepDurationMs =
-      stepAudioDurationMs ?? guidedStepDurationMs(steps[stepIndex]);
+    const stepDurationMs = guidedStepDurationMs(steps[stepIndex]);
     const startedAt = performance.now();
     let rafId = 0;
     const tick = (): void => {
@@ -536,17 +603,22 @@ export function GuidedExplanationPlayer(props: {
       cancelAnimationFrame(rafId);
       window.clearTimeout(advanceTimer);
     };
-  }, [isPlaying, stepIndex, isLastStep, steps, stepAudioDurationMs]);
+  }, [isPlaying, stepIndex, isLastStep, steps, voicePreferences.enabled]);
 
   const stepSentenceCount = Math.max(
     1,
     narrationSentences(steps[stepIndex]?.narration ?? "").length
   );
-  const activeSentenceIndex = Math.min(
-    stepSentenceOffsets[stepIndex] +
-      Math.floor((stepProgress / 100) * stepSentenceCount),
-    transcriptSentences.length - 1
-  );
+  // With the voice on, the narration loop owns the lit sentence (it lights
+  // each line as the voice reaches it); without it, the estimate clock does.
+  const activeSentenceIndex =
+    voicePreferences.enabled && narratedSentenceIndex !== null
+      ? Math.min(narratedSentenceIndex, transcriptSentences.length - 1)
+      : Math.min(
+          stepSentenceOffsets[stepIndex] +
+            Math.floor((stepProgress / 100) * stepSentenceCount),
+          transcriptSentences.length - 1
+        );
 
   // Prefetch: once a step starts (or narration is enabled), synthesize (or
   // pull from cache) every sentence of it, oldest first, so its audio exists
@@ -589,7 +661,6 @@ export function GuidedExplanationPlayer(props: {
           globalSentenceIndex,
           utterance.durationMs
         );
-        setDurationsVersion((version) => version + 1);
       }
     })();
     return () => {
@@ -597,70 +668,63 @@ export function GuidedExplanationPlayer(props: {
     };
   }, [stepIndex, stepSentenceOffsets, steps, voicePreferences]);
 
-  // Say the sentence as it lights up: when the active sentence changes during
-  // playback, fetch its utterance (usually a cache hit from the prefetch) and
-  // start it; playback runs through the Web Audio channel, which keeps its
-  // autoplay permission once the learner has interacted with the page at all.
+  // Audio-driven narration loop: with the voice on, each step's lines are
+  // synthesized (cache-first) and spoken IN FULL, one at a time — the step
+  // advances when its last line ends. This replaces the estimate clock, which
+  // cut sentences off mid-word whenever the text-length estimate ran faster
+  // than real audio. Pausing/seeking/lesson changes cancel the loop; resuming
+  // restarts the current step from its first line.
   useEffect(() => {
     if (!isPlaying || !voicePreferences.enabled) {
-      if (isPlaying && !voicePreferences.enabled) {
-        narrationLog("say skipped: narration disabled in preferences");
-      }
       stopActiveNarration(isPlaying ? "voice disabled" : "paused");
       return;
     }
-    const activeSentence = transcriptSentences[activeSentenceIndex];
-    if (activeSentence === undefined) {
-      stopActiveNarration("no active sentence");
-      return;
-    }
-    if (narratedSentenceRef.current === activeSentenceIndex) {
-      return;
-    }
-    narrationLog(
-      `say sentence ${activeSentenceIndex + 1}/${transcriptSentences.length}:`,
-      JSON.stringify(activeSentence.text.slice(0, 60))
+    const generation = ++narrationGenerationRef.current;
+    const isCancelled = (): boolean =>
+      generation !== narrationGenerationRef.current;
+    const stepSentences = narrationSentences(
+      steps[stepIndex]?.narration ?? ""
     );
-    let cancelled = false;
-    void getOrSynthesizeUtterance(activeSentence.text, voicePreferences).then(
-      (utterance) => {
-        // The stale-check is the effect cleanup (`cancelled`): it runs whenever
-        // the active sentence, playing state or preferences change. There is no
-        // separate "currently narrating" comparison here — `narratedSentenceRef`
-        // starts at -1 (nothing spoken yet) and is only set once audio starts,
-        // so comparing against it discarded every utterance before its first
-        // play and narration stayed silent forever.
-        if (cancelled) {
-          narrationLog(
-            `sentence ${activeSentenceIndex + 1} abandoned (effect cleaned up)`
-          );
-          return;
-        }
-        if (utterance === null) {
-          narrationLog(
-            `sentence ${activeSentenceIndex + 1}: NO utterance (synthesis failed)`
-          );
-          return;
-        }
-        narrationLog(
-          `speaking sentence ${activeSentenceIndex + 1}:`,
-          `bytes=${utterance.wav.byteLength}`,
-          `durationMs=${utterance.durationMs}`
-        );
-        stopActiveNarration("new sentence");
-        narratedSentenceRef.current = activeSentenceIndex;
-        sentenceDurationsRef.current.set(
-          activeSentenceIndex,
-          utterance.durationMs
-        );
-        setDurationsVersion((version) => version + 1);
-        getNarrationChannel().play(utterance.cacheKey, utterance.wav);
+    void (async () => {
+      await speakStepLines({
+        firstSentenceIndex: stepSentenceOffsets[stepIndex] ?? 0,
+        isCancelled,
+        onProgress: (percent) => {
+          if (!isCancelled()) {
+            setStepProgress(percent);
+          }
+        },
+        onSentenceLit: (globalSentenceIndex) => {
+          setNarratedSentenceIndex(globalSentenceIndex);
+        },
+        onUtteranceReady: (globalSentenceIndex, durationMs) => {
+          sentenceDurationsRef.current.set(globalSentenceIndex, durationMs);
+        },
+        play: (utterance) =>
+          getNarrationChannel().play(utterance.cacheKey, utterance.wav),
+        sentences: stepSentences,
+        speakFallbackMs:
+          guidedStepDurationMs(steps[stepIndex]) /
+          Math.max(stepSentences.length, 1),
+        synthesize: (text) => getOrSynthesizeUtterance(text, voicePreferences),
+      });
+      if (isCancelled()) {
+        return;
       }
-    );
+      setStepProgress(100);
+      if (stepIndex < steps.length - 1) {
+        narrationLog("step complete -> next step");
+        setStepIndex(stepIndex + 1);
+      } else {
+        narrationLog("lesson narration finished");
+        setIsPlaying(false);
+      }
+    })();
     return () => {
-      cancelled = true;
+      narrationGenerationRef.current += 1;
+      stopActiveNarration("narration loop restarted");
     };
-  }, [activeSentenceIndex, isPlaying, voicePreferences, transcriptSentences]);
+  }, [isPlaying, voicePreferences, stepIndex, stepSentenceOffsets, steps, stopActiveNarration, getNarrationChannel]);
 
 
   // Keep the lit sentence in view.
@@ -919,4 +983,5 @@ export function GuidedExplanationPlayer(props: {
     </div>
   );
 }
+
 

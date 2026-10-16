@@ -68,8 +68,9 @@ function ensureUnlockBinding(): void {
 }
 
 export interface NarrationChannel {
-  /** Speaks one utterance, replacing whatever the channel was speaking. */
-  play: (cacheKey: string, wav: ArrayBuffer) => void;
+  /** Speaks one utterance, replacing whatever the channel was speaking.
+   * Resolves when the line finishes playing (or is stopped/superseded). */
+  play: (cacheKey: string, wav: ArrayBuffer) => Promise<void>;
   /** Silence the channel and invalidate in-flight decodes. */
   stop: () => void;
 }
@@ -111,7 +112,7 @@ export function createNarrationChannel(): NarrationChannel {
       );
       if (context === null) {
         narrationLog("channel play aborted: no AudioContext");
-        return;
+        return Promise.resolve();
       }
       if (context.state === "suspended") {
         narrationLog("context suspended at play; requesting resume");
@@ -124,7 +125,7 @@ export function createNarrationChannel(): NarrationChannel {
           }
         })();
       }
-      void (async () => {
+      return (async () => {
         let buffer = decodedBuffers.get(cacheKey);
         if (buffer === undefined) {
           try {
@@ -170,22 +171,25 @@ export function createNarrationChannel(): NarrationChannel {
         source.buffer = buffer;
         source.connect(context.destination);
         currentSource = source;
-        source.addEventListener("ended", () => {
-          narrationLog("source ended naturally:", cacheKey.slice(0, 40));
+        // Resolves when the line finishes naturally, or when stop()/a newer
+        // line kills the source (stop() fires the ended event).
+        // oxlint-disable-next-line promise/avoid-new
+        await new Promise<void>((resolve) => {
+          source.addEventListener("ended", () => {
+            narrationLog("source ended:", cacheKey.slice(0, 40));
+            resolve();
+          });
+          source.start();
+          narrationLog(
+            "source started, ctx.currentTime=",
+            Math.round(context.currentTime * 100) / 100,
+            "state=",
+            context.state
+          );
         });
-        source.start();
-        narrationLog(
-          "source started, ctx.currentTime=",
-          Math.round(context.currentTime * 100) / 100,
-          "state=",
-          context.state
-        );
-        narrationLog(
-          "source started, ctx.currentTime=",
-          Math.round(context.currentTime * 100) / 100,
-          "state=",
-          context.state
-        );
+        if (currentSource === source) {
+          currentSource = null;
+        }
       })();
     },
     stop() {
