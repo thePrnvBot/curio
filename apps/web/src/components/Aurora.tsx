@@ -394,6 +394,13 @@ const Aurora = ({
     };
 
     const frame = (now: number) => {
+      // 30fps cap: WebGL canvas at the foot of the page; halving its frame
+      // rate is invisible for this gradient and frees frame time for the
+      // hero shader.
+      if (now - last < 30) {
+        raf = requestAnimationFrame(frame);
+        return;
+      }
       raf = 0;
       if (!visible || document.hidden) return;
       const s = settingsRef.current;
@@ -430,7 +437,7 @@ const Aurora = ({
       const s = settingsRef.current;
       const width = Math.max(1, container.clientWidth);
       const height = Math.max(1, container.clientHeight);
-      const ratio = Math.min(s.dpr || window.devicePixelRatio || 1, 2);
+      const ratio = Math.min(s.dpr || window.devicePixelRatio || 1, 1.5);
       view.width = width;
       view.height = height;
       canvas.width = Math.max(1, Math.round(width * ratio));

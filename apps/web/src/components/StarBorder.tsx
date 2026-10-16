@@ -279,7 +279,7 @@ const StarBorder = <T extends React.ElementType = 'button'>({
     const measure = () => {
       state.width = root.offsetWidth;
       state.height = root.offsetHeight;
-      state.dpr = Math.min(window.devicePixelRatio || 1, 2);
+      state.dpr = Math.min(window.devicePixelRatio || 1, 1.5);
       canvas.width = Math.max(1, Math.round((state.width + BLEED * 2) * state.dpr));
       canvas.height = Math.max(1, Math.round((state.height + BLEED * 2) * state.dpr));
       wake();
@@ -318,7 +318,7 @@ const StarBorder = <T extends React.ElementType = 'button'>({
       tip = true
     ) => {
       if (length < 0.5 || intensity <= 0) return;
-      const steps = clamp(Math.ceil(length / 2), 2, 90);
+      const steps = clamp(Math.ceil(length / 2), 2, 60);
       pointAt(shape, head, point);
       let px = point.x;
       let py = point.y;
@@ -467,6 +467,14 @@ const StarBorder = <T extends React.ElementType = 'button'>({
     };
 
     const frame = (now: number) => {
+      // Hard 30fps cap: this loop draws radial blooms + dozens of gradient
+      // strokes per frame; on 120Hz displays the 60fps path doubles CPU work
+      // that then competes with the hero shader for frame time (the landing
+      // stutter).
+      if (now - last < 30) {
+        raf = requestAnimationFrame(frame);
+        return;
+      }
       raf = 0;
       if (!alive) return;
       const s = settingsRef.current;
@@ -592,6 +600,12 @@ const StarBorder = <T extends React.ElementType = 'button'>({
     resizeObserver.observe(root);
     const visibility = new IntersectionObserver(entries => {
       state.visible = entries.some(entry => entry.isIntersecting);
+      if (!state.visible) {
+        // Offscreen: hard-stop the loop instead of waiting for the current
+        // frame's "settling" condition to end it on its own.
+        cancelAnimationFrame(raf);
+        raf = 0;
+      }
       if (state.visible) wake();
     });
     visibility.observe(root);
