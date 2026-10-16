@@ -210,7 +210,7 @@ export const webPageReadEffect = Effect.fnUntraced(function* (
   const truncated = trimmed.length > WEB_READ_MAX_CHARS;
   return {
     markdown: truncated
-      ? `${trimmed.slice(0, WEB_READ_MAX_CHARS).trimEnd()}\n\nâ€¦`
+      ? `${trimmed.slice(0, WEB_READ_MAX_CHARS).trimEnd()}` + "\n\n…"
       : trimmed,
     note: truncated
       ? "Page text was truncated; read again with a narrower source if key details are missing."

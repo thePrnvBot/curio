@@ -175,7 +175,7 @@ export function ArtifactPreviewer({ data }: { data: ArtifactUIData }) {
         className="bg-background w-full rounded-md border-x border-b"
         ref={htmlFrameRef}
         // Interactive artifacts: scripts and forms run, but the frame keeps a
-        // null origin â€” meaning no access to Curio's cookies, storage, DOM, or
+        // null origin — meaning no access to Curio's cookies, storage, DOM, or
         // any httpOnly session cookie, no same-origin reads, and no top-level
         // navigation out of the artifact.
         sandbox="allow-scripts allow-forms"
@@ -263,7 +263,7 @@ export function PromptInputAttachmentsDisplay() {
     return null;
   }
 
-  // Only mount the header addon when attachments exist â€” an always-on header
+  // Only mount the header addon when attachments exist — an always-on header
   // leaves a phantom padded strip between the top border and the textarea.
   return (
     <PromptInputHeader>

@@ -72,7 +72,7 @@ export function BadgeShowcaseSection({
       </div>
       {loading ? (
         // Same card chrome as the empty and earned states, so stepping
-        // between skeleton â†’ earned badges never changes layout language.
+        // between skeleton → earned badges never changes layout language.
         <div className="bg-card/50 rounded-xl border p-5 md:p-6">
           <div className="flex flex-wrap gap-x-7 gap-y-5">
             {BADGE_SKELETONS.map((index) => (

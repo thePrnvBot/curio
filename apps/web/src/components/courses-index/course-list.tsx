@@ -89,7 +89,7 @@ export function CourseListSection({
                         {isActive ? <Badge>In progress</Badge> : null}
                       </div>
                       <p className="text-muted-foreground mt-1 text-sm">
-                        {`${course.completedLessonCount} of ${course.lessonCount} lessons Â· ${progressPercent(course)}%`}
+                        {`${course.completedLessonCount} of ${course.lessonCount} lessons · ${progressPercent(course)}%`}
                       </p>
                       <div className="mt-3 flex items-center gap-2">
                         <Badge variant="outline">{`${course.lessonCount} lessons`}</Badge>
