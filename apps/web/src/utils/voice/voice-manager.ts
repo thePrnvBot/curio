@@ -155,7 +155,9 @@ function postVoiceRequest(
 
 /* -------------------------------- provider --------------------------------- */
 
-export const KOKORO_WEB_PROVIDER_ID = "kokoro-web";
+// The v2 suffix orphans every cached utterance synthesized by the old
+// WebGPU engine, whose waveforms were garbled noise.
+export const KOKORO_WEB_PROVIDER_ID = "kokoro-web-v2";
 
 export const kokoroWebVoiceProvider: VoiceProvider = {
   async listVoices(): Promise<readonly VoiceCatalogEntry[]> {

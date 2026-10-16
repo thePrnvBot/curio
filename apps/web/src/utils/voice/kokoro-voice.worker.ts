@@ -5,6 +5,7 @@ import type {
   VoiceWorkerRequest,
   VoiceWorkerResponse,
 } from "./voice-worker-protocol";
+import { narrationLog } from "./voice-playback";
 
 /**
  * Kokoro-82M narration synth, loaded lazily inside a worker so the model
@@ -19,13 +20,12 @@ let modelPromise: Promise<KokoroTTS> | null = null;
 
 function loadModel(): Promise<KokoroTTS> {
   if (modelPromise === null) {
+    narrationLog("loading Kokoro model (wasm q8)");
     modelPromise = KokoroTTS.from_pretrained(MODEL_ID, {
-      // WebGPU + fp32 where available (fast, high-fidelity); q8 WASM otherwise.
-      ...(("gpu" in navigator && navigator.gpu !== null
-        ? { device: "webgpu" as const, dtype: "fp32" as const }
-        : { dtype: "q8" as const }) as Parameters<
-        typeof KokoroTTS.from_pretrained
-      >[1]),
+      // WebGPU + fp32 renders garbled noise with kokoro's graph on several
+      // browsers (the waveform comes back full of static), so synthesis
+      // always runs the WASM q8 path. Slower per sentence; clean audio.
+      dtype: "q8",
       // Model download size is significant (~80MB q8): stream progress back so
       // the UI can show a "downloading narration model" state.
       progress_callback: (progress: { progress?: number; status?: string }) => {
@@ -109,7 +109,28 @@ workerScope.onmessage = async (event: MessageEvent<VoiceWorkerRequest>) => {
       speed: request.speed,
       voice: request.voiceId as never,
     });
-    const wav = encodeWavPcm16(audio.audio, audio.sampling_rate);
+    const samples = audio.audio;
+    // Sample statistics: sane speech floats sit within ±1 with a moderate RMS;
+    // garbage (wrong device/dtype) shows extreme or saturated values.
+    let min = Number.POSITIVE_INFINITY;
+    let max = Number.NEGATIVE_INFINITY;
+    let squaredSum = 0;
+    const probeLength = Math.min(samples.length, 24_000);
+    for (let sampleIndex = 0; sampleIndex < probeLength; sampleIndex += 1) {
+      const value = samples[sampleIndex];
+      min = Math.min(min, value);
+      max = Math.max(max, value);
+      squaredSum += value * value;
+    }
+    narrationLog(
+      "worker samples:",
+      samples.constructor.name,
+      `len=${samples.length}`,
+      `min=${min.toFixed(3)}`,
+      `max=${max.toFixed(3)}`,
+      `rms=${Math.sqrt(squaredSum / Math.max(probeLength, 1)).toFixed(3)}`
+    );
+    const wav = encodeWavPcm16(samples, audio.sampling_rate);
     const response: VoiceWorkerResponse = {
       durationMs: (audio.audio.length / audio.sampling_rate) * 1000,
       id: request.id,

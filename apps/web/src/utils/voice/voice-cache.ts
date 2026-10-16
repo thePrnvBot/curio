@@ -7,7 +7,7 @@
 
 import { Effect } from "effect";
 
-export type VoiceProviderId = "kokoro-web";
+export type VoiceProviderId = "kokoro-web-v2";
 
 export interface VoicePreferences {
   readonly enabled: boolean;
