@@ -62,6 +62,7 @@ import {
   extractPendingQuestions,
   PendingQuestionsPanel,
 } from "@/components/chat/chat-questions";
+import { WebToolView } from "@/components/chat/chat-web-tools";
 
 export { ChatSkeleton };
 import ChatSessionPanel from "@/components/chat-session-panel";
@@ -90,6 +91,8 @@ export interface PersistedChatMessageRecord {
 
 const CREATE_COURSE_TOOL_NAME = "create_course";
 const CREATE_LESSON_TOOL_NAME = "create_lesson";
+const TOOL_WEB_SEARCH = "tool-web_search";
+const TOOL_WEB_READ = "tool-web_read";
 
 const CHAT_STARTER_SUGGESTIONS = [
   "Build a landing page artifact and publish it for review",
@@ -467,6 +470,12 @@ function ChatConversation({
                             />
                           </div>
                         );
+                      }
+                      if (part.type === TOOL_WEB_SEARCH || part.type === TOOL_WEB_READ) {
+                        // Web tool calls render as collapsible cards, live:
+                        // running while the Director searches, completed
+                        // with results/previews once committed.
+                        return <WebToolView key={structuralKey} part={part} />;
                       }
                       if (part.type !== "tool-create_artifact") {
                         return null;
