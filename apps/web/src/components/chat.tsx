@@ -157,11 +157,13 @@ function ChatConversation({
 }) {
   // The Chat instance lives outside the React tree: navigating away to
   // another conversation never tears an in-flight stream down, and coming
-  // back reattaches to the same instance mid-stream.
+  // back reattaches to the same instance mid-stream. `resume` also asks the
+  // server for a durable run replay on mount, so a chat that kept streaming
+  // while the page was closed catches up when it is reopened.
   const chat = getChatInstance(chatId, initialMessages);
 
   const { messages, status, sendMessage, regenerate, stop, setMessages, error } =
-    useChat({ chat });
+    useChat({ chat, resume: true });
 
   const isStreaming = status === "submitted" || status === "streaming";
   const pendingQuestions = useMemo(
@@ -263,6 +265,47 @@ function ChatConversation({
 
   function sendPendingQuestionAnswers(answersText: string): void {
     void sendMessage({ text: answersText });
+  }
+
+  function handleMessageStop(): void {
+    playInteractionCue("close");
+    // Consumed before the settle effect runs, so a stopped stream doesn't
+    // also play the ready cue.
+    streamSoundStateRef.current = "idle";
+    stop();
+
+    // The generation is detached from the request, so the stop button must
+    // also tell the server run to settle. Once it has, the persisted partial
+    // replaces whatever partial text the local stream managed to show.
+    void (async () => {
+      try {
+        const abortResponse = await fetch(
+          `/api/chat/${encodeURIComponent(chatId)}/abort`,
+          { credentials: "include", method: "POST" }
+        );
+        if (!abortResponse.ok) {
+          // 404: nothing was running server-side; the local settle is enough.
+          if (abortResponse.status !== 404) {
+            console.error(
+              "Abort endpoint failed",
+              abortResponse.status,
+              await abortResponse.text().catch(() => "")
+            );
+          }
+          return;
+        }
+        const chatDetail = await queryClient.fetchQuery(
+          trpc.chats.get.queryOptions({ chatId })
+        );
+        const restoredMessages = await restoreUIMessages(chatDetail.messages);
+        setMessages(restoredMessages);
+        void queryClient.invalidateQueries({
+          queryKey: trpc.chats.list.queryKey(),
+        });
+      } catch (stopError: unknown) {
+        console.error("Failed to stop the server agent run", stopError);
+      }
+    })();
   }
 
   return (
@@ -548,13 +591,7 @@ function ChatConversation({
                       </PromptInputTools>
                       <PromptInputSubmit
                         disabled={false}
-                        onStop={() => {
-                          playInteractionCue("close");
-                          // Consumed before the settle effect runs, so a
-                          // stopped stream doesn't also play the ready cue.
-                          streamSoundStateRef.current = "idle";
-                          stop();
-                        }}
+                        onStop={handleMessageStop}
                         status={status}
                       />
                     </PromptInputFooter>

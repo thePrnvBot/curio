@@ -9,8 +9,18 @@ import { DefaultChatTransport, type UIMessage } from "ai";
 
 const instances = new Map<string, Chat<UIMessage>>();
 
+/**
+ * A durable chat replays the whole active run from storage on reconnect
+ * (GET /api/chat/{id}/stream). Telling the AI SDK that reconnection is a
+ * full replay makes it reset the streaming message state first, so replayed
+ * chunks rebuild the response instead of duplicating partial text.
+ */
+class ReplayDefaultChatTransport extends DefaultChatTransport<UIMessage> {
+  readonly resumeStreamIsReplay = true;
+}
+
 function createTransport(): DefaultChatTransport<UIMessage> {
-  return new DefaultChatTransport({
+  return new ReplayDefaultChatTransport({
     api: "/api/chat",
     credentials: "include",
     prepareSendMessagesRequest: ({ id, messages, messageId, trigger }) => ({
