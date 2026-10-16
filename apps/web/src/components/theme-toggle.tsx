@@ -12,7 +12,7 @@ export function ThemeToggle() {
   return (
     <Button
       aria-label="Toggle theme"
-      className="rounded-full"
+      className="rounded-full hover:-translate-y-0.5"
       onClick={() => {
         setTheme(nextTheme);
       }}

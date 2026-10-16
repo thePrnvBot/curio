@@ -48,9 +48,15 @@ export default function Header() {
     readonly left: number;
     readonly width: number;
   } | null>(null);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [hoveredPill, setHoveredPill] = useState<{
+    readonly left: number;
+    readonly width: number;
+  } | null>(null);
 
-  // Measure the active link so the pill can glide under it; re-measure on
-  // viewport resizes and when the active route changes.
+  // Measure the active link so the pill can glide under it, plus the hovered
+  // link for the softer hover pill; re-measure on viewport resizes, route
+  // changes and whenever the pointer moves to another link.
   useLayoutEffect(() => {
     function measureActivePill(): void {
       const container = containerRef.current;
@@ -65,6 +71,15 @@ export default function Header() {
         left: activeItem.offsetLeft,
         width: activeItem.offsetWidth,
       });
+      if (hoveredIndex !== null) {
+        const hoveredItem = itemRefs.current[String(hoveredIndex)];
+        if (hoveredItem !== null && hoveredItem !== undefined) {
+          setHoveredPill({
+            left: hoveredItem.offsetLeft,
+            width: hoveredItem.offsetWidth,
+          });
+        }
+      }
     }
     measureActivePill();
     window.addEventListener("resize", measureActivePill);
@@ -73,15 +88,33 @@ export default function Header() {
       window.removeEventListener("resize", measureActivePill);
       window.clearTimeout(fitTimer);
     };
-  }, [activeIndex]);
+  }, [activeIndex, hoveredIndex]);
+
+  const showHoverPill =
+    hoveredIndex !== null && hoveredIndex !== activeIndex && hoveredPill !== null;
 
   return (
     <header className="pointer-events-none fixed inset-x-0 top-2.5 z-50 flex justify-center px-3">
       <nav
         className="border-border/70 bg-card/80 pointer-events-auto relative flex items-center rounded-full border p-1 shadow-lg backdrop-blur-md"
+        onPointerLeave={() => {
+          setHoveredIndex(null);
+        }}
         ref={containerRef}
       >
-        {activePill !== null ? (
+        {hoveredPill === null ? null : (
+          <span
+            aria-hidden="true"
+            className={`bg-foreground/[0.06] absolute bottom-1 top-1 rounded-full transition-[left,width,opacity,scale] duration-200 ease-out ${
+              showHoverPill ? "scale-100 opacity-100" : "scale-90 opacity-0"
+            }`}
+            style={{
+              left: hoveredPill.left,
+              width: hoveredPill.width,
+            }}
+          />
+        )}
+        {activePill === null ? null : (
           <span
             aria-hidden="true"
             className="bg-primary absolute bottom-1 top-1 rounded-full shadow-xs transition-[left,width,opacity] duration-300 ease-out"
@@ -90,7 +123,7 @@ export default function Header() {
               width: activePill.width,
             }}
           />
-        ) : null}
+        )}
         {NAV_LINKS.map((navLink, navLinkIndex) => {
           const isActive = navLinkIndex === activeIndex;
           return (
@@ -102,6 +135,9 @@ export default function Header() {
               }
               data-cuelume-navigate="navigate"
               key={navLink.to}
+              onMouseEnter={() => {
+                setHoveredIndex(navLinkIndex);
+              }}
               ref={(anchor) => {
                 itemRefs.current[String(navLinkIndex)] = anchor;
               }}

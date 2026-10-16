@@ -33,7 +33,11 @@ export default function UserMenu() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button className="rounded-full" variant="outline" />}>
+      <DropdownMenuTrigger
+        render={
+          <Button className="rounded-full hover:-translate-y-0.5 hover:shadow-sm" variant="outline" />
+        }
+      >
         {session.user.name}
       </DropdownMenuTrigger>
       <DropdownMenuContent className="bg-card">
