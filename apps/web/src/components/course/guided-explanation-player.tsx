@@ -26,6 +26,7 @@ import { toast } from "sonner";
 
 import { highlightCode } from "@curio/ui/components/ai-elements/code-block";
 import { playInteractionCue } from "@/utils/sound";
+import { createNarrationChannel, type NarrationChannel } from "@/utils/voice/voice-playback";
 import {
   countCachedUtterances,
   getOrSynthesizeUtterance,
@@ -322,8 +323,8 @@ export function GuidedExplanationPlayer(props: {
     }
   }, [voiceStatus, voicePreferences.enabled]);
 
-  // One sentence's audio ref + the sentence it is currently speaking.
-  const narrationAudioRef = useRef<HTMLAudioElement | null>(null);
+  // One sentence's narration channel + the sentence it is currently speaking.
+  const narrationChannelRef = useRef<NarrationChannel | null>(null);
   const narratedSentenceRef = useRef(-1);
   // How many of this lesson's sentences have stored audio — shown as
   // "N/M lines" next to Playing/Paused. Re-probed as steps advance and when
@@ -335,14 +336,16 @@ export function GuidedExplanationPlayer(props: {
   const sentenceDurationsRef = useRef<Map<number, number>>(new Map());
   const [durationsVersion, setDurationsVersion] = useState(0);
 
-  function stopActiveNarration(): void {
-    const audio = narrationAudioRef.current;
-    narrationAudioRef.current = null;
-    narratedSentenceRef.current = -1;
-    if (audio !== null) {
-      audio.pause();
-      audio.src = "";
+  function getNarrationChannel(): NarrationChannel {
+    if (narrationChannelRef.current === null) {
+      narrationChannelRef.current = createNarrationChannel();
     }
+    return narrationChannelRef.current;
+  }
+
+  function stopActiveNarration(): void {
+    getNarrationChannel().stop();
+    narratedSentenceRef.current = -1;
   }
 
   // Restart the explanation when a different guided lesson is opened.
@@ -582,8 +585,8 @@ export function GuidedExplanationPlayer(props: {
 
   // Say the sentence as it lights up: when the active sentence changes during
   // playback, fetch its utterance (usually a cache hit from the prefetch) and
-  // start it; autoplay policy failures are tolerated silently - the visual
-  // narration keeps running.
+  // start it; playback runs through the Web Audio channel, which keeps its
+  // autoplay permission once the learner has interacted with the page at all.
   useEffect(() => {
     if (!isPlaying || !voicePreferences.enabled) {
       stopActiveNarration();
@@ -608,19 +611,13 @@ export function GuidedExplanationPlayer(props: {
           return;
         }
         stopActiveNarration();
-        const audio = new Audio(
-          URL.createObjectURL(new Blob([utterance.wav], { type: "audio/wav" }))
-        );
-        narrationAudioRef.current = audio;
         narratedSentenceRef.current = activeSentenceIndex;
         sentenceDurationsRef.current.set(
           activeSentenceIndex,
           utterance.durationMs
         );
         setDurationsVersion((version) => version + 1);
-        void audio.play().catch(() => {
-          // Autoplay blocked until a user gesture - visual narration continues.
-        });
+        getNarrationChannel().play(utterance.cacheKey, utterance.wav);
       }
     );
     return () => {

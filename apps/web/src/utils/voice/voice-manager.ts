@@ -36,6 +36,9 @@ export class VoiceSynthesisFailed extends Error {
 }
 
 export interface VoiceUtterance {
+  /** Stable cache key (provider:voice:speed:hash) - also the playback
+   * decode-cache key. Attached by the manager, not the provider. */
+  readonly cacheKey: string;
   /** Narrated length in milliseconds (single WAV, per sentence). */
   readonly durationMs: number;
   readonly providerId: string;
@@ -43,13 +46,16 @@ export interface VoiceUtterance {
   readonly wav: ArrayBuffer;
 }
 
+/** What a provider renders; the manager attaches the cache key. */
+export type SynthesizedUtterance = Omit<VoiceUtterance, "cacheKey">;
+
 export interface VoiceProvider {
   readonly providerId: string;
   /** Lazily initialized; may download model weights on first call. */
   synthesize(
     text: string,
     preferences: { readonly speed: number; readonly voiceId: string }
-  ): Effect.Effect<VoiceUtterance, VoiceSynthesisFailed>;
+  ): Effect.Effect<SynthesizedUtterance, VoiceSynthesisFailed>;
   /** Voice list; must not require model weights. */
   listVoices(): Promise<readonly VoiceCatalogEntry[]>;
 }
@@ -379,6 +385,7 @@ async function synthesizeUncached(
   );
   if (cached !== null) {
     return {
+      cacheKey: key,
       durationMs: cached.durationMs,
       providerId: activeProvider.providerId,
       sampleRate: cached.sampleRate,
@@ -415,7 +422,7 @@ async function synthesizeUncached(
         );
       });
     setStatus({ kind: "idle" });
-    return utterance;
+    return { ...utterance, cacheKey: key };
   } catch (error: unknown) {
     const message =
       error instanceof Error ? error.message : "speech synthesis failed";
