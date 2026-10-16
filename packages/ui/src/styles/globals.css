@@ -166,3 +166,10 @@
   animation: guided-block-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
   animation-delay: var(--guided-delay, 0ms);
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-guided-block-in {
+    animation-duration: 0.01ms;
+    animation-delay: 0ms;
+  }
+}

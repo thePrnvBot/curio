@@ -24,6 +24,12 @@ import {
   type ReactElement,
 } from "react";
 import { toast } from "sonner";
+import {
+  AnimatePresence,
+  motion,
+  useReducedMotion,
+  type Variants,
+} from "motion/react";
 
 import { highlightCode } from "@curio/ui/components/ai-elements/code-block";
 import { playInteractionCue } from "@/utils/sound";
@@ -73,6 +79,36 @@ export function narrationSentences(narration: string): string[] {
     .map((sentence) => sentence.trim())
     .filter((sentence) => sentence.length > 0);
 }
+
+/** Effect-Institute-style stage transitions: the incoming visual slides up
+ * from the narration direction with a blur-fade, the outgoing one lifts away.
+ * Mirrored when stepping backwards. */
+const stageVariants: Variants = {
+  enter: (direction: number) => ({
+    opacity: 0,
+    y: 26 * direction,
+    filter: "blur(6px)",
+  }),
+  center: {
+    opacity: 1,
+    y: 0,
+    filter: "blur(0px)",
+    transition: { duration: 0.34, ease: [0.22, 1, 0.36, 1] },
+  },
+  exit: (direction: number) => ({
+    opacity: 0,
+    y: -20 * direction,
+    filter: "blur(4px)",
+    transition: { duration: 0.22, ease: [0.4, 0, 1, 1] },
+  }),
+};
+
+/** Reduced motion: crossfade only, no travel. */
+const reducedStageVariants: Variants = {
+  enter: { opacity: 0 },
+  center: { opacity: 1, transition: { duration: 0.15 } },
+  exit: { opacity: 0, transition: { duration: 0.1 } },
+};
 
 interface SpeakStepOptions {
   readonly firstSentenceIndex: number;
@@ -382,6 +418,16 @@ export function GuidedExplanationPlayer(props: {
   const [stepIndex, setStepIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
   const [stepProgress, setStepProgress] = useState(0);
+  const prefersReducedMotion = useReducedMotion();
+  // Direction of the last step change: the stage slides with the narration.
+  // The comparison must happen during render — the transition variants need
+  // the direction in the same commit the step changes, before any effect runs.
+  const previousStepIndexRef = useRef(stepIndex);
+  // oxlint-disable-next-line react/refs
+  const stepDirection = stepIndex >= previousStepIndexRef.current ? 1 : -1;
+  useEffect(() => {
+    previousStepIndexRef.current = stepIndex;
+  }, [stepIndex]);
 
   // Narration: preferences arrive from the manager (localStorage-backed),
   // and sentence audio is synthesized per active sentence and cached.
@@ -714,6 +760,8 @@ export function GuidedExplanationPlayer(props: {
       setStepProgress(100);
       if (stepIndex < steps.length - 1) {
         narrationLog("step complete -> next step");
+        // Institute-style animation sound: a soft blip marks the transition.
+        playInteractionCue("navigate", { emphasis: "subtle" });
         setStepIndex(stepIndex + 1);
       } else {
         narrationLog("lesson narration finished");
@@ -860,34 +908,47 @@ export function GuidedExplanationPlayer(props: {
             </div>
           )}
 
-          <div
-            className="bg-card rounded-xl border"
-            key={stepIndex}
+          <AnimatePresence
+            custom={stepDirection}
+            initial={false}
+            mode="wait"
           >
-            <div className="flex items-center justify-between border-b px-4 py-2.5">
-              <p className="text-muted-foreground text-xs font-medium tracking-widest uppercase">
-                {currentStep.visual.kind === "code"
-                  ? (currentStep.visual.language ?? "Code")
-                  : "Notes"}
-              </p>
-              <p className="text-muted-foreground text-xs tabular-nums">
-                {`Step ${stepIndex + 1} of ${steps.length}`}
-              </p>
-            </div>
-            <div className="p-5">
-              {currentStep.visual.kind === "code" ? (
-                <GuidedCodeStage
-                  language={guidedCodeLanguageHint(
-                    currentStep.visual.language,
-                    currentStep.visual.source
-                  )}
-                  source={currentStep.visual.source}
-                />
-              ) : (
-                <GuidedMarkdownStage source={currentStep.visual.source} />
-              )}
-            </div>
-          </div>
+            <motion.div
+              animate="center"
+              className="bg-card rounded-xl border"
+              custom={stepDirection}
+              exit="exit"
+              initial="enter"
+              key={stepIndex}
+              variants={
+                prefersReducedMotion ? reducedStageVariants : stageVariants
+              }
+            >
+              <div className="flex items-center justify-between border-b px-4 py-2.5">
+                <p className="text-muted-foreground text-xs font-medium tracking-widest uppercase">
+                  {currentStep.visual.kind === "code"
+                    ? (currentStep.visual.language ?? "Code")
+                    : "Notes"}
+                </p>
+                <p className="text-muted-foreground text-xs tabular-nums">
+                  {`Step ${stepIndex + 1} of ${steps.length}`}
+                </p>
+              </div>
+              <div className="p-5">
+                {currentStep.visual.kind === "code" ? (
+                  <GuidedCodeStage
+                    language={guidedCodeLanguageHint(
+                      currentStep.visual.language,
+                      currentStep.visual.source
+                    )}
+                    source={currentStep.visual.source}
+                  />
+                ) : (
+                  <GuidedMarkdownStage source={currentStep.visual.source} />
+                )}
+              </div>
+            </motion.div>
+          </AnimatePresence>
         </div>
       </div>
 
@@ -942,7 +1003,13 @@ export function GuidedExplanationPlayer(props: {
             >
               <SkipForwardIcon className="size-4" aria-hidden="true" />
             </Button>
-            <span className="text-muted-foreground text-xs tabular-nums">
+            <span className="text-muted-foreground flex items-center gap-1.5 text-xs tabular-nums">
+              {isPlaying && voicePreferences.enabled ? (
+                <span aria-hidden="true" className="relative flex size-2">
+                  <span className="bg-primary absolute inline-flex h-full w-full animate-ping rounded-full opacity-60" />
+                  <span className="bg-primary relative inline-flex size-2 rounded-full" />
+                </span>
+              ) : null}
               {isPlaying ? "Playing" : isLastStep ? "Complete" : "Paused"} ·{" "}
               {stepIndex + 1}/{steps.length}
               {voicePreferences.enabled ? (
