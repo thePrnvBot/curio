@@ -21,6 +21,14 @@ import {
   playInteractionCue,
   soundSettingEnabled,
 } from "@/utils/sound";
+import {
+  getVoiceCatalog,
+  readVoicePreferences,
+  saveVoicePreferences,
+  subscribeToVoicePreferences,
+} from "@/utils/voice/voice-manager";
+import type { VoicePreferences } from "@/utils/voice/voice-manager";
+import type { VoiceCatalogEntry } from "@/utils/voice/voice-worker-protocol";
 import { useTRPC } from "@/utils/trpc";
 
 export const Route = createFileRoute("/_auth/dashboard")({
@@ -340,10 +348,24 @@ function DashboardRoute(): ReactElement {
   const [isHydrated, setIsHydrated] = useState(false);
   const [isSoundEnabled, setIsSoundEnabled] = useState(false);
   const [isSoundBusy, setIsSoundBusy] = useState(false);
+  const [narrationPreferences, setNarrationPreferences] =
+    useState<VoicePreferences>(readVoicePreferences);
+  const [voiceCatalog, setVoiceCatalog] = useState<
+    readonly VoiceCatalogEntry[]
+  >([]);
 
   useEffect(() => {
     setIsHydrated(true);
     setIsSoundEnabled(soundSettingEnabled());
+    return subscribeToVoicePreferences(() => {
+      setNarrationPreferences(readVoicePreferences());
+    });
+  }, []);
+
+  useEffect(() => {
+    void getVoiceCatalog().then((catalog) => {
+      setVoiceCatalog(catalog);
+    });
   }, []);
 
   async function toggleSound(): Promise<void> {
@@ -448,6 +470,93 @@ function DashboardRoute(): ReactElement {
               >
                 {isSoundEnabled ? "Sound on" : "Sound off"}
               </Button>
+            </div>
+          ) : null}
+          {isHydrated ? (
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <span className="text-sm font-medium">Lesson narration</span>
+              <Button
+                onClick={() => {
+                  saveVoicePreferences({
+                    ...narrationPreferences,
+                    enabled: !narrationPreferences.enabled,
+                  });
+                }}
+                size="sm"
+                variant="outline"
+              >
+                {narrationPreferences.enabled ? "Voice on" : "Voice off"}
+              </Button>
+              <select
+                aria-label="Narration voice"
+                className="border-border bg-background h-8 max-w-52 rounded-md border px-2 text-xs"
+                disabled={!narrationPreferences.enabled}
+                onChange={(changeEvent) => {
+                  saveVoicePreferences({
+                    ...narrationPreferences,
+                    voiceId: changeEvent.target.value,
+                  });
+                }}
+                value={narrationPreferences.voiceId}
+              >
+                {(
+                  [
+                    ["en-us", "🇺🇸"],
+                    ["en-gb", "🇬🇧"],
+                    ["ja", "🇯🇵"],
+                    ["zh", "🇨🇳"],
+                    ["es", "🇪🇸"],
+                    ["fr-fr", "🇫🇷"],
+                    ["hi", "🇮🇳"],
+                    ["it", "🇮🇹"],
+                    ["pt-br", "🇧🇷"],
+                  ] as const
+                ).map(([languageCode, flag]) => {
+                  const languageVoices = voiceCatalog.filter(
+                    (entry) => entry.languageCode === languageCode
+                  );
+                  if (languageVoices.length === 0) {
+                    return null;
+                  }
+                  return (
+                    <optgroup label={`${flag} ${languageCode}`} key={languageCode}>
+                      {languageVoices
+                        .slice()
+                        .sort((first, second) =>
+                          first.grade === ""
+                            ? 1
+                            : second.grade === ""
+                              ? -1
+                              : first.grade.localeCompare(second.grade)
+                        )
+                        .map((entry) => (
+                          <option key={entry.voiceId} value={entry.voiceId}>
+                            {entry.displayName}
+                            {entry.grade !== "" ? ` · ${entry.grade}` : ""}
+                          </option>
+                        ))}
+                    </optgroup>
+                  );
+                })}
+              </select>
+              <select
+                aria-label="Narration speed"
+                className="border-border bg-background h-8 rounded-md border px-2 text-xs"
+                disabled={!narrationPreferences.enabled}
+                onChange={(changeEvent) => {
+                  saveVoicePreferences({
+                    ...narrationPreferences,
+                    speed: Number(changeEvent.target.value),
+                  });
+                }}
+                value={narrationPreferences.speed}
+              >
+                {[0.8, 1, 1.1, 1.25, 1.5].map((speed) => (
+                  <option key={speed} value={speed}>
+                    {`${speed}x`}
+                  </option>
+                ))}
+              </select>
             </div>
           ) : null}
         </div>

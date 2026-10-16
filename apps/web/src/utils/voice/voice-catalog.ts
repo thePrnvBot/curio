@@ -1,0 +1,66 @@
+/**
+ * Voice picker catalog for the Kokoro provider - authoritative metadata from
+ * hexgrad/Kokoro-82M VOICES.md (v1.0, 54 voices), kept client-side so the
+ * dashboard renders it without touching the synthesis worker. Grades
+ * estimate voice training quality, so the picker surfaces the best options
+ * first.
+ */
+
+import type { VoiceCatalogEntry } from "./voice-worker-protocol";
+
+export const KOKORO_VOICE_CATALOG: readonly VoiceCatalogEntry[] = [
+  { displayName: "Heart", gender: "female", grade: "A", languageCode: "en-us", voiceId: "af_heart" },
+  { displayName: "Bella", gender: "female", grade: "A-", languageCode: "en-us", voiceId: "af_bella" },
+  { displayName: "Nicole", gender: "female", grade: "B-", languageCode: "en-us", voiceId: "af_nicole" },
+  { displayName: "Aoede", gender: "female", grade: "C+", languageCode: "en-us", voiceId: "af_aoede" },
+  { displayName: "Kore", gender: "female", grade: "C+", languageCode: "en-us", voiceId: "af_kore" },
+  { displayName: "Sarah", gender: "female", grade: "C+", languageCode: "en-us", voiceId: "af_sarah" },
+  { displayName: "Alloy", gender: "female", grade: "C", languageCode: "en-us", voiceId: "af_alloy" },
+  { displayName: "Nova", gender: "female", grade: "C", languageCode: "en-us", voiceId: "af_nova" },
+  { displayName: "Sky", gender: "female", grade: "C-", languageCode: "en-us", voiceId: "af_sky" },
+  { displayName: "Jessica", gender: "female", grade: "D", languageCode: "en-us", voiceId: "af_jessica" },
+  { displayName: "River", gender: "female", grade: "D", languageCode: "en-us", voiceId: "af_river" },
+  { displayName: "Michael", gender: "male", grade: "C+", languageCode: "en-us", voiceId: "am_michael" },
+  { displayName: "Fenrir", gender: "male", grade: "C+", languageCode: "en-us", voiceId: "am_fenrir" },
+  { displayName: "Puck", gender: "male", grade: "C+", languageCode: "en-us", voiceId: "am_puck" },
+  { displayName: "Echo", gender: "male", grade: "D", languageCode: "en-us", voiceId: "am_echo" },
+  { displayName: "Eric", gender: "male", grade: "D", languageCode: "en-us", voiceId: "am_eric" },
+  { displayName: "Liam", gender: "male", grade: "D", languageCode: "en-us", voiceId: "am_liam" },
+  { displayName: "Onyx", gender: "male", grade: "D", languageCode: "en-us", voiceId: "am_onyx" },
+  { displayName: "Santa", gender: "male", grade: "D-", languageCode: "en-us", voiceId: "am_santa" },
+  { displayName: "Adam", gender: "male", grade: "F+", languageCode: "en-us", voiceId: "am_adam" },
+  { displayName: "Emma", gender: "female", grade: "B-", languageCode: "en-gb", voiceId: "bf_emma" },
+  { displayName: "Fable", gender: "male", grade: "C", languageCode: "en-gb", voiceId: "bm_fable" },
+  { displayName: "George", gender: "male", grade: "C", languageCode: "en-gb", voiceId: "bm_george" },
+  { displayName: "Isabella", gender: "female", grade: "C", languageCode: "en-gb", voiceId: "bf_isabella" },
+  { displayName: "Alice", gender: "female", grade: "D", languageCode: "en-gb", voiceId: "bf_alice" },
+  { displayName: "Lily", gender: "female", grade: "D", languageCode: "en-gb", voiceId: "bf_lily" },
+  { displayName: "Daniel", gender: "male", grade: "D", languageCode: "en-gb", voiceId: "bm_daniel" },
+  { displayName: "Lewis", gender: "male", grade: "D+", languageCode: "en-gb", voiceId: "bm_lewis" },
+  { displayName: "Siwis", gender: "female", grade: "B-", languageCode: "fr-fr", voiceId: "ff_siwis" },
+  { displayName: "Sara", gender: "female", grade: "C", languageCode: "it", voiceId: "if_sara" },
+  { displayName: "Nicola", gender: "male", grade: "C", languageCode: "it", voiceId: "im_nicola" },
+  { displayName: "Alpha", gender: "female", grade: "C", languageCode: "hi", voiceId: "hf_alpha" },
+  { displayName: "Beta", gender: "female", grade: "C", languageCode: "hi", voiceId: "hf_beta" },
+  { displayName: "Omega", gender: "male", grade: "C", languageCode: "hi", voiceId: "hm_omega" },
+  { displayName: "Psi", gender: "male", grade: "C", languageCode: "hi", voiceId: "hm_psi" },
+  { displayName: "Dora", gender: "female", grade: "", languageCode: "es", voiceId: "ef_dora" },
+  { displayName: "Alex", gender: "male", grade: "", languageCode: "es", voiceId: "em_alex" },
+  { displayName: "Santa", gender: "male", grade: "", languageCode: "es", voiceId: "em_santa" },
+  { displayName: "Dora", gender: "female", grade: "", languageCode: "pt-br", voiceId: "pf_dora" },
+  { displayName: "Alex", gender: "male", grade: "", languageCode: "pt-br", voiceId: "pm_alex" },
+  { displayName: "Santa", gender: "male", grade: "", languageCode: "pt-br", voiceId: "pm_santa" },
+  { displayName: "Alpha", gender: "female", grade: "C+", languageCode: "ja", voiceId: "jf_alpha" },
+  { displayName: "Gongitsune", gender: "female", grade: "C", languageCode: "ja", voiceId: "jf_gongitsune" },
+  { displayName: "Nezumi", gender: "female", grade: "C-", languageCode: "ja", voiceId: "jf_nezumi" },
+  { displayName: "Tebukuro", gender: "female", grade: "C", languageCode: "ja", voiceId: "jf_tebukuro" },
+  { displayName: "Kumo", gender: "male", grade: "C-", languageCode: "ja", voiceId: "jm_kumo" },
+  { displayName: "Xiaobei", gender: "female", grade: "D", languageCode: "zh", voiceId: "zf_xiaobei" },
+  { displayName: "Xiaoni", gender: "female", grade: "D", languageCode: "zh", voiceId: "zf_xiaoni" },
+  { displayName: "Xiaoxiao", gender: "female", grade: "D", languageCode: "zh", voiceId: "zf_xiaoxiao" },
+  { displayName: "Xiaoyi", gender: "female", grade: "D", languageCode: "zh", voiceId: "zf_xiaoyi" },
+  { displayName: "Yunjian", gender: "male", grade: "D", languageCode: "zh", voiceId: "zm_yunjian" },
+  { displayName: "Yunxi", gender: "male", grade: "D", languageCode: "zh", voiceId: "zm_yunxi" },
+  { displayName: "Yunxia", gender: "male", grade: "D", languageCode: "zh", voiceId: "zm_yunxia" },
+  { displayName: "Yunyang", gender: "male", grade: "D", languageCode: "zh", voiceId: "zm_yunyang" },
+];
