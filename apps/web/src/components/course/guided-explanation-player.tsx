@@ -666,54 +666,6 @@ export function GuidedExplanationPlayer(props: {
           transcriptSentences.length - 1
         );
 
-  // Prefetch: once a step starts (or narration is enabled), synthesize (or
-  // pull from cache) every sentence of it, oldest first, so its audio exists
-  // before the clock reaches each line.
-  useEffect(() => {
-    if (!voicePreferences.enabled) {
-      stopActiveNarration("voice disabled (prefetch)");
-      return;
-    }
-    let cancelled = false;
-    const stepSentenceIndexes: number[] = [];
-    const stepSentenceTexts: string[] = [];
-    narrationSentences(steps[stepIndex]?.narration ?? "").forEach(
-      (sentence, sentenceOffset) => {
-        stepSentenceIndexes.push(stepSentenceOffsets[stepIndex] + sentenceOffset);
-        stepSentenceTexts.push(sentence);
-      }
-    );
-    void (async () => {
-      for (
-        let stepSentenceIndex = 0;
-        stepSentenceIndex < stepSentenceIndexes.length;
-        stepSentenceIndex += 1
-      ) {
-        if (cancelled) {
-          return;
-        }
-        const globalSentenceIndex = stepSentenceIndexes[stepSentenceIndex] ?? -1;
-        if (sentenceDurationsRef.current.has(globalSentenceIndex)) {
-          continue;
-        }
-        const utterance = await getOrSynthesizeUtterance(
-          stepSentenceTexts[stepSentenceIndex] ?? "",
-          voicePreferences
-        );
-        if (cancelled || utterance === null) {
-          continue;
-        }
-        sentenceDurationsRef.current.set(
-          globalSentenceIndex,
-          utterance.durationMs
-        );
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [stepIndex, stepSentenceOffsets, steps, voicePreferences]);
-
   // Audio-driven narration loop: with the voice on, each step's lines are
   // synthesized (cache-first) and spoken IN FULL, one at a time — the step
   // advances when its last line ends. This replaces the estimate clock, which
@@ -809,6 +761,44 @@ export function GuidedExplanationPlayer(props: {
       (module) => stepIndex >= module.startStep && stepIndex < module.endStep
     ) ?? transcriptModules[0];
   const activeModuleIndex = transcriptModules.indexOf(activeModule);
+
+  // Module-ahead voice prefetch: fill the cache for the sub-lesson module the
+  // reader is on, plus exactly one module ahead — crossing a boundary never
+  // waits on the WASM engine, and nothing beyond that is generated. Cache
+  // hits resolve instantly; the narration loop shares the in-flight promises,
+  // so playback rides this synthesis instead of racing it.
+  useEffect(() => {
+    if (!voicePreferences.enabled) {
+      return;
+    }
+    let cancelled = false;
+    const sentencesForModule = (
+      module: { endStep: number; startStep: number }
+    ): string[] =>
+      transcriptSentences
+        .filter(
+          (sentence) =>
+            sentence.stepIndex >= module.startStep &&
+            sentence.stepIndex < module.endStep
+        )
+        .map((sentence) => sentence.text);
+    const nextModule = transcriptModules[activeModuleIndex + 1];
+    const queue = [
+      ...sentencesForModule(activeModule),
+      ...(nextModule === undefined ? [] : sentencesForModule(nextModule)),
+    ];
+    void (async () => {
+      for (const sentenceText of queue) {
+        if (cancelled) {
+          return;
+        }
+        await getOrSynthesizeUtterance(sentenceText, voicePreferences);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeModule, activeModuleIndex, transcriptModules, transcriptSentences, voicePreferences]);
   useEffect(() => {
     transcriptRef.current?.scrollTo({ top: 0 });
   }, [activeModuleIndex]);

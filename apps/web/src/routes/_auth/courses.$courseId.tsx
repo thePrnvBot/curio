@@ -1,7 +1,7 @@
-﻿import { useQuery, useQueryClient } from "@tanstack/react-query";
+﻿import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeftIcon, CheckIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import {
   CoursePageSkeleton,
@@ -10,7 +10,6 @@ import {
 } from "@/components/course/course-page-skeletons";
 import {
   GuidedExplanationPlayer,
-  narrationSentences,
 } from "@/components/course/guided-explanation-player";
 import {
   LessonContentView,
@@ -19,13 +18,6 @@ import {
   LessonCompletionControls,
 } from "@/components/course/lesson-completion-controls";
 import { ProgressFromZero } from "@/components/animated-progress";
-import {
-  getOrSynthesizeUtterance,
-  hasCachedUtterance,
-  readVoicePreferences,
-  subscribeToVoicePreferences,
-  type VoicePreferences,
-} from "@/utils/voice/voice-manager";
 import { useTRPC } from "@/utils/trpc";
 
 export const Route = createFileRoute("/_auth/courses/$courseId")({
@@ -70,16 +62,6 @@ function CoursePageRoute() {
   const { lesson: requestedLessonId } = Route.useSearch();
   const navigate = useNavigate();
 
-  const [voicePreferences, setVoicePreferences] =
-    useState<VoicePreferences>(readVoicePreferences);
-  useEffect(
-    () =>
-      subscribeToVoicePreferences(() => {
-        setVoicePreferences(readVoicePreferences());
-      }),
-    []
-  );
-
   const courseQuery = useQuery(trpc.courses.get.queryOptions({ courseId }));
   const sections = courseQuery.data?.sections ?? [];
 
@@ -119,75 +101,8 @@ function CoursePageRoute() {
     });
   }
 
-  // Course-wide narration prefetch: while the course page is open (and
-  // narration is on), pull every guided lesson's content and synthesize its
-  // sentences into the voice cache in the background. The active lesson is
-  // prefetched first by the player; the cache-hit probe keeps this from
-  // re-doing work across revisits, and chunks land in IndexedDB instantly
-  // thereafter.
-  const queryClient = useQueryClient();
-  const guidedLessonRefs = useMemo(() => {
-    return flatLessons
-      .filter((lesson) => lesson.kind === "guided-explanation")
-      .map((lesson) => ({ id: lesson.id }));
-  }, [flatLessons]);
-  useEffect(() => {
-    if (!voicePreferences.enabled || guidedLessonRefs.length === 0) {
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      for (const guidedLessonRef of guidedLessonRefs) {
-        if (cancelled) {
-          return;
-        }
-        let lessonDetail: { content: unknown } | undefined;
-        try {
-          lessonDetail = await queryClient.fetchQuery(
-            trpc.courses.getLesson.queryOptions({
-              courseId,
-              lessonId: guidedLessonRef.id,
-            })
-          );
-        } catch {
-          // Churned course (deleted/streaming) — abandon the background run.
-          return;
-        }
-        const lessonContent =
-          lessonDetail?.content as
-            | {
-                kind: string;
-                steps?: ReadonlyArray<{ narration?: unknown }>;
-              }
-            | null
-            | undefined;
-        if (
-          lessonContent === null ||
-          lessonContent === undefined ||
-          lessonContent.kind !== "guided-explanation"
-        ) {
-          continue;
-        }
-        for (const step of lessonContent.steps ?? []) {
-          if (cancelled) {
-            return;
-          }
-          for (const sentence of narrationSentences(String(step.narration))) {
-            if (cancelled) {
-              return;
-            }
-            if (await hasCachedUtterance(sentence, voicePreferences)) {
-              continue;
-            }
-            await getOrSynthesizeUtterance(sentence, voicePreferences);
-          }
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [courseId, guidedLessonRefs, queryClient, trpc, voicePreferences]);
+  // Narration voice lines are filled on demand by the guided explanation
+  // player (current sub-lesson module + one ahead) — no course-wide sweep.
 
   if (courseQuery.isPending) {
     return <CoursePageSkeleton />;
