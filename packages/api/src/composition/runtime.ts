@@ -2,8 +2,10 @@ import type { LanguageModel } from "ai";
 import { Effect, Layer, ManagedRuntime } from "effect";
 
 import { ArtifactPublishFailed } from "../domain/artifact-publish-failed";
+import { createCourseStoreLessonGenerator } from "../infrastructure/course-store-lesson-generator";
 import { createGenerateTextArtifactGenerator } from "../infrastructure/generate-text-artifact-generator";
 import { createGenerateTextChatTitleComposer } from "../infrastructure/generate-text-chat-title-composer";
+import { createGenerateTextLessonContent } from "../infrastructure/generate-text-lesson-generator";
 import { ArtifactGenerator } from "../services/artifact-generator";
 import type { ArtifactPublisherContract } from "../services/artifact-publisher";
 import { ArtifactPublisher } from "../services/artifact-publisher";
@@ -13,16 +15,20 @@ import type { ChatStoreContract } from "../services/chat-store";
 import { ChatStore } from "../services/chat-store";
 import type { ChatRunStoreContract } from "../services/chat-run-store";
 import { ChatRunStore } from "../services/chat-run-store";
+import { LessonGenerator } from "../services/lesson-generator";
 import type { CourseStoreContract } from "../services/course-store";
 import { CourseStore } from "../services/course-store";
 import type { ModelSettingsStoreContract } from "../services/model-settings-store";
 import { ModelSettingsStore } from "../services/model-settings-store";
 import { ChatTitleComposer } from "../services/chat-title-composer";
 
+const LESSON_GENERATION_MODEL_SCOPE_ID = "lesson-generation";
+
 export type CurioRuntime = ManagedRuntime.ManagedRuntime<
   | ChatStore
   | ChatRunStore
   | ChatModelProvider
+  | LessonGenerator
   | ArtifactPublisher
   | ChatTitleComposer
   | ArtifactGenerator
@@ -68,6 +74,7 @@ function buildCurioLayer(
   | ChatStore
   | ChatRunStore
   | ChatModelProvider
+  | LessonGenerator
   | ArtifactPublisher
   | ChatTitleComposer
   | ArtifactGenerator
@@ -116,10 +123,34 @@ function buildCurioLayer(
     chatModelProviderLayer
   );
 
+  const lessonGeneratorLayer = Layer.provide(
+    Layer.effect(
+      LessonGenerator,
+      Effect.gen(function* makeLessonGenerator() {
+        const courseStore = yield* CourseStore;
+        const chatModelProvider = yield* ChatModelProvider;
+        return createCourseStoreLessonGenerator({
+          courseStore,
+          generateLessonContent: createGenerateTextLessonContent({
+            resolveChatModel: resolveChatModel(
+              chatModelProvider,
+              LESSON_GENERATION_MODEL_SCOPE_ID
+            ),
+          }),
+        });
+      })
+    ),
+    Layer.mergeAll(
+      Layer.succeed(CourseStore, dependencies.courseStore),
+      chatModelProviderLayer
+    )
+  );
+
   return Layer.mergeAll(
     Layer.succeed(ChatStore, dependencies.chatStore),
     Layer.succeed(ChatRunStore, dependencies.chatRunStore),
     chatModelProviderLayer,
+    lessonGeneratorLayer,
     Layer.succeed(ArtifactPublisher, artifactPublisherContract),
     chatTitleComposerLayer,
     artifactGeneratorLayer,

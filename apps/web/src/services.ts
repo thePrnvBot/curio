@@ -5,8 +5,8 @@ import type {
   CreateLessonToolResult,
   CourseChunkPlanToolRequest,
   CourseScaffoldToolResult,
-  LessonContentToolPayload,
 } from "@curio/api/infrastructure/course-create-tool";
+import { toStoredLessonContent } from "@curio/api/infrastructure/course-create-tool";
 import { createDrizzleChatStore } from "@curio/api/infrastructure/drizzle-chat-store";
 import { createDrizzleChatRunStore } from "@curio/api/infrastructure/drizzle-chat-run-store";
 import { createDrizzleCourseStore } from "@curio/api/infrastructure/drizzle-course-store";
@@ -19,7 +19,7 @@ import { ArtifactPublisher } from "@curio/api/services/artifact-publisher";
 import { ChatModelProvider } from "@curio/api/services/chat-model-provider";
 import { CourseStore } from "@curio/api/services/course-store";
 import { ModelSettingsStore } from "@curio/api/services/model-settings-store";
-import type { CourseLessonKind, LessonContent } from "@curio/api/domain/course";
+import type { CourseLessonKind } from "@curio/api/domain/course";
 import { COURSE_LESSON_KINDS } from "@curio/api/domain/course";
 import type { LanguageModel } from "ai";
 import { createAuth } from "@curio/auth";
@@ -181,73 +181,4 @@ export async function createScopedModel(
       return yield* chatModelProviderService.getChatModel(chatId);
     })
   );
-}
-
-/** Tool content is already validated by the tool's zod schema; this only
- * normalizes kinds/defaults into the stored `LessonContent` union. */
-function toStoredLessonContent(
-  rawContent: LessonContentToolPayload
-): LessonContent {
-  switch (rawContent.kind) {
-    case "animation": {
-      return {
-        body: rawContent.body,
-        html: rawContent.html,
-        kind: "animation",
-      };
-    }
-    case "cards": {
-      return {
-        body: rawContent.body,
-        cards: rawContent.cards.map((card) => ({
-          body: card.body,
-          title: card.title,
-        })),
-        kind: "cards",
-      };
-    }
-    case "recap": {
-      return {
-        kind: "recap",
-        questions: rawContent.questions.map((question) => ({
-          answerIndex: Math.max(
-            0,
-            Math.min(question.answerIndex, question.options.length - 1)
-          ),
-          explanation: question.explanation,
-          options: question.options,
-          prompt: question.prompt,
-        })),
-      };
-    }
-    case "guided-explanation": {
-      return {
-        intro: rawContent.intro,
-        kind: "guided-explanation",
-        steps: rawContent.steps.map((step) => ({
-          durationMs: step.durationMs,
-          narration: step.narration,
-          visual: {
-            kind: step.visual.kind,
-            language: step.visual.language,
-            source: step.visual.source,
-          },
-        })),
-      };
-    }
-    case "video": {
-      return {
-        body: rawContent.body,
-        kind: "video",
-        videoUrl: rawContent.videoUrl,
-      };
-    }
-    default: {
-      return {
-        body: "",
-        cards: [],
-        kind: "cards",
-      };
-    }
-  }
 }

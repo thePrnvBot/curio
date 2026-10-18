@@ -1,5 +1,6 @@
-﻿import { tool } from "ai";
+import { tool } from "ai";
 import type { ToolSet } from "ai";
+import type { LessonContent } from "@curio/db/schema/course";
 import { z } from "zod";
 
 export const CREATE_COURSE_TOOL_NAME = "create_course";
@@ -96,13 +97,82 @@ const guidedExplanationSchema = z.object({
     ),
 });
 
-const lessonContentSchema = z.discriminatedUnion("kind", [
+export const lessonContentSchema = z.discriminatedUnion("kind", [
   videoContentSchema,
   cardsContentSchema,
   animationContentSchema,
   recapContentSchema,
   guidedExplanationSchema,
 ]);
+
+/** Maps a zod-validated content payload onto the stored `LessonContent`
+ * shape (kinds normalize; optional fields get their stored defaults). */
+export function toStoredLessonContent(
+  rawContent: LessonContentToolPayload
+): LessonContent {
+  switch (rawContent.kind) {
+    case "animation": {
+      return {
+        body: rawContent.body,
+        html: rawContent.html,
+        kind: "animation",
+      };
+    }
+    case "cards": {
+      return {
+        body: rawContent.body,
+        cards: rawContent.cards.map((card) => ({
+          body: card.body,
+          title: card.title,
+        })),
+        kind: "cards",
+      };
+    }
+    case "guided-explanation": {
+      return {
+        intro: rawContent.intro,
+        kind: "guided-explanation",
+        steps: rawContent.steps.map((step) => ({
+          durationMs: step.durationMs,
+          narration: step.narration,
+          visual: {
+            kind: step.visual.kind,
+            language: step.visual.language,
+            source: step.visual.source,
+          },
+        })),
+      };
+    }
+    case "recap": {
+      return {
+        kind: "recap",
+        questions: rawContent.questions.map((question) => ({
+          answerIndex: Math.max(
+            0,
+            Math.min(question.answerIndex, question.options.length - 1)
+          ),
+          explanation: question.explanation,
+          options: question.options,
+          prompt: question.prompt,
+        })),
+      };
+    }
+    case "video": {
+      return {
+        body: rawContent.body,
+        kind: "video",
+        videoUrl: rawContent.videoUrl,
+      };
+    }
+    default: {
+      return {
+        body: "",
+        cards: [],
+        kind: "cards",
+      };
+    }
+  }
+}
 
 /**
  * Chunked creation: `create_course` carries an outline (no lesson content)

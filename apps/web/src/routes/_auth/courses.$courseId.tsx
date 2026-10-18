@@ -1,7 +1,8 @@
-﻿import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeftIcon, CheckIcon } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { toast } from "sonner";
 
 import {
   CoursePageSkeleton,
@@ -103,6 +104,55 @@ function CoursePageRoute() {
 
   // Narration voice lines are filled on demand by the guided explanation
   // player (current sub-lesson module + one ahead) — no course-wide sweep.
+
+  // Content fill: whenever the reader has a lesson open and the next lesson
+  // is still an unfilled skeleton, the server generates its content — one
+  // lesson per visit, so the course always has the next module ready.
+  const queryClient = useQueryClient();
+  const generateNextLesson = useMutation(
+    trpc.courses.generateNextLessonModule.mutationOptions()
+  );
+  const openedLessonTriggerRef = useRef<string | null>(null);
+  const openedLessonId = selectedLessonId;
+  useEffect(() => {
+    if (openedLessonId === null) {
+      return;
+    }
+    if (openedLessonTriggerRef.current === openedLessonId) {
+      return;
+    }
+    openedLessonTriggerRef.current = openedLessonId;
+    void (async () => {
+      try {
+        const outcome = await generateNextLesson.mutateAsync({
+          courseId,
+          lessonId: openedLessonId,
+        });
+        if (outcome.kind === "generated") {
+          toast.success(`Next lesson ready — ${outcome.title}`);
+          void queryClient.invalidateQueries({
+            queryKey: trpc.courses.getLesson.queryKey({
+              courseId,
+              lessonId: outcome.lessonId,
+            }),
+          });
+          void queryClient.invalidateQueries({
+            queryKey: trpc.courses.get.queryKey({ courseId }),
+          });
+        }
+      } catch {
+        // Background prefetch failure — tell the reader briefly; the call
+        // retries automatically the next time they open a lesson.
+        toast.error("Couldn't generate the next lesson yet — it'll retry when you return to it");
+      }
+    })();
+  }, [
+    openedLessonId,
+    courseId,
+    generateNextLesson,
+    queryClient,
+    trpc,
+  ]);
 
   if (courseQuery.isPending) {
     return <CoursePageSkeleton />;

@@ -45,7 +45,7 @@ const ARTIFACT_BRIEF_SCHEMA = z.object({
     .describe("One-or-two-sentence plain-language summary of the artifact"),
 });
 
-const CURIO_BASELINE_STYLE =
+export const CURIO_BASELINE_STYLE =
   "<style>\n" +
   "  :root {\n" +
   "    color-scheme: light dark;\n" +

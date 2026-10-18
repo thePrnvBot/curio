@@ -10,8 +10,10 @@ import {
   LessonNotFound,
 } from "../services/course-store";
 import { CourseOperationFailed } from "../domain/course-operation-failed";
+import { LessonGenerationFailed } from "../domain/lesson-generation-failed";
 import { protectedProcedure, router } from "../index";
 import { CourseStore } from "../services/course-store";
+import { LessonGenerator } from "../services/lesson-generator";
 
 const teachingProseSchema = z
   .string()
@@ -165,6 +167,13 @@ async function unwrap<T>(value: Promise<T>): Promise<T> {
         message: error.message,
       });
     }
+    if (error instanceof LessonGenerationFailed) {
+      throw new TRPCError({
+        cause: error,
+        code: "INTERNAL_SERVER_ERROR",
+        message: error.message,
+      });
+    }
     throw error;
   }
 }
@@ -246,6 +255,25 @@ export function createCoursesRouter(runtime: CurioRuntime) {
                 input.lessonId,
                 ctx.session.user.id
               );
+            })
+          )
+        )
+      ),
+
+    /** Progressive course filling: generates the nearest unfilled lesson at
+     * or after the one the reader has open — one lesson per call. */
+    generateNextLessonModule: protectedProcedure
+      .input(courseLessonLookupSchema)
+      .mutation(({ ctx, input }) =>
+        unwrap(
+          runtime.runPromise(
+            Effect.gen(function* generateNextLessonModule() {
+              const lessonGenerator = yield* LessonGenerator;
+              return yield* lessonGenerator.generateNextLessonModule({
+                courseId: input.courseId,
+                currentLessonId: input.lessonId,
+                userId: ctx.session.user.id,
+              });
             })
           )
         )
