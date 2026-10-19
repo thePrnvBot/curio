@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { Option } from "effect";
 
-import { auth, curioRuntime } from "../../services";
+import { curioRuntime } from "../../services";
+import { requestSession, unauthorizedResponse } from "../../utils/api-session";
 import { resumeChatStreamResponse } from "../../utils/durable-chat";
 
 /**
@@ -19,14 +21,11 @@ export const Route = createFileRoute("/api/chat/$chatId/stream")({
         request: Request;
         params: { chatId: string };
       }) => {
-        const session = await auth.api.getSession({ headers: request.headers });
-
-        if (!session) {
-          return Response.json(
-            { error: "Authentication required" },
-            { status: 401 }
-          );
+        const sessionOption = await requestSession(request);
+        if (Option.isNone(sessionOption)) {
+          return unauthorizedResponse();
         }
+        const session = sessionOption.value;
 
         return await curioRuntime.runPromise(
           resumeChatStreamResponse({

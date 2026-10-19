@@ -1,19 +1,19 @@
 import { toUIMessage } from "@curio/api/domain/chat";
+import { createArtifactTool } from "@curio/api/infrastructure/artifact-create-tool";
 import {
-  createArtifactTool,
-} from "@curio/api/infrastructure/artifact-create-tool";
-import {
+  ASK_USER_TOOL_NAME,
   createAskUserTool,
 } from "@curio/api/infrastructure/ask-user-tool";
 import {
+  CREATE_COURSE_TOOL_NAME,
   CREATE_LESSON_TOOL_NAME,
   createCourseTool,
 } from "@curio/api/infrastructure/course-create-tool";
 import { createWebTools } from "@curio/api/infrastructure/web-tools";
-import type { LanguageModel } from "ai";
 import { ChatStore } from "@curio/api/services/chat-store";
 import { ChatTitleComposer } from "@curio/api/services/chat-title-composer";
 import { createFileRoute } from "@tanstack/react-router";
+import type { LanguageModel } from "ai";
 import {
   convertToModelMessages,
   createIdGenerator,
@@ -23,11 +23,10 @@ import {
   toUIMessageStream,
 } from "ai";
 import type { ToolUIPart, UIMessage } from "ai";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { z } from "zod";
 
 import {
-  auth,
   createScopedCourseLesson,
   createScopedCourseScaffold,
   createScopedModel,
@@ -35,6 +34,7 @@ import {
   curioRuntime,
   runtimeScopedArtifactPublisher,
 } from "../../services";
+import { requestSession, unauthorizedResponse } from "../../utils/api-session";
 import {
   chatRunInFlight,
   commitChatRunChunks,
@@ -43,8 +43,6 @@ import {
   releaseRunRegistration,
   registerRunAbortController,
 } from "../../utils/durable-chat";
-
-const ASK_USER_TOOL_NAME = "ask_user";
 
 /**
  * Human-in-the-loop reconstruction: an ask_user call can stay unresolved
@@ -126,8 +124,6 @@ const CHAT_INSTRUCTIONS =
   "answer or lesson prose.";
 
 const MAX_STREAM_STEPS = 40;
-
-const CREATE_COURSE_TOOL_NAME = "create_course";
 
 /**
  * Keeps the Director streaming the course without pause: once a scaffold
@@ -416,9 +412,7 @@ async function createChatResponse({
 
       persistGeneratedMessages({
         chatId,
-        chatTitle: isFirstExchange
-          ? deriveChatTitle(generatedMessages)
-          : null,
+        chatTitle: isFirstExchange ? deriveChatTitle(generatedMessages) : null,
         generatedMessages,
         userId,
       });
@@ -455,14 +449,11 @@ export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
       POST: async ({ request }: { request: Request }) => {
-        const session = await auth.api.getSession({ headers: request.headers });
-
-        if (!session) {
-          return Response.json(
-            { error: "Authentication required" },
-            { status: 401 }
-          );
+        const sessionOption = await requestSession(request);
+        if (Option.isNone(sessionOption)) {
+          return unauthorizedResponse();
         }
+        const session = sessionOption.value;
 
         const parsedRequestBody = chatRequestSchema.safeParse(
           await request.json()
@@ -535,7 +526,7 @@ export const Route = createFileRoute("/api/chat")({
         const runningRun = await curioRuntime.runPromise(
           chatRunInFlight(chatId, userId)
         );
-        if (runningRun !== null) {
+        if (Option.isSome(runningRun)) {
           return Response.json(
             { error: "The agent is still working on this chat" },
             { status: 409 }

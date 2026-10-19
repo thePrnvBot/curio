@@ -1,10 +1,14 @@
 import { ArtifactGenerator } from "@curio/api/services/artifact-generator";
 import { ArtifactPublisher } from "@curio/api/services/artifact-publisher";
 import { createFileRoute } from "@tanstack/react-router";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { z } from "zod";
 
-import { auth, curioFeatures, curioRuntime } from "../../../services";
+import { curioFeatures, curioRuntime } from "../../../services";
+import {
+  requestSession,
+  unauthorizedResponse,
+} from "../../../utils/api-session";
 
 const artifactGenerationRequestSchema = z.object({
   prompt: z.string().min(1).max(20_000),
@@ -14,13 +18,9 @@ export const Route = createFileRoute("/api/artifacts/generate")({
   server: {
     handlers: {
       POST: async ({ request }: { request: Request }) => {
-        const session = await auth.api.getSession({ headers: request.headers });
-
-        if (!session) {
-          return Response.json(
-            { error: "Authentication required" },
-            { status: 401 }
-          );
+        const sessionOption = await requestSession(request);
+        if (Option.isNone(sessionOption)) {
+          return unauthorizedResponse();
         }
 
         if (!curioFeatures.artifactPublishingEnabled) {
