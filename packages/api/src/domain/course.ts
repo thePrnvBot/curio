@@ -1,4 +1,7 @@
 import type { LessonContent } from "@curio/db/schema/course";
+import { Data } from "effect";
+
+import { describeCause } from "./cause-description";
 
 export const COURSE_LESSON_KINDS = [
   "video",
@@ -9,6 +12,72 @@ export const COURSE_LESSON_KINDS = [
 ] as const;
 
 export type CourseLessonKind = (typeof COURSE_LESSON_KINDS)[number];
+
+/** The model supplies lesson kinds as free strings; anything unrecognized
+ * degrades to `cards` rather than failing the whole creation. */
+export function normalizeLessonKind(kind: string): CourseLessonKind {
+  return COURSE_LESSON_KINDS.find((candidate) => candidate === kind) ?? "cards";
+}
+
+export class CourseOperationFailed extends Data.TaggedError(
+  "CourseOperationFailed"
+)<{
+  readonly operation: string;
+  readonly cause: unknown;
+}> {
+  override get message(): string {
+    return `Course operation "${this.operation}" failed: ${describeCause(
+      this.cause
+    )}`;
+  }
+}
+export class CourseNotFound extends Data.TaggedError("CourseNotFound")<{
+  readonly courseId: string;
+}> {
+  override get message(): string {
+    return `Course ${this.courseId} was not found`;
+  }
+}
+
+export class LessonNotFound extends Data.TaggedError("LessonNotFound")<{
+  readonly courseId: string;
+  readonly lessonId: string;
+}> {
+  override get message(): string {
+    return `Lesson ${this.lessonId} does not belong to course ${this.courseId}`;
+  }
+}
+
+export class BadgeNotFound extends Data.TaggedError("BadgeNotFound")<{
+  readonly badgeId: string;
+}> {
+  override get message(): string {
+    return `Badge ${this.badgeId} was not found`;
+  }
+}
+
+/**
+ * Type guard for the lookup failures callers may legitimately need to tell
+ * apart from storage failures (routers answer these with 404). Store error
+ * wrappers preserve failures matching this guard instead of flattening them
+ * into a generic `CourseOperationFailed`.
+ */
+export function isCourseLookupFailure(
+  cause: unknown
+): cause is CourseNotFound | LessonNotFound | BadgeNotFound {
+  return (
+    cause instanceof CourseNotFound ||
+    cause instanceof LessonNotFound ||
+    cause instanceof BadgeNotFound
+  );
+}
+
+/** The closed set of failures any course-store operation can fail with. */
+export type CourseStoreFailure =
+  | CourseOperationFailed
+  | CourseNotFound
+  | LessonNotFound
+  | BadgeNotFound;
 
 export type {
   GuidedExplanationStep,
@@ -153,4 +222,37 @@ export interface CourseLessonDetail {
 export interface LessonCompletionResult {
   readonly course: CourseSummary;
   readonly courseCompleted: boolean;
+}
+
+export interface LessonCompletionInput {
+  readonly courseId: string;
+  readonly lessonId: string;
+  readonly userId: string;
+}
+
+export interface CourseDeletionInput {
+  readonly courseId: string;
+  readonly userId: string;
+}
+
+export interface CourseLookupInput {
+  readonly courseId: string;
+  readonly userId: string;
+}
+
+export interface CourseLessonLookupInput {
+  readonly courseId: string;
+  readonly lessonId: string;
+  readonly userId: string;
+}
+
+export interface BadgeDeletionInput {
+  readonly badgeId: string;
+  readonly userId: string;
+}
+
+export interface BadgeAwardInput {
+  readonly courseId: string | null;
+  readonly label: string;
+  readonly userId: string;
 }

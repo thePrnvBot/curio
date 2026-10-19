@@ -1,17 +1,16 @@
-export class ModelOperationFailed extends Error {
-  constructor(params: { cause: unknown; operation: string }) {
-    super(
-      `Model settings operation "${params.operation}" failed: ${describeModelCause(
-        params.cause
-      )}`
-    );
-    this.name = "ModelOperationFailed";
-  }
-}
+import { Data } from "effect";
 
-function describeModelCause(cause: unknown): string {
-  if (cause instanceof Error) {
-    return cause.message;
+import { describeCause } from "./cause-description";
+
+export class ModelOperationFailed extends Data.TaggedError(
+  "ModelOperationFailed"
+)<{
+  readonly operation: string;
+  readonly cause: unknown;
+}> {
+  override get message(): string {
+    return `Model settings operation "${this.operation}" failed: ${describeCause(
+      this.cause
+    )}`;
   }
-  return String(cause);
 }

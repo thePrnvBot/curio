@@ -9,7 +9,7 @@ import type {
   ArtifactPublicationInput,
   ArtifactPublicationResult,
 } from "../domain/artifact";
-import { ArtifactPublishFailed } from "../domain/artifact-publish-failed";
+import { ArtifactPublishFailed } from "../domain/artifact";
 import type { ArtifactPublisherContract } from "../services/artifact-publisher";
 
 export interface ArtifactServerMcpConfig {
@@ -254,7 +254,10 @@ function stageArtifactUpload(
   fingerprintSha256: string,
   byteLength: number
 ): Effect.Effect<
-  { stagedEntry: { method?: string; uploadUrl?: string }; stagedUploadId: string },
+  {
+    stagedEntry: { method?: string; uploadUrl?: string };
+    stagedUploadId: string;
+  },
   ArtifactPublishFailed
 > {
   return callArtifactTool(

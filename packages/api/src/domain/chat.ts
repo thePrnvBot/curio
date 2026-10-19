@@ -1,4 +1,5 @@
 import type { UIMessage } from "ai";
+import { Data } from "effect";
 
 export type ChatRole = UIMessage["role"];
 
@@ -24,6 +25,25 @@ export interface ChatDetail {
 export interface StoredConversationMessages {
   readonly chatId: string;
   readonly messages: readonly Pick<UIMessage, "id" | "role" | "parts">[];
+}
+
+export class ChatOperationFailed extends Data.TaggedError(
+  "ChatOperationFailed"
+)<{
+  readonly operation: string;
+  readonly cause: unknown;
+}> {
+  override get message(): string {
+    return `Chat operation "${this.operation}" failed`;
+  }
+}
+
+export class ChatNotFound extends Data.TaggedError("ChatNotFound")<{
+  readonly chatId: string;
+}> {
+  override get message(): string {
+    return `Chat ${this.chatId} was not found`;
+  }
 }
 
 export function toUIMessage(record: ChatMessageRecord): UIMessage {
