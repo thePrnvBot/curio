@@ -1,29 +1,32 @@
 import { createCurioRuntime } from "@curio/api/composition/runtime";
-import { ArtifactPublishFailed } from "@curio/api/domain/artifact-publish-failed";
+import { ArtifactPublishFailed } from "@curio/api/domain/artifact";
+import { normalizeLessonKind } from "@curio/api/domain/course";
+import { toStoredLessonContent } from "@curio/api/domain/lesson-content";
 import type {
   CreateLessonToolRequest,
   CreateLessonToolResult,
   CourseChunkPlanToolRequest,
   CourseScaffoldToolResult,
 } from "@curio/api/infrastructure/course-create-tool";
-import { toStoredLessonContent } from "@curio/api/infrastructure/course-create-tool";
-import { createDrizzleChatStore } from "@curio/api/infrastructure/drizzle-chat-store";
 import { createDrizzleChatRunStore } from "@curio/api/infrastructure/drizzle-chat-run-store";
+import { createDrizzleChatStore } from "@curio/api/infrastructure/drizzle-chat-store";
 import { createDrizzleCourseStore } from "@curio/api/infrastructure/drizzle-course-store";
 import { createDrizzleModelSettingsStore } from "@curio/api/infrastructure/drizzle-model-settings-store";
 import { createMcpArtifactPublisher } from "@curio/api/infrastructure/mcp-artifact-publisher";
-import { createOpenAiCompatibleChatModelProvider } from "@curio/api/infrastructure/openai-chat-model-provider";
+import {
+  OPENCODE_SESSION_HEADER_NAME,
+  createOpenAiCompatibleChatModelProvider,
+} from "@curio/api/infrastructure/openai-chat-model-provider";
 import { createUserChatModel } from "@curio/api/infrastructure/user-chat-model";
 import type { ArtifactPublisherContract } from "@curio/api/services/artifact-publisher";
 import { ArtifactPublisher } from "@curio/api/services/artifact-publisher";
 import { ChatModelProvider } from "@curio/api/services/chat-model-provider";
+import { ChatRunStore } from "@curio/api/services/chat-run-store";
 import { CourseStore } from "@curio/api/services/course-store";
 import { ModelSettingsStore } from "@curio/api/services/model-settings-store";
-import type { CourseLessonKind } from "@curio/api/domain/course";
-import { COURSE_LESSON_KINDS } from "@curio/api/domain/course";
-import type { LanguageModel } from "ai";
 import { createAuth } from "@curio/auth";
 import { createDb } from "@curio/db";
+import type { LanguageModel } from "ai";
 import { Effect } from "effect";
 
 import { ENV } from "./env.server";
@@ -42,7 +45,7 @@ const chatModelProvider = createOpenAiCompatibleChatModelProvider({
   baseUrl: ENV.AI_BASE_URL,
   // OpenCode Go routes requests per conversation via this header
   modelId: ENV.AI_MODEL,
-  sessionHeaderName: "x-opencode-session",
+  sessionHeaderName: OPENCODE_SESSION_HEADER_NAME,
 });
 
 const artifactPublisher = ENV.ARTIFACT_SERVER_URL
@@ -61,6 +64,31 @@ export const curioRuntime = createCurioRuntime({
   courseStore,
   modelSettingsStore: createDrizzleModelSettingsStore(db),
 });
+
+/**
+ * Boot-time sweep for runs orphaned by a previous server restart: their
+ * writer died before settling them, so a chat reopened without a live run
+ * would stay submit-blocked forever otherwise (runs untouched for the same
+ * staleness window the reconnect path uses are honest crash victims).
+ */
+const STALE_RUN_THRESHOLD_MS = 300_000;
+void curioRuntime.runPromise(
+  Effect.gen(function* crashOrphanedRuns() {
+    const chatRunStoreService = yield* ChatRunStore;
+    const crashedRunIds = yield* chatRunStoreService.crashStaleRuns(
+      STALE_RUN_THRESHOLD_MS
+    );
+    if (crashedRunIds.length > 0) {
+      yield* Effect.logInfo(
+        `Marked ${crashedRunIds.length} stale agent run(s) as crashed at boot`
+      );
+    }
+  }).pipe(
+    Effect.catch((error) =>
+      Effect.logError("Boot-time stale run sweep failed", error)
+    )
+  )
+);
 
 export const runtimeScopedArtifactPublisher: ArtifactPublisherContract = {
   publish: (publicationInput) =>
@@ -120,9 +148,7 @@ export async function createScopedCourseLesson(
   userId: string,
   createLessonRequest: CreateLessonToolRequest
 ): Promise<CreateLessonToolResult> {
-  const storedContent = toStoredLessonContent(
-    createLessonRequest.content
-  );
+  const storedContent = toStoredLessonContent(createLessonRequest.content);
   const written = await curioRuntime.runPromise(
     Effect.gen(function* createScopedLesson() {
       const courseStoreService = yield* CourseStore;
@@ -142,14 +168,6 @@ export async function createScopedCourseLesson(
   };
 }
 
-/** The model supplies lesson kinds as free strings; anything unrecognized
- * degrades to `cards` rather than failing the whole creation. */
-function normalizeLessonKind(kind: string): CourseLessonKind {
-  return (
-    COURSE_LESSON_KINDS.find((candidate) => candidate === kind) ?? "cards"
-  );
-}
-
 /**
  * Resolves the chat model for one conversation: the user's saved provider
  * choice (OpenAI or OpenAI-compatible, from the settings dashboard) wins;
@@ -162,20 +180,17 @@ export async function createScopedModel(
   return await curioRuntime.runPromise(
     Effect.gen(function* resolveScopedModel() {
       const modelSettingsStore = yield* ModelSettingsStore;
-      const userSettings = yield* modelSettingsStore.getUserModelSettings(
-        userId
-      );
-      if (
-        userSettings !== null &&
-        (userSettings.provider === "openai" ||
-          userSettings.provider === "openai-compatible")
-      ) {
-        return createUserChatModel({
+      const userSettingsOption =
+        yield* modelSettingsStore.getUserModelSettings(userId);
+      if (userSettingsOption !== null) {
+        return createUserChatModel(
+          {
+            ...userSettingsOption,
+            sessionHeaderName: OPENCODE_SESSION_HEADER_NAME,
+          },
           chatId,
-          fallbackApiKey: ENV.AI_API_KEY,
-          fallbackBaseUrl: ENV.AI_BASE_URL,
-          settings: userSettings,
-        });
+          { apiKey: ENV.AI_API_KEY, baseUrl: ENV.AI_BASE_URL }
+        );
       }
       const chatModelProviderService = yield* ChatModelProvider;
       return yield* chatModelProviderService.getChatModel(chatId);
