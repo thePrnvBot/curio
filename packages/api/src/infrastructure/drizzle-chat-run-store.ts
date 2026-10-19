@@ -2,9 +2,9 @@ import type { Database } from "@curio/db";
 import { chat, chatRun, chatRunChunk } from "@curio/db/schema/chat";
 import type { UIMessageChunk } from "ai";
 import { and, asc, desc, eq, gt, lt } from "drizzle-orm";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 
-import { ChatOperationFailed } from "../domain/chat-operation-failed";
+import { ChatOperationFailed } from "../domain/chat";
 import type {
   ChatRunChunkRecord,
   ChatRunRecord,
@@ -71,15 +71,13 @@ export function createDrizzleChatRunStore(
               .orderBy(desc(chatRunChunk.seq))
               .limit(1);
             const baseSeq = highestRows.at(0)?.seq ?? -1;
-            await transactionDatabase
-              .insert(chatRunChunk)
-              .values(
-                chunks.map((chunk, offset) => ({
-                  chunk: chunk as unknown as Record<string, unknown>,
-                  runId,
-                  seq: baseSeq + offset + 1,
-                }))
-              );
+            await transactionDatabase.insert(chatRunChunk).values(
+              chunks.map((chunk, offset) => ({
+                chunk: chunk as unknown as Record<string, unknown>,
+                runId,
+                seq: baseSeq + offset + 1,
+              }))
+            );
             // Touch the run so a live writer is never mistaken for a dead one.
             await transactionDatabase
               .update(chatRun)
@@ -124,10 +122,9 @@ export function createDrizzleChatRunStore(
             .limit(1)
         )
       ).pipe(
-        Effect.map((rows) => {
-          const row = rows.at(0);
-          return row === undefined ? null : rowToRunRecord(row);
-        })
+        Effect.map((rows) =>
+          Option.fromNullishOr(rows.at(0)).pipe(Option.map(rowToRunRecord))
+        )
       ),
 
     getRun: (runId) =>
@@ -146,10 +143,9 @@ export function createDrizzleChatRunStore(
             .limit(1)
         )
       ).pipe(
-        Effect.map((rows) => {
-          const row = rows.at(0);
-          return row === undefined ? null : rowToRunRecord(row);
-        })
+        Effect.map((rows) =>
+          Option.fromNullishOr(rows.at(0)).pipe(Option.map(rowToRunRecord))
+        )
       ),
 
     listChunks: (runId, afterSeq) =>
@@ -172,12 +168,11 @@ export function createDrizzleChatRunStore(
             .orderBy(asc(chatRunChunk.seq))
         )
       ).pipe(
-        Effect.map(
-          (rows): ChatRunChunkRecord[] =>
-            rows.map((row) => ({
-              chunk: row.chunk as unknown as UIMessageChunk,
-              seq: row.seq,
-            }))
+        Effect.map((rows): ChatRunChunkRecord[] =>
+          rows.map((row) => ({
+            chunk: row.chunk as unknown as UIMessageChunk,
+            seq: row.seq,
+          }))
         )
       ),
 

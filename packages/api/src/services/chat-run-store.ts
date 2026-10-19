@@ -1,10 +1,15 @@
 import type { UIMessageChunk } from "ai";
-import type { Effect } from "effect";
+import type { Effect, Option } from "effect";
 import { Context } from "effect";
 
-import type { ChatOperationFailed } from "../domain/chat-operation-failed";
+import type { ChatOperationFailed } from "../domain/chat";
 
-export type ChatRunStatus = "running" | "done" | "stopped" | "error" | "crashed";
+export type ChatRunStatus =
+  | "running"
+  | "done"
+  | "stopped"
+  | "error"
+  | "crashed";
 
 export type ChatRunExitStatus = Exclude<ChatRunStatus, "running">;
 
@@ -49,12 +54,12 @@ export interface ChatRunStoreContract {
   readonly findRunningRun: (
     chatId: string,
     userId: string
-  ) => Effect.Effect<ChatRunRecord | null, ChatOperationFailed>;
+  ) => Effect.Effect<Option.Option<ChatRunRecord>, ChatOperationFailed>;
 
   /** One run by id. */
   readonly getRun: (
     runId: string
-  ) => Effect.Effect<ChatRunRecord | null, ChatOperationFailed>;
+  ) => Effect.Effect<Option.Option<ChatRunRecord>, ChatOperationFailed>;
 
   /** Committed chunks of a run, ordered, after the given sequence number. */
   readonly listChunks: (

@@ -2,99 +2,68 @@ import type { Effect } from "effect";
 import { Context } from "effect";
 
 import type {
+  BadgeAwardInput,
   CourseBadgeRecord,
   CourseChunkPlanInput,
+  CourseDeletionInput,
   CourseLessonContentInput,
+  CourseLessonDetail,
+  CourseLessonLookupInput,
+  CourseLookupInput,
+  BadgeDeletionInput,
   CourseLessonWrittenResult,
+  CourseScaffoldResult,
+  CourseStoreFailure,
+  CourseSummary,
   CourseCreationInput,
   CourseDetail,
-  CourseLessonDetail,
-  CourseScaffoldResult,
-  CourseSummary,
+  LessonCompletionInput,
   LessonCompletionResult,
 } from "../domain/course";
-import type { CourseOperationFailed } from "../domain/course-operation-failed";
 
+/** Storage for the user's courses, sections, lessons and badges. */
 export interface CourseStoreContract {
   readonly listCourses: (
     userId: string
-  ) => Effect.Effect<readonly CourseSummary[], CourseOperationFailed>;
+  ) => Effect.Effect<readonly CourseSummary[], CourseStoreFailure>;
   readonly listBadges: (
     userId: string
-  ) => Effect.Effect<readonly CourseBadgeRecord[], CourseOperationFailed>;
+  ) => Effect.Effect<readonly CourseBadgeRecord[], CourseStoreFailure>;
   readonly deleteCourse: (
-    courseId: string,
-    userId: string
-  ) => Effect.Effect<void, CourseOperationFailed | CourseNotFound>;
+    deletion: CourseDeletionInput
+  ) => Effect.Effect<void, CourseStoreFailure>;
   readonly createCourse: (
     creationInput: CourseCreationInput
-  ) => Effect.Effect<CourseSummary, CourseOperationFailed>;
+  ) => Effect.Effect<CourseSummary, CourseStoreFailure>;
   /** Streamed creation, step 1: persist the outline (title + section +
    * lesson shells without content) and hand back the lesson identifiers the
    * model fills one `create_lesson` call at a time. */
   readonly createCourseScaffold: (
     planInput: CourseChunkPlanInput
-  ) => Effect.Effect<CourseScaffoldResult, CourseOperationFailed>;
+  ) => Effect.Effect<CourseScaffoldResult, CourseStoreFailure>;
   /** Streamed creation, step 2..N: fill one lesson's finished content. */
   readonly writeCourseLessonContent: (
     writeInput: CourseLessonContentInput
-  ) => Effect.Effect<
-    CourseLessonWrittenResult,
-    CourseOperationFailed | CourseNotFound | LessonNotFound
-  >;
+  ) => Effect.Effect<CourseLessonWrittenResult, CourseStoreFailure>;
   /** Sidebar structure for the course page; empty for unknown/no-owner. */
   readonly getCourseStructure: (
-    courseId: string,
-    userId: string
-  ) => Effect.Effect<CourseDetail, CourseOperationFailed | CourseNotFound>;
+    lookup: CourseLookupInput
+  ) => Effect.Effect<CourseDetail, CourseStoreFailure>;
   readonly getLesson: (
-    courseId: string,
-    lessonId: string,
-    userId: string
-  ) => Effect.Effect<CourseLessonDetail, CourseOperationFailed | CourseNotFound>;
+    lookup: CourseLessonLookupInput
+  ) => Effect.Effect<CourseLessonDetail, CourseStoreFailure>;
   readonly completeLesson: (
-    courseId: string,
-    lessonId: string,
-    userId: string
-  ) => Effect.Effect<
-    LessonCompletionResult,
-    CourseOperationFailed | CourseNotFound
-  >;
-  readonly awardBadge: (awardInput: {
-    readonly courseId: string | null;
-    readonly label: string;
-    readonly userId: string;
-  }) => Effect.Effect<CourseBadgeRecord, CourseOperationFailed>;
+    completionInput: LessonCompletionInput
+  ) => Effect.Effect<LessonCompletionResult, CourseStoreFailure>;
+  readonly awardBadge: (
+    awardInput: BadgeAwardInput
+  ) => Effect.Effect<CourseBadgeRecord, CourseStoreFailure>;
   readonly deleteBadge: (
-    badgeId: string,
-    userId: string
-  ) => Effect.Effect<void, CourseOperationFailed | BadgeNotFound>;
+    deletion: BadgeDeletionInput
+  ) => Effect.Effect<void, CourseStoreFailure>;
 }
 
-export class BadgeNotFound extends Error {
-  constructor(params: { readonly badgeId: string }) {
-    super(`Badge ${params.badgeId} was not found`);
-    this.name = "BadgeNotFound";
-  }
-}
-
-export class CourseNotFound extends Error {
-  constructor(params: { readonly courseId: string }) {
-    super(`Course ${params.courseId} was not found`);
-    this.name = "CourseNotFound";
-  }
-}
-
-export class LessonNotFound extends Error {
-  constructor(params: {
-    readonly courseId: string;
-    readonly lessonId: string;
-  }) {
-    super(`Lesson ${params.lessonId} does not belong to course ${params.courseId}`);
-    this.name = "LessonNotFound";
-  }
-}
-
-export class CourseStore extends Context.Service<CourseStore, CourseStoreContract>()(
-  "curio/CourseStore"
-) {}
+export class CourseStore extends Context.Service<
+  CourseStore,
+  CourseStoreContract
+>()("curio/CourseStore") {}

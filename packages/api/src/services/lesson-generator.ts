@@ -1,21 +1,11 @@
 import type { Effect } from "effect";
 import { Context } from "effect";
 
-import type { LessonGenerationFailed } from "../domain/lesson-generation-failed";
-import type { CourseNotFound } from "./course-store";
-
-export type LessonGenerationOutcome =
-  | {
-      readonly kind: "already-filled";
-      readonly lessonId: string;
-      readonly title: string;
-    }
-  | {
-      readonly kind: "generated";
-      readonly lessonId: string;
-      readonly title: string;
-    }
-  | { readonly kind: "nothing-ahead" };
+import type { CourseNotFound } from "../domain/course";
+import type {
+  LessonGenerationFailed,
+  LessonGenerationOutcome,
+} from "../domain/lesson-generation";
 
 export interface LessonGeneratorContract {
   /**

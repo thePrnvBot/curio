@@ -10,8 +10,7 @@ import type {
   ChatSummary,
   StoredConversationMessages,
 } from "../domain/chat";
-import { ChatNotFound } from "../domain/chat-not-found";
-import { ChatOperationFailed } from "../domain/chat-operation-failed";
+import { ChatNotFound, ChatOperationFailed } from "../domain/chat";
 import type { ChatStoreContract } from "../services/chat-store";
 
 interface ChatRow {

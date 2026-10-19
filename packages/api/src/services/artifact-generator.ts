@@ -1,8 +1,10 @@
 import { Context } from "effect";
 import type { Effect } from "effect";
 
-import type { ArtifactGenerationFailed } from "../domain/artifact-generation-failed";
-import type { GeneratedArtifactBrief } from "../domain/structured-generation-data";
+import type {
+  ArtifactGenerationFailed,
+  GeneratedArtifactBrief,
+} from "../domain/artifact";
 
 export interface ArtifactGeneratorContract {
   /**

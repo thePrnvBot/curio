@@ -4,8 +4,8 @@ import type { Effect } from "effect";
 import type {
   ArtifactPublicationInput,
   ArtifactPublicationResult,
+  ArtifactPublishFailed,
 } from "../domain/artifact";
-import type { ArtifactPublishFailed } from "../domain/artifact-publish-failed";
 
 export interface ArtifactPublisherContract {
   /**

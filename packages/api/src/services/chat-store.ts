@@ -4,11 +4,11 @@ import { Context } from "effect";
 import type {
   ChatDetail,
   ChatMessageRecord,
+  ChatNotFound,
+  ChatOperationFailed,
   ChatSummary,
   StoredConversationMessages,
 } from "../domain/chat";
-import type { ChatNotFound } from "../domain/chat-not-found";
-import type { ChatOperationFailed } from "../domain/chat-operation-failed";
 
 export interface ChatStoreContract {
   readonly listChats: (

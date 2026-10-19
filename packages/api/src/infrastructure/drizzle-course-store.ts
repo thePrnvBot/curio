@@ -9,24 +9,26 @@ import {
 import { asc, desc, eq, and } from "drizzle-orm";
 import { Effect } from "effect";
 
+import {
+  BadgeNotFound,
+  CourseNotFound,
+  CourseOperationFailed,
+  isCourseLookupFailure,
+  normalizeLessonKind,
+  LessonNotFound,
+} from "../domain/course";
 import type {
   CourseBadgeRecord,
+  CourseLessonSummary,
   CourseLessonWrittenResult,
   CourseDetail,
   CourseLessonDetail,
-  CourseLessonKind,
-  CourseLessonSummary,
+  CourseStoreFailure,
   CourseScaffoldResult,
   CourseSummary,
   LessonCompletionResult,
 } from "../domain/course";
-import {
-  BadgeNotFound,
-  CourseNotFound,
-  LessonNotFound,
-} from "../services/course-store";
 import type { CourseStoreContract } from "../services/course-store";
-import { CourseOperationFailed } from "../domain/course-operation-failed";
 
 interface CourseRow {
   readonly completedLessonCount: number;
@@ -85,30 +87,31 @@ function toBadgeRecord(row: CourseBadgeRow): CourseBadgeRecord {
   };
 }
 
-const KNOWN_LESSON_KINDS: readonly CourseLessonKind[] = [
-  "video",
-  "cards",
-  "animation",
-  "recap",
-  "guided-explanation",
-];
-
-function normalizeLessonKind(kind: string): CourseLessonKind {
-  return KNOWN_LESSON_KINDS.find((candidate) => candidate === kind) ?? "cards";
+/**
+ * Normalizes storage failures to `CourseOperationFailed` while *preserving*
+ * the domain lookup failures (`CourseNotFound`, `LessonNotFound`,
+ * `BadgeNotFound`) — the wrapper used to flatten every failure, which left
+ * the NotFound guards in the courses router dead and made a missing course
+ * answer 500 instead of 404.
+ */
+function withCourseError(operation: string) {
+  return <Success>(
+    effect: Effect.Effect<Success, unknown, never>
+  ): Effect.Effect<Success, CourseStoreFailure, never> =>
+    effect.pipe(
+      Effect.catchIf(
+        isCourseLookupFailure,
+        (lookupFailure) => Effect.fail(lookupFailure),
+        (otherCause) =>
+          Effect.fail(
+            new CourseOperationFailed({ cause: otherCause, operation })
+          )
+      )
+    );
 }
 
 function normalizeLessonPosition(value: number): number {
   return Number.isFinite(value) && value > 0 ? value : 1;
-}
-
-function withCourseError(operation: string) {
-  return <Success>(
-    effect: Effect.Effect<Success, unknown, never>
-  ): Effect.Effect<Success, CourseOperationFailed, never> =>
-    Effect.mapError(
-      effect,
-      (cause: unknown) => new CourseOperationFailed({ cause, operation })
-    );
 }
 
 function generateId(prefix: string): string {
@@ -168,7 +171,7 @@ export function createDrizzleCourseStore(
         )
       ).pipe(Effect.map((rows) => rows.map(toBadgeRecord))),
 
-    deleteCourse: (courseId, userId) =>
+    deleteCourse: ({ courseId, userId }) =>
       withCourseError("deleteCourse")(
         Effect.gen(function* removeCourse() {
           const deletedRows = yield* Effect.tryPromise(() =>
@@ -291,7 +294,9 @@ export function createDrizzleCourseStore(
             ) {
               const sectionInput = sections.at(sectionIndex);
               if (sectionInput === undefined) {
-                throw new Error("Course section vanished mid-scaffold-transaction");
+                throw new Error(
+                  "Course section vanished mid-scaffold-transaction"
+                );
               }
               if (sectionInput.lessons.length === 0) {
                 continue;
@@ -335,7 +340,11 @@ export function createDrizzleCourseStore(
           });
 
           return {
-            course: { id: courseId, lessonCount: scaffoldLessons.length, title },
+            course: {
+              id: courseId,
+              lessonCount: scaffoldLessons.length,
+              title,
+            },
             lessons: scaffoldLessons.map((scaffoldLesson) => ({
               courseId,
               id: scaffoldLesson.id,
@@ -369,14 +378,16 @@ export function createDrizzleCourseStore(
               .where(
                 and(
                   eq(courseLesson.id, lessonId),
-                  eq(courseLesson.courseId, courseId),
+                  eq(courseLesson.courseId, courseId)
                 )
               )
-              .limit(1),
+              .limit(1)
           );
           const lessonRow = lessonRows.at(0);
           if (lessonRow === undefined) {
-            return yield* Effect.fail(new LessonNotFound({ courseId, lessonId }));
+            return yield* Effect.fail(
+              new LessonNotFound({ courseId, lessonId })
+            );
           }
 
           const now = new Date();
@@ -398,10 +409,10 @@ export function createDrizzleCourseStore(
             position: normalizeLessonPosition(lessonRow.position),
             title: lessonRow.title,
           } satisfies CourseLessonWrittenResult;
-        }),
+        })
       ),
 
-    getCourseStructure: (courseId, userId) =>
+    getCourseStructure: ({ courseId, userId }) =>
       withCourseError("getCourseStructure")(
         Effect.gen(function* readStructure() {
           const courseRows = yield* Effect.tryPromise(() =>
@@ -436,7 +447,9 @@ export function createDrizzleCourseStore(
               .orderBy(asc(courseLesson.position))
           );
 
-          const toSummary = (lessonRow: CourseLessonRow): CourseLessonSummary => ({
+          const toSummary = (
+            lessonRow: CourseLessonRow
+          ): CourseLessonSummary => ({
             completed: lessonRow.completedAt !== null,
             id: lessonRow.id,
             kind: normalizeLessonKind(lessonRow.kind),
@@ -477,9 +490,7 @@ export function createDrizzleCourseStore(
           if (unsectioned.length > 0) {
             const firstSection = sections.at(0);
             if (firstSection !== undefined) {
-              firstSection.lessons.push(
-                ...unsectioned.map(toSummary)
-              );
+              firstSection.lessons.push(...unsectioned.map(toSummary));
             } else {
               sections.push({
                 id: null,
@@ -496,7 +507,7 @@ export function createDrizzleCourseStore(
         })
       ),
 
-    getLesson: (courseId, lessonId, userId) =>
+    getLesson: ({ courseId, lessonId, userId }) =>
       withCourseError("getLesson")(
         Effect.gen(function* readLesson() {
           const courseRows = yield* Effect.tryPromise(() =>
@@ -541,7 +552,7 @@ export function createDrizzleCourseStore(
         })
       ),
 
-    completeLesson: (courseId, lessonId, userId) =>
+    completeLesson: ({ courseId, lessonId, userId }) =>
       withCourseError("completeLesson")(
         Effect.gen(function* markLessonComplete() {
           const courseRows = yield* Effect.tryPromise(() =>
@@ -654,7 +665,7 @@ export function createDrizzleCourseStore(
         })
       ),
 
-    deleteBadge: (badgeId, userId) =>
+    deleteBadge: ({ badgeId, userId }) =>
       withCourseError("deleteBadge")(
         Effect.gen(function* removeBadge() {
           const deletedBadgeRows = yield* Effect.tryPromise(() =>

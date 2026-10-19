@@ -1,12 +1,12 @@
 import { Effect } from "effect";
 
-import { LessonGenerationFailed } from "../domain/lesson-generation-failed";
-import { toStoredLessonContent } from "./course-create-tool";
-import type { LessonGenerationBrief } from "./generate-text-lesson-generator";
-import { CourseNotFound } from "../services/course-store";
+import { CourseNotFound } from "../domain/course";
+import { toStoredLessonContent } from "../domain/lesson-content";
+import type { LessonContentToolPayload } from "../domain/lesson-content";
+import type { LessonGenerationBrief } from "../domain/lesson-generation";
+import { LessonGenerationFailed } from "../domain/lesson-generation";
 import type { CourseStoreContract } from "../services/course-store";
 import type { LessonGeneratorContract } from "../services/lesson-generator";
-import type { LessonContentToolPayload } from "./course-create-tool";
 
 export interface CourseStoreLessonGeneratorConfig {
   readonly courseStore: CourseStoreContract;
@@ -33,10 +33,8 @@ export function createCourseStoreLessonGenerator(
     generateNextLessonModule: ({ courseId, currentLessonId, userId }) =>
       Effect.gen(function* generateNextLessonModule() {
         const detail = yield* config.courseStore
-          .getCourseStructure(courseId, userId)
-          .pipe(
-            Effect.mapError(mapStoreError("the course outline"))
-          );
+          .getCourseStructure({ courseId, userId })
+          .pipe(Effect.mapError(mapStoreError("the course outline")));
         const ordered = detail.sections.flatMap((section) =>
           section.lessons.map((lesson) => ({
             ...lesson,
@@ -52,10 +50,8 @@ export function createCourseStoreLessonGenerator(
         const currentLesson = ordered[currentIndex];
 
         const currentDetail = yield* config.courseStore
-          .getLesson(courseId, currentLesson.id, userId)
-          .pipe(
-            Effect.mapError(mapStoreError(currentLesson.title))
-          );
+          .getLesson({ courseId, lessonId: currentLesson.id, userId })
+          .pipe(Effect.mapError(mapStoreError(currentLesson.title)));
 
         // The nearest unfilled lesson at or after the reader's position.
         let targetLesson = currentLesson;
@@ -66,7 +62,7 @@ export function createCourseStoreLessonGenerator(
             return { kind: "nothing-ahead" } as const;
           }
           const nextDetail = yield* config.courseStore
-            .getLesson(courseId, nextLesson.id, userId)
+            .getLesson({ courseId, lessonId: nextLesson.id, userId })
             .pipe(Effect.mapError(mapStoreError(nextLesson.title)));
           if (nextDetail.content !== null) {
             return {
@@ -97,7 +93,7 @@ export function createCourseStoreLessonGenerator(
         // The Director's own run may have filled this lesson while the model
         // was writing — discard the generated draft rather than overwrite it.
         const latest = yield* config.courseStore
-          .getLesson(courseId, targetLesson.id, userId)
+          .getLesson({ courseId, lessonId: targetLesson.id, userId })
           .pipe(Effect.mapError(mapStoreError(targetLesson.title)));
         if (latest.content !== null) {
           return {
