@@ -7,6 +7,10 @@ import { createTRPCOptionsProxy } from "@trpc/tanstack-react-query";
 import { toast } from "sonner";
 
 import Loader from "./components/loader";
+import {
+  RouteErrorComponent,
+  RouteNotFoundComponent,
+} from "./components/route-fallbacks";
 import { routeTree } from "./routeTree.gen";
 import { TRPCProvider } from "./utils/trpc";
 
@@ -60,7 +64,8 @@ export const getRouter = () => {
     defaultPreloadStaleTime: 0,
     context: { trpc, queryClient },
     defaultPendingComponent: () => <Loader />,
-    defaultNotFoundComponent: () => <div>Not Found</div>,
+    defaultErrorComponent: RouteErrorComponent,
+    defaultNotFoundComponent: RouteNotFoundComponent,
     Wrap: ({ children }) => (
       <TRPCProvider trpcClient={trpcClient} queryClient={queryClient}>
         {children}
