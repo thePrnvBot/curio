@@ -3,15 +3,15 @@ import { Effect } from "effect";
 import { z } from "zod";
 
 import {
-  DdgBlocked,
-  duckDuckGoSearchEffect,
-  WEB_SEARCH_TOOL_NAME,
-} from "./web-search";
-import {
   ObscuraUnavailable,
   webPageReadEffect,
   WEB_READ_TOOL_NAME,
 } from "./web-reader";
+import {
+  DdgBlocked,
+  duckDuckGoSearchEffect,
+  WEB_SEARCH_TOOL_NAME,
+} from "./web-search";
 
 export {
   WEB_SEARCH_TOOL_NAME,
@@ -46,8 +46,7 @@ export function createWebTools(): ToolSet {
           return attempt.failure instanceof DdgBlocked
             ? {
                 blocked: true,
-                note:
-                  "DuckDuckGo temporarily blocked the request. Answer from your own knowledge or try again shortly with a different phrasing.",
+                note: "DuckDuckGo temporarily blocked the request. Answer from your own knowledge or try again shortly with a different phrasing.",
                 results: [],
               }
             : {

@@ -1,24 +1,18 @@
 ﻿import { spawn, type ChildProcess } from "node:child_process";
 
-import { Effect } from "effect";
+import { Data, Effect } from "effect";
 
 export const WEB_READ_TOOL_NAME = "web_read";
 
-export class ObscuraUnavailable extends Error {
-  readonly _tag = "ObscuraUnavailable";
+export class ObscuraUnavailable extends Data.TaggedError("ObscuraUnavailable")<{
+  readonly message: string;
+}> {}
 
-  constructor(params: { message: string }) {
-    super(params.message);
-    this.name = "ObscuraUnavailable";
-  }
-}
-
-export class WebReadFailed extends Error {
-  readonly _tag = "WebReadFailed";
-
-  constructor(params: { message: string }) {
-    super(params.message);
-    this.name = "WebReadFailed";
+export class WebReadFailed extends Data.TaggedError("WebReadFailed")<{
+  readonly readFailureMessage: string;
+}> {
+  override get message(): string {
+    return this.readFailureMessage;
   }
 }
 
@@ -166,7 +160,7 @@ const obscuraFetchEffect = Effect.fnUntraced(function* (
     lastFailure = attempt.failure;
     if (attempt.failure.reason !== "binary-missing") {
       return yield* Effect.fail(
-        new WebReadFailed({ message: attempt.failure.message })
+        new WebReadFailed({ readFailureMessage: attempt.failure.message })
       );
     }
   }
@@ -189,7 +183,7 @@ export const webPageReadEffect = Effect.fnUntraced(function* (
   if (!isPublicHttpUrl(url)) {
     return yield* Effect.fail(
       new WebReadFailed({
-        message: "Only public http(s) URLs can be read.",
+        readFailureMessage: "Only public http(s) URLs can be read.",
       })
     );
   }
@@ -226,4 +220,3 @@ export const readWebPage = (
   selector?: string
 ): Promise<WebPageReadResult> =>
   Effect.runPromise(webPageReadEffect(url, selector));
-

@@ -1,26 +1,25 @@
-﻿import { Effect } from "effect";
+﻿import { Data, Effect } from "effect";
+
+import { describeCause } from "../domain/cause-description";
 
 export const WEB_SEARCH_TOOL_NAME = "web_search";
 
 export type SearchFreshness = "any" | "day" | "week" | "month" | "year";
 
-export class DdgBlocked extends Error {
-  readonly _tag = "DdgBlocked";
-
-  constructor(params: { query: string }) {
-    super(`DuckDuckGo served an anti-bot page for "${params.query}"`);
-    this.name = "DdgBlocked";
+export class DdgBlocked extends Data.TaggedError("DdgBlocked")<{
+  readonly query: string;
+}> {
+  override get message(): string {
+    return `DuckDuckGo served an anti-bot page for "${this.query}"`;
   }
 }
 
-export class WebSearchFailed extends Error {
-  readonly _tag = "WebSearchFailed";
-
-  constructor(params: { operation: string; cause: unknown }) {
-    super(
-      `Web search failed while ${params.operation}: ${describeCause(params.cause)}`
-    );
-    this.name = "WebSearchFailed";
+export class WebSearchFailed extends Data.TaggedError("WebSearchFailed")<{
+  readonly operation: string;
+  readonly cause: unknown;
+}> {
+  override get message(): string {
+    return `Web search failed while ${this.operation}: ${describeCause(this.cause)}`;
   }
 }
 
@@ -33,13 +32,6 @@ export interface WebSearchResult {
 export interface DuckDuckGoSearchOutcome {
   readonly blocked: boolean;
   readonly results: readonly WebSearchResult[];
-}
-
-function describeCause(cause: unknown): string {
-  if (cause instanceof Error) {
-    return cause.message;
-  }
-  return String(cause);
 }
 
 /* ------------------------------- DDG search ------------------------------- */
@@ -257,4 +249,3 @@ export const duckDuckGoSearch = (
       )
     )
   );
-
