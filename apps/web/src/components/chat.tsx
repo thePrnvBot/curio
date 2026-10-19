@@ -1,5 +1,3 @@
-﻿"use client";
-
 import { useChat } from "@ai-sdk/react";
 import type { ChatAttachmentData } from "@curio/ui/components/ai-elements/attachments";
 import {
@@ -89,8 +87,11 @@ export interface PersistedChatMessageRecord {
   readonly parts: unknown;
 }
 
-const CREATE_COURSE_TOOL_NAME = "create_course";
-const CREATE_LESSON_TOOL_NAME = "create_lesson";
+import {
+  CREATE_COURSE_TOOL_NAME,
+  CREATE_LESSON_TOOL_NAME,
+} from "@curio/api/infrastructure/course-create-tool";
+
 const TOOL_WEB_SEARCH = "tool-web_search";
 const TOOL_WEB_READ = "tool-web_read";
 

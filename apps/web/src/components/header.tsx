@@ -1,5 +1,3 @@
-"use client";
-
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useLayoutEffect, useRef, useState } from "react";
 
@@ -91,7 +89,9 @@ export default function Header() {
   }, [activeIndex, hoveredIndex]);
 
   const showHoverPill =
-    hoveredIndex !== null && hoveredIndex !== activeIndex && hoveredPill !== null;
+    hoveredIndex !== null &&
+    hoveredIndex !== activeIndex &&
+    hoveredPill !== null;
 
   return (
     <header className="pointer-events-none fixed inset-x-0 top-2.5 z-50 flex justify-center px-3">
@@ -105,7 +105,7 @@ export default function Header() {
         {hoveredPill === null ? null : (
           <span
             aria-hidden="true"
-            className={`bg-foreground/[0.06] absolute bottom-1 top-1 rounded-full transition-[left,width,opacity,scale] duration-200 ease-out ${
+            className={`bg-foreground/[0.06] absolute top-1 bottom-1 rounded-full transition-[left,width,opacity,scale] duration-200 ease-out ${
               showHoverPill ? "scale-100 opacity-100" : "scale-90 opacity-0"
             }`}
             style={{
@@ -117,7 +117,7 @@ export default function Header() {
         {activePill === null ? null : (
           <span
             aria-hidden="true"
-            className="bg-primary absolute bottom-1 top-1 rounded-full shadow-xs transition-[left,width,opacity] duration-300 ease-out"
+            className="bg-primary absolute top-1 bottom-1 rounded-full shadow-xs transition-[left,width,opacity] duration-300 ease-out"
             style={{
               left: activePill.left,
               width: activePill.width,
@@ -147,10 +147,7 @@ export default function Header() {
             </Link>
           );
         })}
-        <div
-          aria-hidden="true"
-          className="bg-border/70 mx-1 h-6 w-px"
-        />
+        <div aria-hidden="true" className="bg-border/70 mx-1 h-6 w-px" />
         <div className="flex items-center gap-1 px-1">
           <ThemeToggle />
           <UserMenu />

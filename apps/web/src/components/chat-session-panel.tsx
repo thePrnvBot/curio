@@ -1,7 +1,5 @@
-"use client";
-
-import type { UIMessage } from "ai";
 import { useQueryClient } from "@tanstack/react-query";
+import type { UIMessage } from "ai";
 import { isToolUIPart } from "ai";
 import {
   FileIcon,
@@ -14,11 +12,11 @@ import {
 import { useEffect, useState } from "react";
 
 import { subscribeToChatFinish } from "@/utils/chat-runtime";
-import { useTRPC } from "@/utils/trpc";
 import {
   toArtifactToolEntry,
   toInlineDataArtifact,
 } from "@/utils/chat-schemas";
+import { useTRPC } from "@/utils/trpc";
 
 type SessionEntryKind =
   | "artifact"

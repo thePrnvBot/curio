@@ -1,6 +1,6 @@
-﻿import type { ReactElement } from "react";
-import { Skeleton } from "@curio/ui/components/skeleton";
+﻿import { Skeleton } from "@curio/ui/components/skeleton";
 import { BookOpenCheckIcon } from "lucide-react";
+import type { ReactElement } from "react";
 
 /** Course-created banner shown under the Director's scaffold tool call. */
 export function CourseCreatedNote({

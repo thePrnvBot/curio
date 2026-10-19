@@ -1,20 +1,17 @@
-﻿"use client";
-
-import {
+﻿import {
   Attachments,
   ChatAttachment,
 } from "@curio/ui/components/ai-elements/attachments";
 import type { ChatAttachmentData } from "@curio/ui/components/ai-elements/attachments";
 import { CodeBlock } from "@curio/ui/components/ai-elements/code-block";
-import {
-  MessageResponse,
-} from "@curio/ui/components/ai-elements/message";
+import { MessageResponse } from "@curio/ui/components/ai-elements/message";
 import {
   PromptInputButton,
   PromptInputHeader,
   usePromptInputAttachments,
   usePromptInputController,
 } from "@curio/ui/components/ai-elements/prompt-input";
+import type { PromptInputMessage } from "@curio/ui/components/ai-elements/prompt-input";
 import {
   Tool,
   ToolContent,
@@ -34,7 +31,6 @@ import {
   toGeneratedArtifactResponse,
 } from "@/utils/chat-schemas";
 import type { ArtifactUIData } from "@/utils/ui-messages";
-import type { PromptInputMessage } from "@curio/ui/components/ai-elements/prompt-input";
 const ARTIFACT_GENERATION_API = "/api/artifacts/generate";
 
 function toChatAttachmentData(
@@ -73,7 +69,11 @@ function injectHeightProbe(htmlContent: string): string {
 const ARTIFACT_MIN_PREVIEW_HEIGHT = 120;
 const ARTIFACT_MAX_PREVIEW_HEIGHT = 10_000;
 
-export function InlineFilePartView({ fileEntry }: { fileEntry: ChatAttachmentData }) {
+export function InlineFilePartView({
+  fileEntry,
+}: {
+  fileEntry: ChatAttachmentData;
+}) {
   if (
     fileEntry.mediaType !== undefined &&
     fileEntry.mediaType.startsWith("image/") &&
@@ -137,10 +137,7 @@ export function ArtifactPreviewer({ data }: { data: ArtifactUIData }) {
         const probeHeight = decodeArtifactHeight(
           JSON.parse(windowMessage.data)
         );
-        if (
-          probeHeight !== null &&
-          Number.isFinite(probeHeight)
-        ) {
+        if (probeHeight !== null && Number.isFinite(probeHeight)) {
           setFrameHeight(
             Math.min(
               Math.max(probeHeight, ARTIFACT_MIN_PREVIEW_HEIGHT),
@@ -281,7 +278,6 @@ export function PromptInputAttachmentsDisplay() {
     </PromptInputHeader>
   );
 }
-
 
 interface GeneratedArtifactResponse {
   readonly brief: {

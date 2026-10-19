@@ -1,13 +1,12 @@
 import { toUIMessage } from "@curio/api/domain/chat";
+import type { ChatNotFound, ChatOperationFailed } from "@curio/api/domain/chat";
 import { ChatRunStore } from "@curio/api/services/chat-run-store";
-import { ChatStore } from "@curio/api/services/chat-store";
 import type {
   ChatRunExitStatus,
   ChatRunRecord,
   ChatRunStoreContract,
 } from "@curio/api/services/chat-run-store";
-import type { ChatNotFound } from "@curio/api/domain/chat-not-found";
-import type { ChatOperationFailed } from "@curio/api/domain/chat-operation-failed";
+import { ChatStore } from "@curio/api/services/chat-store";
 import type { UIMessage, UIMessageChunk } from "ai";
 import { createUIMessageStreamResponse } from "ai";
 import { Data, Effect, Option, Stream } from "effect";
@@ -99,7 +98,7 @@ export const createDurableRun = Effect.fnUntraced(function* admitDurableRun(
 export const chatRunInFlight = Effect.fnUntraced(function* findInFlightRun(
   chatId: string,
   userId: string
-): Effect.fn.Return<ChatRunRecord | null, never, ChatRunStore> {
+): Effect.fn.Return<Option.Option<ChatRunRecord>, never, ChatRunStore> {
   const chatRunStore = yield* ChatRunStore;
   const outcome = yield* Effect.result(
     chatRunStore.findRunningRun(chatId, userId)
@@ -112,7 +111,7 @@ export const chatRunInFlight = Effect.fnUntraced(function* findInFlightRun(
       chatId,
       outcome.failure
     );
-    return null;
+    return Option.none();
   }
   return outcome.success;
 });
@@ -192,8 +191,13 @@ const recoverStaleRun = Effect.fnUntraced(function* markStaleRunCrashed(
   const chatRunStore = yield* ChatRunStore;
   const { chatId: staleRunChatId, id: runId } = staleRun;
 
-  const run = yield* chatRunStore.getRun(runId);
-  if (run === null || run.status !== "running" || !isStaleRun(run)) {
+  const runOption = yield* chatRunStore.getRun(runId);
+  if (Option.isNone(runOption)) {
+    // The run vanished; nothing to recover.
+    return;
+  }
+  const run = runOption.value;
+  if (run.status !== "running" || !isStaleRun(run)) {
     // Already finished elsewhere in between, or alive after all.
     return;
   }
@@ -289,11 +293,13 @@ export const commitChatRunChunks = Effect.fn("durable-chat.commitChunks")(
       endStatus = "stopped";
     }
 
-    yield* chatRunStore.finishRun(runId, endStatus).pipe(
-      Effect.catch((error) =>
-        Effect.logError("Failed to mark chat run end", runId, error)
-      )
-    );
+    yield* chatRunStore
+      .finishRun(runId, endStatus)
+      .pipe(
+        Effect.catch((error) =>
+          Effect.logError("Failed to mark chat run end", runId, error)
+        )
+      );
     return endStatus;
   }
 );
@@ -313,9 +319,8 @@ function buildReplayStream(
   // chunk. Without it the client never learns the assistant message id, and
   // every replay builds the response into a fresh local message instead of
   // replacing the existing one - duplicating the conversation per visit.
-  return Stream.paginate(
-    { lastSeq: -1 },
-    (cursor) => Effect.gen(function* pollCommittedChunks() {
+  return Stream.paginate({ lastSeq: -1 }, (cursor) =>
+    Effect.gen(function* pollCommittedChunks() {
       const runOutcome = yield* Effect.result(chatRunStore.getRun(runId));
       if (runOutcome._tag === "Failure") {
         return [
@@ -323,13 +328,13 @@ function buildReplayStream(
           Option.none(),
         ] as const;
       }
-      const run = runOutcome.success;
-      if (run === null) {
+      if (Option.isNone(runOutcome.success)) {
         return [
           [errorChunk("The agent run no longer exists")],
           Option.none(),
         ] as const;
       }
+      const run = runOutcome.success.value;
 
       const chunksOutcome = yield* Effect.result(
         chatRunStore.listChunks(runId, cursor.lastSeq)
@@ -342,9 +347,7 @@ function buildReplayStream(
       }
       const committedChunks = chunksOutcome.success;
       const lastSeq = committedChunks.at(-1)?.seq ?? cursor.lastSeq;
-      const committedChunksOnly = committedChunks.map(
-        (record) => record.chunk
-      );
+      const committedChunksOnly = committedChunks.map((record) => record.chunk);
 
       if (run.status !== "running") {
         return [committedChunksOnly, Option.none()] as const;
@@ -371,66 +374,66 @@ function buildReplayStream(
  * to the persisted transcript first, which is how a dead process hands back
  * what it was working on.
  */
-export const resumeChatStreamResponse = Effect.fn(
-  "durable-chat.resume"
-)(function* resumeFromCommittedChunks({
-  chatId,
-  userId,
-}: {
-  chatId: string;
-  userId: string;
-}): Effect.fn.Return<Response, never, ChatStore | ChatRunStore> {
-  if (!chatIdSchema.safeParse(chatId).success) {
-    return Response.json({ error: "Invalid chat id" }, { status: 400 });
-  }
+export const resumeChatStreamResponse = Effect.fn("durable-chat.resume")(
+  function* resumeFromCommittedChunks({
+    chatId,
+    userId,
+  }: {
+    chatId: string;
+    userId: string;
+  }): Effect.fn.Return<Response, never, ChatStore | ChatRunStore> {
+    if (!chatIdSchema.safeParse(chatId).success) {
+      return Response.json({ error: "Invalid chat id" }, { status: 400 });
+    }
 
-  const chatRunStore = yield* ChatRunStore;
-  const foundRunOutcome = yield* Effect.result(
-    chatRunStore.findRunningRun(chatId, userId)
-  );
-  if (foundRunOutcome._tag === "Failure") {
-    yield* Effect.logError(
-      "Failed to look up running chat run",
-      chatId,
-      foundRunOutcome.failure
+    const chatRunStore = yield* ChatRunStore;
+    const foundRunOutcome = yield* Effect.result(
+      chatRunStore.findRunningRun(chatId, userId)
     );
-    return Response.json(
-      { error: "Failed to look up the agent run" },
-      { status: 500 }
-    );
-  }
-  const foundRun = foundRunOutcome.success;
-  if (foundRun !== null && isStaleRun(foundRun)) {
-    yield* recoverStaleRun(foundRun, userId).pipe(
-      Effect.catch((error) =>
-        Effect.logError("Failed to recover stale chat run", error)
-      )
-    );
-  }
+    if (foundRunOutcome._tag === "Failure") {
+      yield* Effect.logError(
+        "Failed to look up running chat run",
+        chatId,
+        foundRunOutcome.failure
+      );
+      return Response.json(
+        { error: "Failed to look up the agent run" },
+        { status: 500 }
+      );
+    }
+    const foundRun = foundRunOutcome.success;
+    if (Option.isSome(foundRun) && isStaleRun(foundRun.value)) {
+      yield* recoverStaleRun(foundRun.value, userId).pipe(
+        Effect.catch((error) =>
+          Effect.logError("Failed to recover stale chat run", error)
+        )
+      );
+    }
 
-  const activeRunOutcome = yield* Effect.result(
-    chatRunStore.findRunningRun(chatId, userId)
-  );
-  if (activeRunOutcome._tag === "Failure") {
-    return Response.json(
-      { error: "Failed to look up the agent run" },
-      { status: 500 }
+    const activeRunOutcome = yield* Effect.result(
+      chatRunStore.findRunningRun(chatId, userId)
     );
-  }
-  const activeRun = activeRunOutcome.success;
-  if (activeRun === null) {
-    return new Response(null, { status: 204 });
-  }
+    if (activeRunOutcome._tag === "Failure") {
+      return Response.json(
+        { error: "Failed to look up the agent run" },
+        { status: 500 }
+      );
+    }
+    const activeRun = activeRunOutcome.success;
+    if (Option.isNone(activeRun)) {
+      return new Response(null, { status: 204 });
+    }
 
-  const replayStream = buildReplayStream(
-    chatRunStore,
-    activeRun.id,
-    Date.now() + MAX_RESUME_TAIL_MS
-  );
-  return createUIMessageStreamResponse({
-    stream: Stream.toReadableStream(replayStream),
-  });
-});
+    const replayStream = buildReplayStream(
+      chatRunStore,
+      activeRun.value.id,
+      Date.now() + MAX_RESUME_TAIL_MS
+    );
+    return createUIMessageStreamResponse({
+      stream: Stream.toReadableStream(replayStream),
+    });
+  }
+);
 
 /**
  * Settles an abort: polls the run store until the run leaves `running` (the
@@ -443,12 +446,13 @@ const waitForRunEnd = Effect.fnUntraced(function* waitForRunSettle(
   const deadline = Date.now() + ABORT_SETTLE_TIMEOUT_MS;
   let latestStatus: ChatRunRecord["status"] = "running";
   for (;;) {
-    const run = yield* chatRunStore.getRun(runId).pipe(
-      Effect.catch(() => Effect.succeed(null))
-    );
-    if (run === null) {
+    const runOption = yield* chatRunStore
+      .getRun(runId)
+      .pipe(Effect.catch(() => Effect.succeed(Option.none<ChatRunRecord>())));
+    if (Option.isNone(runOption)) {
       return latestStatus;
     }
+    const run = runOption.value;
     latestStatus = run.status;
     if (run.status !== "running" || Date.now() >= deadline) {
       return run.status;
@@ -491,18 +495,22 @@ export const abortChatRunResponse = Effect.fn("durable-chat.abort")(
       );
     }
     const runningRun = runningRunOutcome.success;
-    if (runningRun === null) {
+    if (Option.isNone(runningRun)) {
       return Response.json(
         { error: "No active agent run for this chat" },
         { status: 404 }
       );
     }
-    const runId = runningRun.id;
+    const runId = runningRun.value.id;
     const abortController = activeRunAbortControllers.get(runId);
     if (abortController === undefined) {
       // The run predates this process or its process died; the resume
       // responder marks it crashed once stale, so there is nothing to abort.
-      return Response.json({ ok: true, runId, status: runningRun.status });
+      return Response.json({
+        ok: true,
+        runId,
+        status: runningRun.value.status,
+      });
     }
 
     abortedRunIds.add(runId);

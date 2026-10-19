@@ -1,5 +1,4 @@
-﻿"use client";
-
+import { ASK_USER_TOOL_NAME } from "@curio/api/infrastructure/ask-user-tool";
 import { isToolUIPart } from "ai";
 import type { UIMessage } from "ai";
 import { useState } from "react";
@@ -7,12 +6,14 @@ import { useState } from "react";
 import { toPendingQuestions } from "@/utils/chat-schemas";
 import type { PendingQuestions } from "@/utils/chat-schemas";
 
-const ASK_USER_TOOL_NAME = "ask_user";
-
 export function extractPendingQuestions(
   messages: readonly UIMessage[]
 ): PendingQuestions | null {
-  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex--) {
+  for (
+    let messageIndex = messages.length - 1;
+    messageIndex >= 0;
+    messageIndex--
+  ) {
     const candidateMessage = messages[messageIndex];
     if (candidateMessage.role !== "assistant") {
       // The panel only applies to the most recent exchange
@@ -99,7 +100,7 @@ export function PendingQuestionsPanel({
       {/* Fixed-size stage: the header and progress row stay put while
         stepping, and longer question/option sets scroll inside the reserved
         box instead of shifting the surrounding input. */}
-      <div className="min-h-[190px] w-full flex-1 overflow-y-auto pr-1 [scrollbar-width:thin]">
+      <div className="min-h-[190px] w-full flex-1 [scrollbar-width:thin] overflow-y-auto pr-1">
         <p className="text-foreground w-full text-base font-medium">
           {currentQuestion.question}
         </p>
@@ -111,7 +112,7 @@ export function PendingQuestionsPanel({
                 aria-pressed={isPicked}
                 className={
                   isPicked
-                    ? "bg-primary text-primary-foreground w-full rounded-lg border border-primary/60 px-4 py-3 text-left text-[15px] font-medium"
+                    ? "bg-primary text-primary-foreground border-primary/60 w-full rounded-lg border px-4 py-3 text-left text-[15px] font-medium"
                     : "hover:bg-accent hover:text-accent-foreground text-muted-foreground w-full rounded-lg border px-4 py-3 text-left text-[15px] transition-colors"
                 }
                 disabled={busy}
@@ -164,4 +165,3 @@ export function PendingQuestionsPanel({
     </div>
   );
 }
-

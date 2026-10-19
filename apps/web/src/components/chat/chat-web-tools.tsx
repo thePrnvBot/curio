@@ -1,5 +1,3 @@
-"use client";
-
 import { CodeBlock } from "@curio/ui/components/ai-elements/code-block";
 import {
   Tool,
@@ -63,8 +61,7 @@ function toWebReadOutput({ output }: ToolUIPart): WebReadToolOutput | null {
   }
   const candidate = output as WebReadToolOutput;
   const isReadShape =
-    typeof candidate.markdown === "string" ||
-    typeof candidate.url === "string";
+    typeof candidate.markdown === "string" || typeof candidate.url === "string";
   return isReadShape ? candidate : null;
 }
 
@@ -85,30 +82,28 @@ function WebSearchResults({ output }: { output: WebSearchToolOutput }) {
     );
   }
   return (
-    <ul className="divide-border divide-y overflow-hidden rounded-md border border-border bg-muted/30">
-      {results
-        .slice(0, WEB_MAX_RESULTS_SHOWN)
-        .map((result, resultIndex) => (
-          <li
-            className="min-w-0 space-y-0.5 p-2.5"
-            key={`${result.url}-${resultIndex}`}
+    <ul className="divide-border border-border bg-muted/30 divide-y overflow-hidden rounded-md border">
+      {results.slice(0, WEB_MAX_RESULTS_SHOWN).map((result, resultIndex) => (
+        <li
+          className="min-w-0 space-y-0.5 p-2.5"
+          key={`${result.url}-${resultIndex}`}
+        >
+          <a
+            className="text-foreground flex items-center gap-1.5 text-xs font-medium hover:underline"
+            href={result.url}
+            rel="noreferrer noopener"
+            target="_blank"
           >
-            <a
-              className="text-foreground flex items-center gap-1.5 text-xs font-medium hover:underline"
-              href={result.url}
-              rel="noreferrer noopener"
-              target="_blank"
-            >
-              <span className="truncate">{result.title || result.url}</span>
-              <ExternalLinkIcon className="text-muted-foreground size-3 shrink-0" />
-            </a>
-            {result.snippet.length > 0 && (
-              <p className="text-muted-foreground line-clamp-3 text-xs">
-                {result.snippet}
-              </p>
-            )}
-          </li>
-        ))}
+            <span className="truncate">{result.title || result.url}</span>
+            <ExternalLinkIcon className="text-muted-foreground size-3 shrink-0" />
+          </a>
+          {result.snippet.length > 0 && (
+            <p className="text-muted-foreground line-clamp-3 text-xs">
+              {result.snippet}
+            </p>
+          )}
+        </li>
+      ))}
     </ul>
   );
 }

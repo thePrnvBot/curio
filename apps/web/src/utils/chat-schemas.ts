@@ -13,6 +13,7 @@ import type { ArtifactUIData } from "./ui-messages";
 const ArtifactPayload = Schema.Struct({
   content: Schema.String,
   mediaType: Schema.String,
+  reviewUrl: Schema.optional(Schema.String),
   summary: Schema.optional(Schema.String),
   title: Schema.optional(Schema.String),
 });
@@ -127,7 +128,7 @@ export function toArtifactData(input: unknown): ArtifactUIData | null {
   return {
     content: decoded.content,
     mediaType: decoded.mediaType,
-    reviewUrl: undefined,
+    reviewUrl: decoded.reviewUrl,
     summary: decoded.summary,
     title: decoded.title,
   };
@@ -197,6 +198,8 @@ export function toArtifactToolEntry(
 
 const decodeInlineArtifact = toNullish(InlineArtifactPayload);
 
-export function toInlineDataArtifact(input: unknown): InlineArtifactView | null {
+export function toInlineDataArtifact(
+  input: unknown
+): InlineArtifactView | null {
   return decodeInlineArtifact(input);
 }
