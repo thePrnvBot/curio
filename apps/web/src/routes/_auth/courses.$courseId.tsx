@@ -3,6 +3,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeftIcon, CheckIcon } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
+import { z } from "zod";
 
 import {
   CoursePageSkeleton,
@@ -21,16 +22,18 @@ import {
 import { ProgressFromZero } from "@/components/animated-progress";
 import { useTRPC } from "@/utils/trpc";
 
+// `lesson` is kept only when it's a non-empty string; anything else (missing,
+// empty, or a non-string value) falls back to undefined so the route picks the
+// initial lesson itself.
+const courseSearchSchema = z.object({
+  lesson: z.string().min(1).optional().catch(undefined),
+});
+
 export const Route = createFileRoute("/_auth/courses/$courseId")({
   component: CoursePageRoute,
   // Skeleton over the orb while the course structure resolves on navigation
   pendingComponent: () => <CoursePageSkeleton />,
-  validateSearch: (search: Record<string, unknown>): { lesson?: string } => ({
-    lesson:
-      typeof search.lesson === "string" && search.lesson.length > 0
-        ? search.lesson
-        : undefined,
-  }),
+  validateSearch: courseSearchSchema,
 });
 
 interface LessonLike {
