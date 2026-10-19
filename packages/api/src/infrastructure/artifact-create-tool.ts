@@ -3,12 +3,12 @@ import type { ToolSet } from "ai";
 import { Effect } from "effect";
 import { z } from "zod";
 
-import type { ArtifactPublishFailed } from "../domain/artifact-publish-failed";
 import type { ArtifactPublisherContract } from "../services/artifact-publisher";
 
 export const CREATE_ARTIFACT_TOOL_NAME = "create_artifact";
 
-const MEDIA_TYPES_BY_EXTENSION: Readonly<Record<string, string>> = {
+/** Entry-filename extensions the artifact server accepts, with their IANA media types. */
+const MEDIA_TYPES_BY_EXTENSION = {
   css: "text/css",
   html: "text/html",
   js: "text/javascript",
@@ -17,11 +17,19 @@ const MEDIA_TYPES_BY_EXTENSION: Readonly<Record<string, string>> = {
   svg: "image/svg+xml",
   txt: "text/plain",
   xml: "application/xml",
-};
+} as const;
 
+type KnownArtifactExtension = keyof typeof MEDIA_TYPES_BY_EXTENSION;
+
+/** Derives the media type from the filename's extension; unknown extensions fall back to the explicit mediaType input. */
 function guessMediaType(filename: string): string | undefined {
   const extension = filename.split(".").at(-1)?.toLowerCase();
-  return extension ? MEDIA_TYPES_BY_EXTENSION[extension] : undefined;
+  if (extension === undefined) {
+    return undefined;
+  }
+  return extension in MEDIA_TYPES_BY_EXTENSION
+    ? MEDIA_TYPES_BY_EXTENSION[extension as KnownArtifactExtension]
+    : undefined;
 }
 
 export function createArtifactTool(
@@ -36,27 +44,16 @@ export function createArtifactTool(
         const resolvedMediaType =
           mediaType ?? guessMediaType(filename) ?? "text/plain";
 
-        const publishedResult: {
-          artifactId: string;
-          links: {
-            artifact: string;
-            review: string;
-            version: string;
-          };
-          versionId: string;
-        } = await Effect.runPromise(
-          Effect.mapError(
-            artifactPublisher.publish({
-              content,
-              entryFilename: filename,
-              mediaType: resolvedMediaType,
-              title,
-            }),
-            (publishFailure: ArtifactPublishFailed) => publishFailure
-          )
+        // The typed ArtifactPublishFailed rejects the promise directly —
+        // mapError theater here only re-raised the same error unhandled.
+        return await Effect.runPromise(
+          artifactPublisher.publish({
+            content,
+            entryFilename: filename,
+            mediaType: resolvedMediaType,
+            title,
+          })
         );
-
-        return publishedResult;
       },
       inputSchema: z.object({
         content: z

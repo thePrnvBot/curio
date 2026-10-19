@@ -3,11 +3,11 @@ import type { LanguageModel } from "ai";
 import { Effect } from "effect";
 import { z } from "zod";
 
+import { TitleCompositionFailed } from "../domain/chat-title";
 import type {
   ChatTitleCompositionRequest,
   ChatTitleCompositionResult,
-} from "../domain/structured-generation-data";
-import { TitleCompositionFailed } from "../domain/title-composition-failed";
+} from "../domain/chat-title";
 import type { ChatTitleComposerContract } from "../services/chat-title-composer";
 
 const TITLE_SCHEMA = z.object({

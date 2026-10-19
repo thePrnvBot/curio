@@ -2,20 +2,11 @@ import { Output, generateText } from "ai";
 import type { LanguageModel } from "ai";
 import { Effect } from "effect";
 
-import { CURIO_BASELINE_STYLE } from "./generate-text-artifact-generator";
-import { lessonContentSchema } from "./course-create-tool";
-import type { LessonContentToolPayload } from "./course-create-tool";
-import { LessonGenerationFailed } from "../domain/lesson-generation-failed";
-
-export interface LessonGenerationBrief {
-  readonly courseDescription: string;
-  readonly courseTitle: string;
-  /** Ordered outline lines, e.g. `3. [Foundations] video: "Variables 101"`. */
-  readonly outlineLines: readonly string[];
-  readonly previousLessonTitle: string | null;
-  readonly targetKind: string;
-  readonly targetTitle: string;
-}
+import { lessonContentSchema } from "../domain/lesson-content";
+import type { LessonContentToolPayload } from "../domain/lesson-content";
+import { LessonGenerationFailed } from "../domain/lesson-generation";
+import type { LessonGenerationBrief } from "../domain/lesson-generation";
+import { CURIO_BASELINE_STYLE } from "./curio-baseline-style";
 
 export interface GenerateTextLessonContentConfig {
   readonly resolveChatModel: Effect.Effect<LanguageModel>;
@@ -70,10 +61,9 @@ function renderPrompt(brief: LessonGenerationBrief): string {
 
 export function createGenerateTextLessonContent(
   config: GenerateTextLessonContentConfig
-): (brief: LessonGenerationBrief) => Effect.Effect<
-  LessonContentToolPayload,
-  LessonGenerationFailed
-> {
+): (
+  brief: LessonGenerationBrief
+) => Effect.Effect<LessonContentToolPayload, LessonGenerationFailed> {
   return (brief) =>
     Effect.gen(function* generateLessonContent() {
       const model = yield* config.resolveChatModel;
