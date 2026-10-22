@@ -8,12 +8,11 @@ import {
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
+import { MeshGradient, Shader } from "shaders/react";
 
 import AnimatedContent from "@/components/AnimatedContent";
 import Aurora from "@/components/Aurora";
 import CountUp from "@/components/CountUp";
-import SplitText from "@/components/SplitText";
-import StarBorder from "@/components/StarBorder";
 import {
   DotField,
   DoodleAtom,
@@ -24,9 +23,14 @@ import {
   Sparkle,
   Squiggle,
 } from "@/components/doodles";
-import { MeshGradient, Shader } from "shaders/react";
+import SplitText from "@/components/SplitText";
+import StarBorder from "@/components/StarBorder";
 
-const FEATURES: Array<{ icon: LucideIcon; title: string; description: string }> = [
+const FEATURES: Array<{
+  icon: LucideIcon;
+  title: string;
+  description: string;
+}> = [
   {
     icon: Sparkles,
     title: "Courses on anything",
@@ -90,11 +94,13 @@ function useSectionVisible() {
 
   useEffect(() => {
     const element = ref.current;
-    if (!element) return;
+    if (!element) {
+      return;
+    }
 
     const observer = new IntersectionObserver(
       ([entry]) => setIsVisible(entry.isIntersecting),
-      { rootMargin: "300px 0px 300px 0px", threshold: 0 },
+      { rootMargin: "300px 0px 300px 0px", threshold: 0 }
     );
     observer.observe(element);
     return () => observer.disconnect();
@@ -113,7 +119,7 @@ function useSmoothMount(mounted: boolean) {
   useEffect(() => {
     if (!mounted) {
       setIsShown(false);
-      return undefined;
+      return;
     }
     const frame = requestAnimationFrame(() => setIsShown(true));
     return () => cancelAnimationFrame(frame);
@@ -162,20 +168,20 @@ function HomeComponent() {
         {/* Scrim: flat tint + fades. No backdrop-blur - it repaints the canvas
             underneath on every scroll frame and tanks scroll performance. */}
         <div
-          className="from-background via-transparent to-background pointer-events-none absolute inset-0 bg-gradient-to-b"
+          className="from-background to-background pointer-events-none absolute inset-0 bg-gradient-to-b via-transparent"
           aria-hidden="true"
         />
         <div
-          className="pointer-events-none absolute inset-0 bg-background/45"
+          className="bg-background/45 pointer-events-none absolute inset-0"
           aria-hidden="true"
         />
 
         {/* Chalk doodles floating over the scrim, under the headline */}
-        <div className="text-teal-600/30 dark:text-teal-200/25 pointer-events-none absolute inset-0 z-[5]">
-          <DoodleAtom className="motion-safe:animate-[spin_26s_linear_infinite] absolute top-[19%] left-[6%] hidden size-14 -rotate-12 md:block" />
-          <DoodleBulb className="motion-safe:animate-pulse absolute bottom-[24%] left-[10%] hidden size-9 rotate-6 lg:block" />
+        <div className="pointer-events-none absolute inset-0 z-[5] text-teal-600/30 dark:text-teal-200/25">
+          <DoodleAtom className="absolute top-[19%] left-[6%] hidden size-14 -rotate-12 motion-safe:animate-[spin_26s_linear_infinite] md:block" />
+          <DoodleBulb className="absolute bottom-[24%] left-[10%] hidden size-9 rotate-6 motion-safe:animate-pulse lg:block" />
           <DoodleGlobe className="absolute right-[8%] bottom-[30%] hidden size-14 -rotate-3 md:block" />
-          <Sparkle className="motion-safe:animate-pulse absolute top-[24%] right-[14%] size-5" />
+          <Sparkle className="absolute top-[24%] right-[14%] size-5 motion-safe:animate-pulse" />
           <Sparkle className="absolute top-[13%] right-[27%] size-3" />
           <Sparkle className="absolute bottom-[21%] left-[21%] size-4" />
           <PlusMark className="absolute top-[34%] right-[33%] hidden size-4 rotate-12 sm:block" />
@@ -183,7 +189,7 @@ function HomeComponent() {
         </div>
 
         <div className="relative z-10 flex max-w-3xl flex-col items-center text-center">
-          <p className="mb-6 flex items-center gap-3 text-sm tracking-widest text-muted-foreground uppercase">
+          <p className="text-muted-foreground mb-6 flex items-center gap-3 text-sm tracking-widest uppercase">
             <Sparkle className="text-primary/60 size-3.5" />
             Your learning companion
             <Sparkle className="text-primary/60 size-3.5" />
@@ -203,7 +209,11 @@ function HomeComponent() {
               itself.
             </p>
           </AnimatedContent>
-          <AnimatedContent delay={0.6} distance={24} className="mt-10 flex flex-wrap items-center justify-center gap-3">
+          <AnimatedContent
+            delay={0.6}
+            distance={24}
+            className="mt-10 flex flex-wrap items-center justify-center gap-3"
+          >
             <StarBorder
               as={Link}
               to="/chat"
@@ -233,7 +243,7 @@ function HomeComponent() {
 
       {/* Reveal statement */}
       <section className="relative mx-auto max-w-4xl px-6 py-28">
-        <DotField className="absolute inset-0 text-teal-700/[0.08] [mask-image:radial-gradient(ellipse_at_center,black_25%,transparent_72%)] dark:text-teal-200/[0.07]" />
+        <DotField className="absolute inset-0 [mask-image:radial-gradient(ellipse_at_center,black_25%,transparent_72%)] text-teal-700/[0.08] dark:text-teal-200/[0.07]" />
         <AnimatedContent distance={40} className="relative">
           <p className="text-muted-foreground mb-2 text-xs tracking-widest uppercase">
             Why Curio
@@ -241,25 +251,33 @@ function HomeComponent() {
           <Squiggle className="text-primary/40 mt-3 h-2.5 w-24" />
         </AnimatedContent>
         <AnimatedContent distance={32} className="relative max-w-3xl">
-          <p className="text-2xl font-medium leading-relaxed text-balance sm:text-3xl">
+          <p className="text-2xl leading-relaxed font-medium text-balance sm:text-3xl">
             You choose what to learn and how; Curio does the rest - guided
             teaching, exercises that meet you where you are, and recaps that
             greet you when you come back.
           </p>
-        </AnimatedContent>      </section>
+        </AnimatedContent>{" "}
+      </section>
 
       {/* Features */}
       <section className="relative mx-auto max-w-5xl px-6 pb-28">
-        <DotField className="absolute inset-0 text-teal-700/[0.06] [mask-image:radial-gradient(ellipse_at_center,black_20%,transparent_70%)] dark:text-teal-200/[0.05]" />
+        <DotField className="absolute inset-0 [mask-image:radial-gradient(ellipse_at_center,black_20%,transparent_70%)] text-teal-700/[0.06] dark:text-teal-200/[0.05]" />
         <div className="relative grid gap-x-10 gap-y-14 sm:grid-cols-2">
           {FEATURES.map(({ icon: FeatureIcon, title, description }, index) => (
-            <AnimatedContent key={title} delay={index * 0.12} distance={40} threshold={0.2}>
+            <AnimatedContent
+              key={title}
+              delay={index * 0.12}
+              distance={40}
+              threshold={0.2}
+            >
               <div className="flex gap-4">
                 <div className="text-primary mt-1 shrink-0">
                   <FeatureIcon className="size-5" aria-hidden="true" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-medium tracking-tight">{title}</h3>
+                  <h3 className="text-lg font-medium tracking-tight">
+                    {title}
+                  </h3>
                   <Squiggle className="text-primary/50 mt-1.5 h-2 w-20" />
                   <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
                     {description}
@@ -275,7 +293,11 @@ function HomeComponent() {
       <section className="border-y">
         <div className="mx-auto grid max-w-5xl grid-cols-1 divide-y sm:grid-cols-3 sm:divide-x sm:divide-y-0">
           {STATS.map(({ value, suffix, label }) => (
-            <AnimatedContent key={label} distance={24} className="px-6 py-10 text-center">
+            <AnimatedContent
+              key={label}
+              distance={24}
+              className="px-6 py-10 text-center"
+            >
               <div className="text-4xl font-semibold tracking-tight sm:text-5xl">
                 <CountUp to={value} duration={1.6} />
                 <span className="text-primary">{suffix}</span>
@@ -298,16 +320,19 @@ function HomeComponent() {
           lightMode={isLight}
           mouseInteraction={false}
         />
-        <div className="text-teal-600/30 dark:text-teal-200/25 pointer-events-none absolute inset-0">
+        <div className="pointer-events-none absolute inset-0 text-teal-600/30 dark:text-teal-200/25">
           <DoodleBook className="absolute top-[26%] left-[9%] hidden size-12 -rotate-8 lg:block" />
-          <DoodleAtom className="motion-safe:animate-[spin_30s_linear_infinite] absolute right-[7%] bottom-[16%] hidden size-12 lg:block" />
-          <Sparkle className="motion-safe:animate-pulse absolute top-[22%] right-[13%] size-5" />
+          <DoodleAtom className="absolute right-[7%] bottom-[16%] hidden size-12 motion-safe:animate-[spin_30s_linear_infinite] lg:block" />
+          <Sparkle className="absolute top-[22%] right-[13%] size-5 motion-safe:animate-pulse" />
           <Sparkle className="absolute top-[38%] left-[18%] size-3.5" />
           <PlusMark className="absolute right-[30%] bottom-[26%] hidden size-4 -rotate-6 sm:block" />
           <PlusMark className="absolute bottom-[20%] left-[26%] hidden size-4 rotate-12 lg:block" />
         </div>
-        <AnimatedContent distance={40} className="relative z-10 mx-auto max-w-2xl text-center">
-          <div className="text-teal-600/40 dark:text-teal-200/40 relative mb-2 flex items-center justify-center gap-2">
+        <AnimatedContent
+          distance={40}
+          className="relative z-10 mx-auto max-w-2xl text-center"
+        >
+          <div className="relative mb-2 flex items-center justify-center gap-2 text-teal-600/40 dark:text-teal-200/40">
             <Sparkle className="size-3" />
             <Sparkle className="size-4" />
             <Sparkle className="size-3" />
@@ -329,8 +354,8 @@ function HomeComponent() {
             </Link>
           </div>
           <p className="text-muted-foreground mt-16 text-xs">
-            © {new Date().getFullYear()} Curio · Built with TanStack Start, Vercel
-            AI SDK and React Bits
+            © {new Date().getFullYear()} Curio · Built with TanStack Start,
+            Vercel AI SDK and React Bits
           </p>
         </AnimatedContent>
       </section>
