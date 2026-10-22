@@ -1,11 +1,12 @@
 /// <reference lib="webworker" />
 import { KokoroTTS } from "kokoro-js";
+import type { GenerateOptions } from "kokoro-js";
 
+import { narrationLog } from "./voice-playback";
 import type {
   VoiceWorkerRequest,
   VoiceWorkerResponse,
 } from "./voice-worker-protocol";
-import { narrationLog } from "./voice-playback";
 
 /**
  * Kokoro-82M narration synth, loaded lazily inside a worker so the model
@@ -16,12 +17,29 @@ import { narrationLog } from "./voice-playback";
 
 const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 
+/** Maximum positive amplitude a signed 16-bit PCM sample can carry. */
+const PCM16_MAX_AMPLITUDE = 32_767;
+
 let modelPromise: Promise<KokoroTTS> | null = null;
+
+let progressPercent = -1;
+
+function postModelProgress(percent: number): void {
+  const rounded = Math.round(percent);
+  if (rounded === progressPercent) {
+    return;
+  }
+  progressPercent = rounded;
+  postMessage({
+    percent: rounded,
+    type: "model-progress",
+  } satisfies VoiceWorkerResponse);
+}
 
 function loadModel(): Promise<KokoroTTS> {
   if (modelPromise === null) {
     narrationLog("loading Kokoro model (wasm q8)");
-    modelPromise = KokoroTTS.from_pretrained(MODEL_ID, {
+    const pendingLoad = KokoroTTS.from_pretrained(MODEL_ID, {
       // WebGPU + fp32 renders garbled noise with kokoro's graph on several
       // browsers (the waveform comes back full of static), so synthesis
       // always runs the WASM q8 path. Slower per sentence; clean audio.
@@ -37,30 +55,28 @@ function loadModel(): Promise<KokoroTTS> {
         }
       },
     });
-    // A failed load must NOT be cached: the rejected promise used to stick
-    // around forever, so one WebGPU/runtime hiccup silenced narration until
-    // a full reload. Reset so the next sentence retries (and can fall back).
-    modelPromise.catch((loadError: unknown) => {
-      modelPromise = null;
-      throw loadError;
-    });
+    modelPromise = pendingLoad;
+    void (async () => {
+      try {
+        await pendingLoad;
+      } catch (loadError: unknown) {
+        // A failed load must NOT be cached: the rejected promise used to
+        // stick around forever, so one WebGPU/runtime hiccup silenced
+        // narration until a full reload. Reset so the next sentence retries
+        // (and can fall back).
+        modelPromise = null;
+        throw loadError;
+      }
+    })();
   }
   return modelPromise;
 }
 
-let progressPercent = -1;
-
-function postModelProgress(percent: number): void {
-  const rounded = Math.round(percent);
-  if (rounded === progressPercent) {
-    return;
-  }
-  progressPercent = rounded;
-  postMessage({ percent: rounded, type: "model-progress" } satisfies VoiceWorkerResponse);
-}
-
 /** Float32 samples -> 16-bit PCM mono WAV bytes. */
-function encodeWavPcm16(samples: Float32Array, sampleRate: number): ArrayBuffer {
+function encodeWavPcm16(
+  samples: Float32Array,
+  sampleRate: number
+): ArrayBuffer {
   const sampleCount = samples.length;
   const bytesPerSample = 2;
   const dataByteLength = sampleCount * bytesPerSample;
@@ -69,7 +85,7 @@ function encodeWavPcm16(samples: Float32Array, sampleRate: number): ArrayBuffer 
 
   const writeString = (offset: number, text: string): void => {
     for (let index = 0; index < text.length; index += 1) {
-      view.setUint8(offset + index, text.charCodeAt(index));
+      view.setUint8(offset + index, text.codePointAt(index) ?? 0);
     }
   };
 
@@ -78,8 +94,10 @@ function encodeWavPcm16(samples: Float32Array, sampleRate: number): ArrayBuffer 
   writeString(8, "WAVE");
   writeString(12, "fmt ");
   view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true); // PCM
-  view.setUint16(22, 1, true); // mono
+  // 1 = linear PCM
+  view.setUint16(20, 1, true);
+  // mono channel
+  view.setUint16(22, 1, true);
   view.setUint32(24, sampleRate, true);
   view.setUint32(28, sampleRate * bytesPerSample, true);
   view.setUint16(32, bytesPerSample, true);
@@ -90,14 +108,33 @@ function encodeWavPcm16(samples: Float32Array, sampleRate: number): ArrayBuffer 
   let sampleIndex = 0;
   while (sampleIndex < sampleCount) {
     const clamped = Math.max(-1, Math.min(1, samples[sampleIndex]));
-    view.setInt16(44 + sampleIndex * bytesPerSample, clamped * 0x7fff, true);
+    view.setInt16(
+      44 + sampleIndex * bytesPerSample,
+      clamped * PCM16_MAX_AMPLITUDE,
+      true
+    );
     sampleIndex += 1;
   }
   return buffer;
 }
 
+/**
+ * Kokoro rejects unknown voice ids, while persisted preferences carry plain
+ * strings: validate against the loaded model's voice table and fall back to
+ * kokoro's own default ("af_heart") on a mismatch.
+ */
+function resolveKokoroVoice(
+  tts: KokoroTTS,
+  requestedVoiceId: string
+): GenerateOptions["voice"] {
+  return Object.hasOwn(tts.voices, requestedVoiceId)
+    ? (requestedVoiceId as GenerateOptions["voice"])
+    : undefined;
+}
+
 const workerScope = self as unknown as DedicatedWorkerGlobalScope;
 
+// oxlint-disable-next-line unicorn/prefer-add-event-listener -- the worker owns exactly one message protocol; the on* handler states that single-subscriber intent
 workerScope.onmessage = async (event: MessageEvent<VoiceWorkerRequest>) => {
   const request = event.data;
   if (request.type !== "synthesize") {
@@ -107,7 +144,7 @@ workerScope.onmessage = async (event: MessageEvent<VoiceWorkerRequest>) => {
     const tts = await loadModel();
     const audio = await tts.generate(request.text, {
       speed: request.speed,
-      voice: request.voiceId as never,
+      voice: resolveKokoroVoice(tts, request.voiceId),
     });
     const samples = audio.audio;
     // Sample statistics: sane speech floats sit within ±1 with a moderate RMS;
@@ -139,7 +176,7 @@ workerScope.onmessage = async (event: MessageEvent<VoiceWorkerRequest>) => {
       type: "synthesis",
       wav,
     };
-    workerScope.postMessage(response, [wav]);
+    postMessage(response, [wav]);
   } catch (error: unknown) {
     const response: VoiceWorkerResponse = {
       id: request.id,
@@ -147,6 +184,6 @@ workerScope.onmessage = async (event: MessageEvent<VoiceWorkerRequest>) => {
       ok: false,
       type: "synthesis",
     };
-    workerScope.postMessage(response);
+    postMessage(response);
   }
 };
