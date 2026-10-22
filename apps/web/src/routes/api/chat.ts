@@ -13,16 +13,16 @@ import { createWebTools } from "@curio/api/infrastructure/web-tools";
 import { ChatStore } from "@curio/api/services/chat-store";
 import { ChatTitleComposer } from "@curio/api/services/chat-title-composer";
 import { createFileRoute } from "@tanstack/react-router";
-import type { LanguageModel } from "ai";
+import type { LanguageModel, UIMessage, ToolUIPart } from "ai";
 import {
   convertToModelMessages,
   createIdGenerator,
   createUIMessageStreamResponse,
   isStepCount,
+  isToolUIPart,
   streamText,
   toUIMessageStream,
 } from "ai";
-import type { ToolUIPart, UIMessage } from "ai";
 import { Effect, Option } from "effect";
 import { z } from "zod";
 
@@ -35,6 +35,7 @@ import {
   runtimeScopedArtifactPublisher,
 } from "../../services";
 import { requestSession, unauthorizedResponse } from "../../utils/api-session";
+import { toCourseCreatedData } from "../../utils/chat-schemas";
 import {
   chatRunInFlight,
   commitChatRunChunks,
@@ -53,42 +54,40 @@ import {
 function sanitizePendingQuestionTools(
   conversation: readonly UIMessage[]
 ): UIMessage[] {
-  function mapPart(part: unknown): unknown {
-    if (
-      typeof part !== "object" ||
-      part === null ||
-      (part as ToolUIPart).type !== `tool-${ASK_USER_TOOL_NAME}`
-    ) {
+  const pendingAnswerNote =
+    "The learner answered these questions; the answers are in the next user message.";
+
+  function sanitizePart(
+    part: UIMessage["parts"][number]
+  ): UIMessage["parts"][number] {
+    if (!isToolUIPart(part)) {
       return part;
     }
-    const questionPart = part as ToolUIPart;
-    if (typeof questionPart.state !== "string") {
+    if (part.type !== `tool-${ASK_USER_TOOL_NAME}`) {
       return part;
     }
-    if (questionPart.state === "output-available") {
+    if (part.state === "output-available") {
       return part;
     }
+    // Rebuilding a tool part across the SDK's state union requires one
+    // boundary cast: the states are unrelated shapes (an input-streaming
+    // part has no output slot to fill), so no plain spread can satisfy the
+    // union. The result is structurally a valid completed tool part.
     return {
-      ...questionPart,
+      ...part,
       state: "output-available",
-      output: {
-        note: "The learner answered these questions; the answers are in the next user message.",
-      },
-    };
+      output: { note: pendingAnswerNote },
+    } as ToolUIPart;
   }
 
   return conversation.map((message) => {
     if (message.role !== "assistant") {
       return message;
     }
-    let mutated = false;
-    const sanitizedParts = message.parts.map((part) => {
-      const mappedPart = mapPart(part);
-      if (mappedPart !== part) {
-        mutated = true;
-      }
-      return mappedPart as never;
-    });
+    const sanitizedParts = message.parts.map(sanitizePart);
+    const mutated = message.parts.some(
+      (originalPart, partIndex) => sanitizedParts[partIndex] !== originalPart
+    );
     return mutated ? { ...message, parts: sanitizedParts } : message;
   });
 }
@@ -125,6 +124,17 @@ const CHAT_INSTRUCTIONS =
 
 const MAX_STREAM_STEPS = 40;
 
+/** One completed tool result inside a generation step (pre-decode). */
+interface CourseChunkToolResult {
+  readonly toolName: string;
+  readonly output: unknown;
+}
+
+/** A completed generation step, as the step provider observes it. */
+interface CourseChunkStep {
+  readonly toolResults: readonly CourseChunkToolResult[];
+}
+
 /**
  * Keeps the Director streaming the course without pause: once a scaffold
  * exists and lessons are still unfilled, every intermediate step is locked
@@ -138,9 +148,7 @@ function prepareCourseChunkStep({
   steps,
 }: {
   stepNumber: number;
-  steps: Array<{
-    readonly toolResults: ReadonlyArray<{ toolName: string; output: unknown }>;
-  }>;
+  steps: readonly CourseChunkStep[];
 }): { activeTools: [string]; toolChoice: "required" } | undefined {
   if (stepNumber === 0) {
     return undefined;
@@ -150,10 +158,15 @@ function prepareCourseChunkStep({
   for (const step of steps) {
     for (const toolResult of step.toolResults) {
       if (toolResult.toolName === CREATE_COURSE_TOOL_NAME) {
-        const scaffoldOutput = toolResult.output as {
-          readonly course?: { readonly lessonCount?: number };
-        } | null;
-        scaffoldLessonCount += scaffoldOutput?.course?.lessonCount ?? 0;
+        // The scaffold shape is the same untrusted payload the chat renders;
+        // decode it once instead of trusting an ad-hoc cast on the server.
+        scaffoldLessonCount += Option.match(
+          toCourseCreatedData(toolResult.output),
+          {
+            onNone: () => 0,
+            onSome: (scaffold) => scaffold.lessonCount,
+          }
+        );
       }
       if (toolResult.toolName === CREATE_LESSON_TOOL_NAME) {
         filledLessonCount += 1;
@@ -182,19 +195,28 @@ const chatRequestSchema = z.object({
   trigger: z.enum(["submit-message", "regenerate-message"]).optional(),
 });
 
-function deriveChatTitle(messages: readonly UIMessage[]): string | null {
+const CHAT_TITLE_MAX_LENGTH = 64;
+const CHAT_TITLE_SUFFIX = "...";
+
+function deriveChatTitle(
+  messages: readonly UIMessage[]
+): Option.Option<string> {
   const firstUserMessage = messages.find((message) => message.role === "user");
-  if (!firstUserMessage) {
-    return null;
+  if (firstUserMessage === undefined) {
+    return Option.none();
   }
   const firstTextPart = firstUserMessage.parts.find(
     (part) => part.type === "text"
   );
   if (firstTextPart?.type !== "text" || firstTextPart.text.trim() === "") {
-    return null;
+    return Option.none();
   }
-  const rawTitle = firstTextPart.text.trim().replaceAll(/\s+/gu, " ");
-  return rawTitle.length <= 64 ? rawTitle : `${rawTitle.slice(0, 61)}...`;
+  const normalizedTitle = firstTextPart.text.trim().replaceAll(/\s+/gu, " ");
+  return Option.some(
+    normalizedTitle.length <= CHAT_TITLE_MAX_LENGTH
+      ? normalizedTitle
+      : `${normalizedTitle.slice(0, CHAT_TITLE_MAX_LENGTH - CHAT_TITLE_SUFFIX.length)}${CHAT_TITLE_SUFFIX}`
+  );
 }
 
 function buildSubmitConversation(
@@ -234,7 +256,7 @@ async function persistGeneratedMessages({
   userId,
 }: {
   chatId: string;
-  chatTitle: string | null;
+  chatTitle: Option.Option<string>;
   generatedMessages: UIMessage[];
   userId: string;
 }): Promise<void> {
@@ -244,8 +266,8 @@ async function persistGeneratedMessages({
       { chatId, messages: generatedMessages },
       userId
     );
-    if (chatTitle) {
-      yield* chatStore.setMessageTitle(chatId, userId, chatTitle);
+    if (Option.isSome(chatTitle)) {
+      yield* chatStore.setMessageTitle(chatId, userId, chatTitle.value);
     }
   });
 
@@ -294,7 +316,7 @@ async function persistPartialMessages({
     chatTitle:
       conversation.filter((message) => message.role === "user").length === 1 &&
       partialMessages.length === 1
-        ? null
+        ? Option.none()
         : deriveChatTitle(partialMessages),
     generatedMessages: partialMessages,
     userId,
@@ -412,7 +434,9 @@ async function createChatResponse({
 
       persistGeneratedMessages({
         chatId,
-        chatTitle: isFirstExchange ? deriveChatTitle(generatedMessages) : null,
+        chatTitle: isFirstExchange
+          ? deriveChatTitle(generatedMessages)
+          : Option.none(),
         generatedMessages,
         userId,
       });
@@ -542,7 +566,7 @@ export const Route = createFileRoute("/api/chat")({
           chatId,
           chatTitle: isFirstExchange
             ? deriveChatTitle(sanitizedConversation)
-            : null,
+            : Option.none(),
           generatedMessages: sanitizedConversation,
           userId,
         });
