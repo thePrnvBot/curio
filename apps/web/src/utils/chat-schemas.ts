@@ -230,6 +230,93 @@ export function toInlineDataArtifact(
 }
 
 /* ------------------------------------------------------------------------
+ * Web tool outputs
+ *
+ * The Director's web_search / web_read results stream back as opaque tool
+ * parts. Their shapes are declared once here, so the cards decode the
+ * committed output instead of sniffing properties to guess which tool it
+ * came from — the tool name already decides which decoder applies.
+ * ---------------------------------------------------------------------- */
+
+const WebSearchResultPayload = Schema.Struct({
+  snippet: Schema.String,
+  title: Schema.String,
+  url: Schema.String,
+});
+
+const WebSearchToolOutputPayload = Schema.Struct({
+  blocked: Schema.optional(Schema.Boolean),
+  error: Schema.optional(Schema.String),
+  note: Schema.optional(Schema.String),
+  results: Schema.optional(Schema.Array(WebSearchResultPayload)),
+});
+
+const WebReadToolOutputPayload = Schema.Struct({
+  error: Schema.optional(Schema.String),
+  markdown: Schema.optional(Schema.String),
+  note: Schema.optional(Schema.String),
+  truncated: Schema.optional(Schema.Boolean),
+  url: Schema.optional(Schema.String),
+});
+
+export interface WebSearchResultView {
+  readonly snippet: string;
+  readonly title: string;
+  readonly url: string;
+}
+
+export interface WebSearchToolOutputView {
+  readonly blocked: boolean;
+  readonly error: Option.Option<string>;
+  readonly note: Option.Option<string>;
+  readonly results: readonly WebSearchResultView[];
+}
+
+export interface WebReadToolOutputView {
+  readonly error: Option.Option<string>;
+  readonly markdown: string;
+  readonly note: Option.Option<string>;
+  readonly truncated: boolean;
+  readonly url: Option.Option<string>;
+}
+
+const decodeWebSearchToolOutput = toOptionalDecode(WebSearchToolOutputPayload);
+
+export function toWebSearchToolOutput(
+  input: unknown
+): Option.Option<WebSearchToolOutputView> {
+  return Option.map(decodeWebSearchToolOutput(input), (decoded) => ({
+    blocked: Option.getOrElse(
+      Option.fromNullishOr(decoded.blocked),
+      () => false
+    ),
+    error: Option.fromNullishOr(decoded.error),
+    note: Option.fromNullishOr(decoded.note),
+    results: Option.getOrElse(Option.fromNullishOr(decoded.results), () => []),
+  }));
+}
+
+const decodeWebReadToolOutput = toOptionalDecode(WebReadToolOutputPayload);
+
+export function toWebReadToolOutput(
+  input: unknown
+): Option.Option<WebReadToolOutputView> {
+  return Option.map(decodeWebReadToolOutput(input), (decoded) => ({
+    error: Option.fromNullishOr(decoded.error),
+    markdown: Option.getOrElse(
+      Option.fromNullishOr(decoded.markdown),
+      () => ""
+    ),
+    note: Option.fromNullishOr(decoded.note),
+    truncated: Option.getOrElse(
+      Option.fromNullishOr(decoded.truncated),
+      () => false
+    ),
+    url: Option.fromNullishOr(decoded.url),
+  }));
+}
+
+/* ------------------------------------------------------------------------
  * Artifact render plans
  *
  * A media type alone does not say how an artifact renders: it says whether

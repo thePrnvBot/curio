@@ -6,14 +6,25 @@ import {
   ToolInput,
 } from "@curio/ui/components/ai-elements/tool";
 import type { ToolUIPart } from "ai";
+import { Option } from "effect";
 import { ExternalLinkIcon, GlobeIcon, SearchIcon } from "lucide-react";
 import type { ReactNode } from "react";
+
+import {
+  toWebReadToolOutput,
+  toWebSearchToolOutput,
+} from "@/utils/chat-schemas";
+import type {
+  WebReadToolOutputView,
+  WebSearchToolOutputView,
+} from "@/utils/chat-schemas";
 
 /**
  * Collapsible cards for the Director's web tool calls. They render whatever
  * the stream has committed so far, so a search or page read shows as running
  * while the agent is away and completes on its own when the durable run
- * streams back in.
+ * streams back in. The tool name picks the decoder for the committed output;
+ * a malformed payload degrades to an empty card body instead of crashing.
  */
 
 const WEB_MAX_RESULTS_SHOWN = 8;
@@ -24,133 +35,110 @@ const WEB_TOOL_LABELS: Record<string, string> = {
   web_search: "Web search",
 };
 
-interface WebSearchToolOutput {
-  blocked?: boolean;
-  error?: string;
-  note?: string;
-  results?: readonly {
-    snippet: string;
-    title: string;
-    url: string;
-  }[];
-}
-
-interface WebReadToolOutput {
-  error?: string;
-  markdown?: string;
-  note?: string;
-  truncated?: boolean;
-  url?: string;
-}
-
-function toWebSearchOutput({ output }: ToolUIPart): WebSearchToolOutput | null {
-  if (typeof output !== "object" || output === null) {
-    return null;
-  }
-  const candidate = output as WebSearchToolOutput;
-  const isSearchShape =
-    typeof candidate.blocked === "boolean" ||
-    Array.isArray(candidate.results) ||
-    (typeof candidate.error === "string" && !("markdown" in candidate));
-  return isSearchShape ? candidate : null;
-}
-
-function toWebReadOutput({ output }: ToolUIPart): WebReadToolOutput | null {
-  if (typeof output !== "object" || output === null) {
-    return null;
-  }
-  const candidate = output as WebReadToolOutput;
-  const isReadShape =
-    typeof candidate.markdown === "string" || typeof candidate.url === "string";
-  return isReadShape ? candidate : null;
-}
-
-function WebSearchResults({ output }: { output: WebSearchToolOutput }) {
-  if (output.blocked === true) {
+function WebSearchResults({
+  output,
+}: {
+  output: WebSearchToolOutputView;
+}): ReactNode {
+  if (output.blocked) {
     return (
       <p className="text-muted-foreground text-xs">
-        {output.note ?? "DuckDuckGo temporarily blocked the search."}
+        {Option.getOrElse(
+          output.note,
+          () => "DuckDuckGo temporarily blocked the search."
+        )}
       </p>
     );
   }
-  const results = output.results ?? [];
-  if (results.length === 0) {
+  if (output.results.length === 0) {
     return (
       <p className="text-muted-foreground text-xs">
-        {output.error ?? "No results."}
+        {Option.getOrElse(output.error, () => "No results.")}
       </p>
     );
   }
   return (
     <ul className="divide-border border-border bg-muted/30 divide-y overflow-hidden rounded-md border">
-      {results.slice(0, WEB_MAX_RESULTS_SHOWN).map((result, resultIndex) => (
-        <li
-          className="min-w-0 space-y-0.5 p-2.5"
-          key={`${result.url}-${resultIndex}`}
-        >
-          <a
-            className="text-foreground flex items-center gap-1.5 text-xs font-medium hover:underline"
-            href={result.url}
-            rel="noreferrer noopener"
-            target="_blank"
+      {output.results
+        .slice(0, WEB_MAX_RESULTS_SHOWN)
+        .map((result, resultIndex) => (
+          <li
+            className="min-w-0 space-y-0.5 p-2.5"
+            key={`${result.url}-${resultIndex}`}
           >
-            <span className="truncate">{result.title || result.url}</span>
-            <ExternalLinkIcon className="text-muted-foreground size-3 shrink-0" />
-          </a>
-          {result.snippet.length > 0 && (
-            <p className="text-muted-foreground line-clamp-3 text-xs">
-              {result.snippet}
-            </p>
-          )}
-        </li>
-      ))}
+            <a
+              className="text-foreground flex items-center gap-1.5 text-xs font-medium hover:underline"
+              href={result.url}
+              rel="noreferrer noopener"
+              target="_blank"
+            >
+              <span className="truncate">
+                {result.title.length > 0 ? result.title : result.url}
+              </span>
+              <ExternalLinkIcon className="text-muted-foreground size-3 shrink-0" />
+            </a>
+            {result.snippet.length > 0 && (
+              <p className="text-muted-foreground line-clamp-3 text-xs">
+                {result.snippet}
+              </p>
+            )}
+          </li>
+        ))}
     </ul>
   );
 }
 
-function WebReadContent({ output }: { output: WebReadToolOutput }) {
-  if (typeof output.error === "string") {
-    return <p className="text-destructive text-xs">{output.error}</p>;
+function WebReadContent({
+  output,
+}: {
+  output: WebReadToolOutputView;
+}): ReactNode {
+  if (Option.isSome(output.error)) {
+    return <p className="text-destructive text-xs">{output.error.value}</p>;
   }
-  const markdown = output.markdown ?? "";
-  if (markdown === "") {
+  if (output.markdown === "") {
     return null;
   }
-  const preview =
-    markdown.length > WEB_READ_MARKDOWN_PREVIEW_CHARS
-      ? `${markdown.slice(0, WEB_READ_MARKDOWN_PREVIEW_CHARS)}…`
-      : markdown;
+  const markdownPreview =
+    output.markdown.length > WEB_READ_MARKDOWN_PREVIEW_CHARS
+      ? `${output.markdown.slice(0, WEB_READ_MARKDOWN_PREVIEW_CHARS)}…`
+      : output.markdown;
   return (
     <div className="space-y-2">
-      <CodeBlock code={preview} language="markdown" />
-      {output.note && (
-        <p className="text-muted-foreground text-xs">{output.note}</p>
+      <CodeBlock code={markdownPreview} language="markdown" />
+      {Option.isSome(output.note) && (
+        <p className="text-muted-foreground text-xs">{output.note.value}</p>
       )}
     </div>
   );
 }
 
-function webToolContent(part: ToolUIPart, toolName: string): ReactNode {
-  const committedOutput = part.output;
-  let body: ReactNode = null;
+/** The committed output decodes per tool; anything else has no body. */
+function webToolBody(
+  toolName: string,
+  committedOutput: unknown
+): Option.Option<ReactNode> {
+  if (toolName === "web_search") {
+    return Option.map(toWebSearchToolOutput(committedOutput), (output) => (
+      <WebSearchResults output={output} />
+    ));
+  }
+  if (toolName === "web_read") {
+    return Option.map(toWebReadToolOutput(committedOutput), (output) => (
+      <WebReadContent output={output} />
+    ));
+  }
+  return Option.none();
+}
 
+function webToolContent(part: ToolUIPart, toolName: string): ReactNode {
   if (!toolName.startsWith("web_")) {
     return null;
   }
-
-  if (toolName === "web_search") {
-    const output = toWebSearchOutput(part);
-    if (output !== null) {
-      body = <WebSearchResults output={output} />;
-    }
-  }
-  if (toolName === "web_read") {
-    const output = toWebReadOutput(part);
-    if (output !== null) {
-      body = <WebReadContent output={output} />;
-    }
-  }
-  if (committedOutput === undefined && body === null) {
+  // Without a committed output the card is pure "running" chrome; once one
+  // arrives, the card stays (possibly empty if the payload fails decode).
+  const body = webToolBody(toolName, part.output);
+  if (Option.isNone(body) && part.output === undefined) {
     return null;
   }
 
@@ -162,7 +150,7 @@ function webToolContent(part: ToolUIPart, toolName: string): ReactNode {
       {toolName === "web_search" && (
         <SearchIcon className="text-muted-foreground mt-0.5 size-3.5 shrink-0" />
       )}
-      <div className="min-w-0 flex-1">{body}</div>
+      <div className="min-w-0 flex-1">{Option.getOrElse(body, () => null)}</div>
     </div>
   );
 }
