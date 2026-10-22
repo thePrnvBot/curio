@@ -1,5 +1,6 @@
 import { validateUIMessages } from "ai";
 import type { UIMessage } from "ai";
+import type { Option } from "effect";
 import { z } from "zod";
 
 /**
@@ -40,11 +41,15 @@ export async function restoreUIMessages(
   return restoredMessages;
 }
 
-/** Typed shape of the `data-artifact` UI part payload. */
+/**
+ * Typed shape of the `data-artifact` UI part payload. Optional payload
+ * fields are carried as `Option` so renderers match on None/Some instead of
+ * juggling `undefined`.
+ */
 export interface ArtifactUIData {
   readonly content: string;
   readonly mediaType: string;
-  readonly reviewUrl?: string;
-  readonly summary?: string;
-  readonly title?: string;
+  readonly reviewUrl: Option.Option<string>;
+  readonly summary: Option.Option<string>;
+  readonly title: Option.Option<string>;
 }
