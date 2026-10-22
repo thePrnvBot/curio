@@ -10,29 +10,34 @@ import type { PendingQuestions } from "@/utils/chat-schemas";
 export function extractPendingQuestions(
   messages: readonly UIMessage[]
 ): Option.Option<PendingQuestions> {
-  for (
-    let messageIndex = messages.length - 1;
-    messageIndex >= 0;
-    messageIndex--
-  ) {
-    const candidateMessage = messages[messageIndex];
-    if (candidateMessage.role !== "assistant") {
-      // The panel only applies to the most recent exchange
-      return Option.none<PendingQuestions>();
-    }
-    for (const part of candidateMessage.parts) {
-      if (
-        isToolUIPart(part) &&
-        part.type === `tool-${ASK_USER_TOOL_NAME}` &&
-        part.state !== "output-available" &&
-        part.state !== "output-error"
-      ) {
-        return toPendingQuestions(part.input);
-      }
-    }
-    return Option.none<PendingQuestions>();
+  // The panel only applies to the most recent exchange: a questionnaire on
+  // an earlier assistant message is considered answered/stale, regardless
+  // of how the parts look.
+  const latestMessage = messages.at(-1);
+  if (latestMessage?.role !== "assistant") {
+    return Option.none();
   }
-  return Option.none<PendingQuestions>();
+  for (const part of latestMessage.parts) {
+    if (
+      isToolUIPart(part) &&
+      part.type === `tool-${ASK_USER_TOOL_NAME}` &&
+      part.state !== "output-available" &&
+      part.state !== "output-error"
+    ) {
+      return toPendingQuestions(part.input);
+    }
+  }
+  return Option.none();
+}
+
+function progressDotClass(isAnswered: boolean, isCurrent: boolean): string {
+  if (isCurrent) {
+    return "bg-foreground size-2 rounded-full";
+  }
+  if (isAnswered) {
+    return "bg-primary size-2 rounded-full";
+  }
+  return "bg-muted-foreground/40 size-2 rounded-full";
 }
 
 export function PendingQuestionsPanel({
@@ -44,7 +49,7 @@ export function PendingQuestionsPanel({
   onAnswered: (answersText: string) => void;
   pendingQuestions: PendingQuestions;
 }) {
-  const questions = pendingQuestions.questions;
+  const { questions } = pendingQuestions;
   const [currentStep, setCurrentStep] = useState(0);
   const [pickedChoices, setPickedChoices] = useState<
     ReadonlyMap<number, number>
@@ -168,13 +173,7 @@ export function PendingQuestionsPanel({
             const isCurrent = questionIndex === currentStep;
             return (
               <span
-                className={
-                  isCurrent
-                    ? "bg-foreground size-2 rounded-full"
-                    : isAnswered
-                      ? "bg-primary size-2 rounded-full"
-                      : "bg-muted-foreground/40 size-2 rounded-full"
-                }
+                className={progressDotClass(isAnswered, isCurrent)}
                 key={question.question}
               />
             );

@@ -1,4 +1,4 @@
-﻿import { Skeleton } from "@curio/ui/components/skeleton";
+import { Skeleton } from "@curio/ui/components/skeleton";
 import { BookOpenCheckIcon } from "lucide-react";
 import type { ReactElement } from "react";
 
