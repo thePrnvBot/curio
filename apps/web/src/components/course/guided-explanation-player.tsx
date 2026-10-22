@@ -1,11 +1,6 @@
+import type { GuidedExplanationLessonContent } from "@curio/db/schema/course";
+import { MessageResponse } from "@curio/ui/components/ai-elements/message";
 import { Button } from "@curio/ui/components/button";
-import {
-  MessageResponse,
-} from "@curio/ui/components/ai-elements/message";
-import type {
-  GuidedExplanationLessonContent,
-  GuidedExplanationStep,
-} from "@curio/db/schema/course";
 import {
   ArrowLeftIcon,
   ChevronRightIcon,
@@ -14,30 +9,12 @@ import {
   SkipBackIcon,
   SkipForwardIcon,
 } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-  type ReactElement,
-} from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import type { CSSProperties, ReactElement } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import {
-  AnimatePresence,
-  motion,
-  useReducedMotion,
-  type Variants,
-} from "motion/react";
 
-import { highlightCode } from "@curio/ui/components/ai-elements/code-block";
 import { playInteractionCue } from "@/utils/sound";
-import {
-  createNarrationChannel,
-  narrationLog,
-  type NarrationChannel,
-} from "@/utils/voice/voice-playback";
 import {
   countCachedUtterances,
   getOrSynthesizeUtterance,
@@ -45,361 +22,68 @@ import {
   subscribeToVoiceCacheWrites,
   subscribeToVoicePreferences,
   subscribeToVoiceStatus,
-  type VoiceManagerStatus,
-  type VoicePreferences,
-  type VoiceUtterance,
 } from "@/utils/voice/voice-manager";
+import type {
+  VoiceManagerStatus,
+  VoicePreferences,
+} from "@/utils/voice/voice-manager";
+import {
+  createNarrationChannel,
+  narrationLog,
+} from "@/utils/voice/voice-playback";
+import type { NarrationChannel } from "@/utils/voice/voice-playback";
 
+import {
+  guidedCodeLanguageHint,
+  GuidedCodeStage,
+  GuidedMarkdownStage,
+  reducedStageVariants,
+  stageVariants,
+} from "./guided-explanation-stages";
+import {
+  guidedStepDurationMs,
+  narrationSentences,
+} from "./guided-explanation-timing";
+import { speakStepLines } from "./guided-explanation-voice";
 import { LessonCompletionControls } from "./lesson-completion-controls";
 
-/** Breath between sentence audio takes so stitched lines don't collide. */
-const NARRATION_SENTENCE_GAP_MS = 260;
-
-const sleep = (ms: number): Promise<void> =>
-  // oxlint-disable-next-line promise/avoid-new
-  new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-
-/** Narrated, step-sequenced explanation player: transcript on the left,
- * synced visuals on the right, timer-driven playback (no voice yet). */
-function guidedStepDurationMs(step: GuidedExplanationStep): number {
-  if (step.durationMs !== undefined) {
-    return step.durationMs;
-  }
-  const wordCount = step.narration.trim().split(/\s+/).length;
-  return Math.max(2400, Math.round(wordCount * 340) + 900);
+/** A contiguous group of steps kept short enough that the transcript never
+ * grows tall enough to need heavy wheel scrolling. */
+interface TranscriptModule {
+  readonly endStep: number;
+  readonly startStep: number;
 }
 
-/** Sentence segmentation for the transcript: the active sentence lights up
- * while its step narrates, so the prose reads as one flowing paragraph. */
-export function narrationSentences(narration: string): string[] {
-  return narration
-    .split(/(?<=[.!?])\s+/u)
-    .map((sentence) => sentence.trim())
-    .filter((sentence) => sentence.length > 0);
+/** Transcript sentence coloring past/current/upcoming reading position. */
+function transcriptSentenceClass(isPast: boolean, isActive: boolean): string {
+  if (isActive) {
+    return "bg-primary/10 text-foreground cursor-pointer rounded-sm px-0.5 -mx-0.5 font-medium [box-decoration-break:clone] transition-colors duration-200";
+  }
+  return isPast
+    ? "text-foreground/55 cursor-pointer [box-decoration-break:clone] transition-colors duration-200 hover:text-foreground/80"
+    : "text-foreground/35 cursor-pointer [box-decoration-break:clone] transition-colors duration-200 hover:text-foreground/60";
 }
 
-/** Effect-Institute-style stage transitions: the incoming visual slides up
- * from the narration direction with a blur-fade, the outgoing one lifts away.
- * Mirrored when stepping backwards. */
-const stageVariants: Variants = {
-  enter: (direction: number) => ({
-    opacity: 0,
-    y: 26 * direction,
-    filter: "blur(6px)",
-  }),
-  center: {
-    opacity: 1,
-    y: 0,
-    filter: "blur(0px)",
-    transition: { duration: 0.34, ease: [0.22, 1, 0.36, 1] },
-  },
-  exit: (direction: number) => ({
-    opacity: 0,
-    y: -20 * direction,
-    filter: "blur(4px)",
-    transition: { duration: 0.22, ease: [0.4, 0, 1, 1] },
-  }),
-};
-
-/** Reduced motion: crossfade only, no travel. */
-const reducedStageVariants: Variants = {
-  enter: { opacity: 0 },
-  center: { opacity: 1, transition: { duration: 0.15 } },
-  exit: { opacity: 0, transition: { duration: 0.1 } },
-};
-
-interface SpeakStepOptions {
-  readonly firstSentenceIndex: number;
-  readonly isCancelled: () => boolean;
-  readonly onProgress: (percent: number) => void;
-  readonly onSentenceLit: (globalSentenceIndex: number) => void;
-  readonly onUtteranceReady: (
-    globalSentenceIndex: number,
-    durationMs: number
-  ) => void;
-  readonly play: (utterance: VoiceUtterance) => Promise<void>;
-  readonly sentences: readonly string[];
-  readonly speakFallbackMs: number;
-  readonly synthesize: (text: string) => Promise<VoiceUtterance | null>;
+/** Short playback label shown beside the seek buttons. */
+function playbackStatusLabel(isPlaying: boolean, isLastStep: boolean): string {
+  if (isPlaying) {
+    return "Playing";
+  }
+  if (isLastStep) {
+    return "Complete";
+  }
+  return "Paused";
 }
 
-/** Speaks one step's lines in order, in full; resolves when the step's last
- * line ends (or immediately once cancelled). Lines are synthesized one at a
- * time, so a first pass may pause briefly per line while the engine renders —
- * each line is cached afterwards and replays instantly. */
-// oxlint-disable-next-line promise(avoid-new) -- none used; annotation anchor
-async function speakStepLines(options: SpeakStepOptions): Promise<void> {
-  const progress = { completedLines: 0 };
-  const totalLines = Math.max(options.sentences.length, 1);
-  for (let index = 0; index < options.sentences.length; index += 1) {
-    if (options.isCancelled()) {
-      return;
-    }
-    const globalSentenceIndex = options.firstSentenceIndex + index;
-    options.onSentenceLit(globalSentenceIndex);
-    // Lines are spoken in order; parallelizing would overlap the voices.
-    // oxlint-disable-next-line no-await-in-loop
-    const utterance = await options.synthesize(options.sentences[index] ?? "");
-    if (options.isCancelled()) {
-      return;
-    }
-    if (utterance !== null) {
-      options.onUtteranceReady(globalSentenceIndex, utterance.durationMs);
-    }
-    const spokenMs = utterance?.durationMs ?? options.speakFallbackMs;
-    const sentenceStartedAt = performance.now();
-    let rafId = requestAnimationFrame(function tick() {
-      if (options.isCancelled()) {
-        return;
-      }
-      const lineFraction = Math.min(
-        (performance.now() - sentenceStartedAt) / spokenMs,
-        1
-      );
-      options.onProgress(
-        ((progress.completedLines + lineFraction) / totalLines) * 100
-      );
-      rafId = requestAnimationFrame(tick);
-    });
-    if (utterance === null) {
-      narrationLog(
-        `sentence ${globalSentenceIndex + 1}: synthesis failed, holding estimated window`
-      );
-      // oxlint-disable-next-line no-await-in-loop
-      await sleep(spokenMs);
-    } else {
-      narrationLog(
-        `speaking sentence ${globalSentenceIndex + 1}:`,
-        `bytes=${utterance.wav.byteLength}`,
-        `durationMs=${utterance.durationMs}`
-      );
-      // oxlint-disable-next-line no-await-in-loop
-      await options.play(utterance);
-    }
-    cancelAnimationFrame(rafId);
-    if (options.isCancelled()) {
-      return;
-    }
-    progress.completedLines += 1;
-    options.onProgress((progress.completedLines / totalLines) * 100);
-    // oxlint-disable-next-line no-await-in-loop
-    await sleep(NARRATION_SENTENCE_GAP_MS);
+/** Model/synthesis progress appended to the playback label while voice runs. */
+function narrationStatusSuffix(voiceStatus: VoiceManagerStatus): string {
+  if (voiceStatus.kind === "loading-model") {
+    return ` · narration model ${voiceStatus.percent}%`;
   }
-}
-
-interface GuidedStageLine {
-  readonly spans: ReadonlyArray<{
-    readonly content: string;
-    readonly style?: CSSProperties;
-  }>;
-}
-
-/** Resolve the shiki language for a step's code. The Director may omit
- * language; guess from the source instead of falling straight to "text",
- * which removes all syntax color. */
-function guidedCodeLanguageHint(
-  language: string | undefined,
-  source: string
-): string {
-  const aliases: Record<string, string> = {
-    cjs: "javascript",
-    go: "go",
-    js: "javascript",
-    jsx: "jsx",
-    mjs: "javascript",
-    shell: "bash",
-    sh: "bash",
-    ts: "typescript",
-    tsx: "tsx",
-    yml: "yaml",
-    zsh: "bash",
-  };
-  const languageHint = language?.trim().toLowerCase();
-  if (languageHint !== undefined && languageHint !== "") {
-    return aliases[languageHint] ?? languageHint;
+  if (voiceStatus.kind === "synthesizing") {
+    return " · narrating…";
   }
-  if (/\bdef\s+\w+\s*\(|:\s*$/m.test(source) && !/[;{]\s*$/m.test(source)) {
-    return "python";
-  }
-  if (
-    /^\s*(CREATE TABLE|INSERT INTO|SELECT\s|UPDATE\s|ALTER TABLE)/im.test(
-      source
-    )
-  ) {
-    return "sql";
-  }
-  if (
-    source.startsWith("#!") ||
-    /^\s*(cd |sudo |npm |pnpm |yarn |git |curl |echo )/m.test(source)
-  ) {
-    return "bash";
-  }
-  if (
-    /^\s*(const |let |import |export |function |async function)/m.test(
-      source
-    ) ||
-    /=>/m.test(source)
-  ) {
-    return "typescript";
-  }
-  if (/\bfunc\s+\w+\s*\(/.test(source)) {
-    return "go";
-  }
-  if (/\bfn\s+\w+\s*\(|\blet\s+mut\s/.test(source)) {
-    return "rust";
-  }
-  if (/{\s*"[^"]*"\s*:/.test(source)) {
-    return "json";
-  }
-  return "text";
-}
-
-/** Code stage with shiki highlighting and staggered line-in motion. Uses the
- * shared highlighter cache from the CodeBlock module; falls back to plain
- * monospace until tokens are ready, identical layout either way. */
-function GuidedCodeStage(props: {
-  source: string;
-  language: string;
-}): ReactElement {
-  const [highlighted, setHighlighted] = useState<{
-    bg: string;
-    fg: string;
-    lines: GuidedStageLine[];
-  } | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    const applyTokens = (result: {
-      bg: string;
-      fg: string;
-      tokens: ReadonlyArray<ReadonlyArray<any>>;
-    }): void => {
-      if (cancelled) {
-        return;
-      }
-      setHighlighted({
-        bg: result.bg,
-        fg: result.fg,
-        lines: result.tokens.map((line) => ({
-          spans: line.map((token) => {
-            let fontStyle: "italic" | undefined;
-            let fontWeight: "bold" | undefined;
-            let textDecoration: "underline" | undefined;
-            if ((token.fontStyle ?? 0) & 1) {
-              fontStyle = "italic";
-            }
-            if ((token.fontStyle ?? 0) & 2) {
-              fontWeight = "bold";
-            }
-            if ((token.fontStyle ?? 0) & 4) {
-              textDecoration = "underline";
-            }
-            return {
-              content: token.content,
-              style: {
-                backgroundColor: token.bgColor,
-                color: token.color,
-                fontStyle,
-                fontWeight,
-                textDecoration,
-                ...token.htmlStyle,
-              } as CSSProperties,
-            };
-          }),
-        })),
-      });
-    };
-    // highlightCode is a sync-cache + async-callback API: a cache hit
-    // returns the tokens WITHOUT invoking the callback, so the sync result
-    // must be consumed here too (otherwise revisited steps lose all
-    // highlighting).
-    const cachedTokens = highlightCode(
-      props.source as never,
-      props.language as never
-    );
-    if (cachedTokens !== null) {
-      applyTokens(cachedTokens);
-    }
-    highlightCode(
-      props.source as never,
-      props.language as never,
-      applyTokens
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [props.language, props.source]);
-
-  const fallbackLines: GuidedStageLine[] = props.source
-    .split("\n")
-    .map((line) => ({ spans: [{ content: line }] }));
-
-  const lines = highlighted === null ? fallbackLines : highlighted.lines;
-
-  return (
-    <pre
-      className="font-mono text-sm leading-6 overflow-x-auto p-4 dark:!bg-[var(--shiki-dark-bg)] dark:!text-[var(--shiki-dark)]"
-      style={
-        highlighted === null
-          ? undefined
-          : { backgroundColor: highlighted.bg, color: highlighted.fg }
-      }
-    >
-      <code>
-        {lines.map((line, lineIndex) => (
-          <span
-            className="animate-guided-block-in block"
-            key={lineIndex}
-            style={
-              {
-                "--guided-delay": `${120 + Math.min(lineIndex * 45, 900)}ms`,
-              } as CSSProperties
-            }
-          >
-            {line.spans.length === 0
-              ? "\u00A0"
-              : line.spans.map((span, spanIndex) => (
-                  <span
-                    className="dark:!bg-[var(--shiki-dark-bg)] dark:!text-[var(--shiki-dark)]"
-                    key={spanIndex}
-                    style={span.style}
-                  >
-                    {span.content}
-                  </span>
-                ))}
-          </span>
-        ))}
-      </code>
-    </pre>
-  );
-}
-
-/** Markdown stage: prose blocks drift in one by one, in narration order. */
-function GuidedMarkdownStage(props: { source: string }): ReactElement {
-  const blocks = props.source
-    .split(/\n{2,}/)
-    .map((block) => block.trim())
-    .filter((block) => block.length > 0);
-
-  return (
-    <div className="space-y-4 text-sm leading-relaxed">
-      {blocks.map((block, blockIndex) => (
-        <div
-          className="animate-guided-block-in"
-          key={blockIndex}
-          style={
-            {
-              "--guided-delay": `${120 + Math.min(blockIndex * 90, 800)}ms`,
-            } as CSSProperties
-          }
-        >
-          <MessageResponse>{block}</MessageResponse>
-        </div>
-      ))}
-    </div>
-  );
+  return "";
 }
 
 // The narration state machine spans several effects; splitting it further
@@ -414,7 +98,7 @@ export function GuidedExplanationPlayer(props: {
   nextLessonTitle: string | null;
   onGoToLesson: (lessonId: string | null) => void;
 }): ReactElement {
-  const steps = props.content.steps;
+  const { steps } = props.content;
   const [stepIndex, setStepIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
   const [stepProgress, setStepProgress] = useState(0);
@@ -496,13 +180,15 @@ export function GuidedExplanationPlayer(props: {
   // Restart the explanation when a different guided lesson is opened.
   useEffect(() => {
     narrationLog("lesson changed -> restart at step 0");
+    // oxlint-disable-next-line react/set-state-in-effect -- resetting the playback state machine on lesson change is the point of this effect
     setStepIndex(0);
     setStepProgress(0);
     setIsPlaying(true);
     setNarratedSentenceIndex(null);
     stopActiveNarration("lesson restarted");
     sentenceDurationsRef.current = new Map();
-  }, [props.lessonId]);
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- lessonId exists to trigger the restart; it is never read inside
+  }, [props.lessonId, stopActiveNarration]);
 
   const isLastStep = stepIndex === steps.length - 1;
 
@@ -518,37 +204,40 @@ export function GuidedExplanationPlayer(props: {
     return offsets;
   }, [steps]);
 
-  function goToStep(nextStepIndex: number): void {
-    const boundedIndex = Math.max(0, Math.min(nextStepIndex, steps.length - 1));
-    if (boundedIndex !== stepIndex) {
-      playInteractionCue("select", {
-        direction: boundedIndex > stepIndex ? "forward" : "back",
-        emphasis: "subtle",
-      });
-    }
-    narrationLog("go to step", boundedIndex);
-    stopActiveNarration("step seek");
-    setNarratedSentenceIndex(stepSentenceOffsets[boundedIndex] ?? null);
-    setStepIndex(boundedIndex);
-    setStepProgress(0);
-  }
+  const goToStep = useCallback(
+    (nextStepIndex: number): void => {
+      const boundedIndex = Math.max(
+        0,
+        Math.min(nextStepIndex, steps.length - 1)
+      );
+      if (boundedIndex !== stepIndex) {
+        playInteractionCue("select", {
+          direction: boundedIndex > stepIndex ? "forward" : "back",
+          emphasis: "subtle",
+        });
+      }
+      narrationLog("go to step", boundedIndex);
+      stopActiveNarration("step seek");
+      setNarratedSentenceIndex(stepSentenceOffsets[boundedIndex] ?? null);
+      setStepIndex(boundedIndex);
+      setStepProgress(0);
+    },
+    [stepIndex, steps.length, stepSentenceOffsets, stopActiveNarration]
+  );
 
   // Keyboard: space toggles playback, arrows step (institute-style).
   useEffect(() => {
     function handleKeyDown(keyboardEvent: KeyboardEvent): void {
-      const eventTarget = keyboardEvent.target as HTMLElement | null;
+      const eventTarget = keyboardEvent.target;
       if (
-        eventTarget !== null &&
+        eventTarget instanceof HTMLElement &&
         ["INPUT", "TEXTAREA", "SELECT"].includes(eventTarget.tagName)
       ) {
         return;
       }
       if (keyboardEvent.code === "Space") {
         keyboardEvent.preventDefault();
-        narrationLog(
-          "spacebar ->",
-          isPlaying ? "pausing" : "playing"
-        );
+        narrationLog("spacebar ->", isPlaying ? "pausing" : "playing");
         playInteractionCue("toggle");
         setIsPlaying((currentlyPlaying) => !currentlyPlaying);
         return;
@@ -567,18 +256,18 @@ export function GuidedExplanationPlayer(props: {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isPlaying, stepIndex, steps.length]);
+  }, [goToStep, isPlaying, stepIndex]);
 
   // Transcript: the narration reads as one continuous paragraph; the sentence
   // currently being narrated lights up. Sentences are flattened step by step
   // so the lit index tracks playback across step boundaries.
   const transcriptSentences = useMemo(() => {
-    const sentences: Array<{ stepIndex: number; text: string }> = [];
-    steps.forEach((step, stepRefIndex) => {
+    const sentences: { stepIndex: number; text: string }[] = [];
+    for (const [stepRefIndex, step] of steps.entries()) {
       for (const sentence of narrationSentences(step.narration)) {
         sentences.push({ stepIndex: stepRefIndex, text: sentence });
       }
-    });
+    }
     return sentences;
   }, [steps]);
   const transcriptSentenceCount = transcriptSentences.length;
@@ -587,31 +276,36 @@ export function GuidedExplanationPlayer(props: {
   // refresh on cache writes (playback misses, background sweeps) so the
   // status stays truthful while narration lines generate.
   useEffect(() => {
-    let generation = ++cacheGeneration.current;
-    const totalLines = transcriptSentences.length;
     if (!voicePreferences.enabled) {
+      // oxlint-disable-next-line react/set-state-in-effect -- a disabled voice must reset the cached-line counter
       setVoiceLineCounts(null);
       return;
     }
-    void countCachedUtterances(
-      transcriptSentences.map((sentence) => sentence.text),
-      voicePreferences
-    ).then((cachedCount) => {
+    cacheGeneration.current += 1;
+    const generation = cacheGeneration.current;
+    const totalLines = transcriptSentences.length;
+    void (async () => {
+      const cachedCount = await countCachedUtterances(
+        transcriptSentences.map((sentence) => sentence.text),
+        voicePreferences
+      );
       if (cacheGeneration.current === generation) {
         narrationLog(`voice lines ready: ${cachedCount}/${totalLines}`);
         setVoiceLineCounts(cachedCount);
       }
-    });
+    })();
     return subscribeToVoiceCacheWrites(() => {
-      const latestGeneration = ++cacheGeneration.current;
-      void countCachedUtterances(
-        transcriptSentences.map((sentence) => sentence.text),
-        voicePreferences
-      ).then((cachedCount) => {
+      cacheGeneration.current += 1;
+      const latestGeneration = cacheGeneration.current;
+      void (async () => {
+        const cachedCount = await countCachedUtterances(
+          transcriptSentences.map((sentence) => sentence.text),
+          voicePreferences
+        );
         if (cacheGeneration.current === latestGeneration) {
           setVoiceLineCounts(cachedCount);
         }
-      });
+      })();
     });
   }, [transcriptSentences, voicePreferences]);
 
@@ -623,6 +317,7 @@ export function GuidedExplanationPlayer(props: {
     if (!isPlaying || voicePreferences.enabled) {
       return;
     }
+    // oxlint-disable-next-line react/set-state-in-effect -- each step restarts its progress bar from zero on the step change
     setStepProgress(0);
     const stepDurationMs = guidedStepDurationMs(steps[stepIndex]);
     const startedAt = performance.now();
@@ -630,7 +325,7 @@ export function GuidedExplanationPlayer(props: {
     const tick = (): void => {
       const percent = Math.min(
         ((performance.now() - startedAt) / stepDurationMs) * 100,
-        100,
+        100
       );
       setStepProgress(percent);
       if (percent < 100) {
@@ -677,12 +372,11 @@ export function GuidedExplanationPlayer(props: {
       stopActiveNarration(isPlaying ? "voice disabled" : "paused");
       return;
     }
-    const generation = ++narrationGenerationRef.current;
+    narrationGenerationRef.current += 1;
+    const generation = narrationGenerationRef.current;
     const isCancelled = (): boolean =>
       generation !== narrationGenerationRef.current;
-    const stepSentences = narrationSentences(
-      steps[stepIndex]?.narration ?? ""
-    );
+    const stepSentences = narrationSentences(steps[stepIndex]?.narration ?? "");
     void (async () => {
       await speakStepLines({
         firstSentenceIndex: stepSentenceOffsets[stepIndex] ?? 0,
@@ -724,8 +418,15 @@ export function GuidedExplanationPlayer(props: {
       narrationGenerationRef.current += 1;
       stopActiveNarration("narration loop restarted");
     };
-  }, [isPlaying, voicePreferences, stepIndex, stepSentenceOffsets, steps, stopActiveNarration, getNarrationChannel]);
-
+  }, [
+    isPlaying,
+    voicePreferences,
+    stepIndex,
+    stepSentenceOffsets,
+    steps,
+    stopActiveNarration,
+    getNarrationChannel,
+  ]);
 
   // Keep the lit sentence in view.
   const transcriptRef = useRef<HTMLDivElement>(null);
@@ -742,17 +443,17 @@ export function GuidedExplanationPlayer(props: {
   // need heavy wheel scrolling. Playback crosses module boundaries on its
   // own as steps advance.
   const transcriptModules = useMemo(() => {
-    const modules: Array<{ endStep: number; startStep: number }> = [];
+    const modules: TranscriptModule[] = [];
     let moduleStartStep = 0;
     let moduleCharacters = 0;
-    steps.forEach((step, stepIdx) => {
+    for (const [stepIdx, step] of steps.entries()) {
       moduleCharacters += step.narration.length;
       if (moduleCharacters >= 900 && stepIdx + 1 < steps.length) {
         modules.push({ endStep: stepIdx + 1, startStep: moduleStartStep });
         moduleStartStep = stepIdx + 1;
         moduleCharacters = 0;
       }
-    });
+    }
     modules.push({ endStep: steps.length, startStep: moduleStartStep });
     return modules;
   }, [steps]);
@@ -772,9 +473,7 @@ export function GuidedExplanationPlayer(props: {
       return;
     }
     let cancelled = false;
-    const sentencesForModule = (
-      module: { endStep: number; startStep: number }
-    ): string[] =>
+    const sentencesForModule = (module: TranscriptModule): string[] =>
       transcriptSentences
         .filter(
           (sentence) =>
@@ -783,28 +482,39 @@ export function GuidedExplanationPlayer(props: {
         )
         .map((sentence) => sentence.text);
     const nextModule = transcriptModules[activeModuleIndex + 1];
-    const queue = [
+    const moduleQueue: string[] = [
       ...sentencesForModule(activeModule),
       ...(nextModule === undefined ? [] : sentencesForModule(nextModule)),
     ];
     void (async () => {
-      for (const sentenceText of queue) {
+      for (const sentenceText of moduleQueue) {
         if (cancelled) {
           return;
         }
+        // Sequential on purpose: synthesis is the same queued engine the
+        // narration loop rides, so order matters and parallel calls would
+        // thrash the cache queue.
+        // oxlint-disable-next-line no-await-in-loop
         await getOrSynthesizeUtterance(sentenceText, voicePreferences);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [activeModule, activeModuleIndex, transcriptModules, transcriptSentences, voicePreferences]);
+  }, [
+    activeModule,
+    activeModuleIndex,
+    transcriptModules,
+    transcriptSentences,
+    voicePreferences,
+  ]);
   useEffect(() => {
     transcriptRef.current?.scrollTo({ top: 0 });
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- activeModuleIndex exists to lash the scroll reset to module changes
   }, [activeModuleIndex]);
 
   const transcript = (
-    <aside className="border-border/70 w-full shrink-0 border-b lg:h-full lg:w-[360px] lg:border-b-0 lg:border-r">
+    <aside className="border-border/70 w-full shrink-0 border-b lg:h-full lg:w-[360px] lg:border-r lg:border-b-0">
       <div className="flex h-full flex-col">
         <div
           className="min-h-0 flex-1 overflow-y-auto px-6 pt-5 pb-6"
@@ -824,22 +534,29 @@ export function GuidedExplanationPlayer(props: {
               const isActive = sentenceRefIndex === activeSentenceIndex;
               return (
                 <span key={sentenceRefIndex}>
-                  <span
+                  <button
                     aria-current={isActive || undefined}
-                    className={
-                      isActive
-                        ? "bg-primary/10 text-foreground cursor-pointer rounded-sm px-0.5 -mx-0.5 font-medium [box-decoration-break:clone] transition-colors duration-200"
-                        : isPast
-                          ? "text-foreground/55 cursor-pointer [box-decoration-break:clone] transition-colors duration-200 hover:text-foreground/80"
-                          : "text-foreground/35 cursor-pointer [box-decoration-break:clone] transition-colors duration-200 hover:text-foreground/60"
-                    }
+                    className={`${transcriptSentenceClass(isPast, isActive)} inline`}
                     data-transcript-sentence={sentenceRefIndex}
+                    // Prose segments stay out of tab order on purpose:
+                    // arrow keys already seek steps.
                     onClick={() => {
                       goToStep(sentence.stepIndex);
                     }}
+                    onKeyDown={(sentenceClickEvent) => {
+                      if (
+                        sentenceClickEvent.key === "Enter" ||
+                        sentenceClickEvent.key === " "
+                      ) {
+                        sentenceClickEvent.preventDefault();
+                        goToStep(sentence.stepIndex);
+                      }
+                    }}
+                    tabIndex={-1}
+                    type="button"
                   >
                     {sentence.text}
-                  </span>{" "}
+                  </button>{" "}
                 </span>
               );
             })}
@@ -852,12 +569,10 @@ export function GuidedExplanationPlayer(props: {
             <div className="flex items-center justify-center gap-2">
               <button
                 aria-label="Previous sub-lesson"
-                className="bg-background text-muted-foreground hover:text-foreground hover:border-ring flex size-7 items-center justify-center rounded-full border transition-colors disabled:opacity-40 disabled:hover:text-muted-foreground"
+                className="bg-background text-muted-foreground hover:text-foreground hover:border-ring disabled:hover:text-muted-foreground flex size-7 items-center justify-center rounded-full border transition-colors disabled:opacity-40"
                 disabled={activeModuleIndex === 0}
                 onClick={() => {
-                  goToStep(
-                    transcriptModules[activeModuleIndex - 1].startStep
-                  );
+                  goToStep(transcriptModules[activeModuleIndex - 1].startStep);
                 }}
                 type="button"
               >
@@ -865,7 +580,7 @@ export function GuidedExplanationPlayer(props: {
               </button>
               <button
                 aria-label="Next sub-lesson"
-                className="bg-background text-muted-foreground hover:text-foreground hover:border-ring flex size-7 items-center justify-center rounded-full border transition-colors disabled:opacity-40 disabled:hover:text-muted-foreground"
+                className="bg-background text-muted-foreground hover:text-foreground hover:border-ring disabled:hover:text-muted-foreground flex size-7 items-center justify-center rounded-full border transition-colors disabled:opacity-40"
                 disabled={activeModuleIndex === transcriptModules.length - 1}
                 onClick={() => {
                   goToStep(transcriptModules[activeModuleIndex + 1].startStep);
@@ -887,7 +602,7 @@ export function GuidedExplanationPlayer(props: {
         <div className="mx-auto w-full max-w-3xl">
           {props.content.intro !== undefined && stepIndex === 0 && (
             <div
-              className="text-muted-foreground mb-4 mt-2 text-sm leading-relaxed"
+              className="text-muted-foreground mt-2 mb-4 text-sm leading-relaxed"
               style={
                 {
                   animationDelay: "60ms",
@@ -898,11 +613,7 @@ export function GuidedExplanationPlayer(props: {
             </div>
           )}
 
-          <AnimatePresence
-            custom={stepDirection}
-            initial={false}
-            mode="wait"
-          >
+          <AnimatePresence custom={stepDirection} initial={false} mode="wait">
             <motion.div
               animate="center"
               className="bg-card rounded-xl border"
@@ -1000,18 +711,14 @@ export function GuidedExplanationPlayer(props: {
                   <span className="bg-primary relative inline-flex size-2 rounded-full" />
                 </span>
               ) : null}
-              {isPlaying ? "Playing" : isLastStep ? "Complete" : "Paused"} ·{" "}
-              {stepIndex + 1}/{steps.length}
+              {playbackStatusLabel(isPlaying, isLastStep)} · {stepIndex + 1}/
+              {steps.length}
               {voicePreferences.enabled ? (
                 <>
-                  {voiceStatus.kind === "loading-model"
-                    ? ` · narration model ${voiceStatus.percent}%`
-                    : voiceStatus.kind === "synthesizing"
-                      ? " · narrating…"
-                      : ""}
-                  {voiceLineCounts !== null
-                    ? ` · ${voiceLineCounts}/${transcriptSentenceCount} lines`
-                    : ""}
+                  {narrationStatusSuffix(voiceStatus)}
+                  {voiceLineCounts === null
+                    ? ""
+                    : ` · ${voiceLineCounts}/${transcriptSentenceCount} lines`}
                 </>
               ) : null}
             </span>
@@ -1040,5 +747,3 @@ export function GuidedExplanationPlayer(props: {
     </div>
   );
 }
-
-

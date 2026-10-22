@@ -108,6 +108,10 @@ interface TokenizedCode {
   bg: string;
 }
 
+/** Re-exported so app code can type Shiki results/tokens without importing
+ * shiki directly. */
+export type { TokenizedCode, ThemedToken };
+
 interface CodeBlockContextType {
   code: string;
 }
