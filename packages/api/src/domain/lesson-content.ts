@@ -1,8 +1,6 @@
 import type { LessonContent } from "@curio/db/schema/course";
 import { z } from "zod";
 
-import { COURSE_LESSON_KINDS } from "./course";
-
 /**
  * The lesson content shape lives in this file exactly once: the AI SDK tool
  * and the structured-output lesson generator consume the schema, routers
@@ -47,7 +45,7 @@ const animationContent = z.object({
   html: z
     .string()
     .min(1)
-    .max(60000)
+    .max(60_000)
     .describe(
       "Self-contained HTML document (inline styles/scripts) that plays the teaching animation"
     ),
@@ -74,7 +72,7 @@ const guidedExplanationContent = z.object({
   steps: z
     .array(
       z.object({
-        durationMs: z.number().int().min(1000).max(600000).optional(),
+        durationMs: z.number().int().min(1000).max(600_000).optional(),
         narration: z
           .string()
           .min(1)
@@ -118,8 +116,9 @@ export const lessonContentSchema = z.discriminatedUnion("kind", [
 /** Structured content payload for one lesson, validated by the schema above. */
 export type LessonContentToolPayload = z.infer<typeof lessonContentSchema>;
 
-/** All lesson kinds the store accepts; unknown model output degrades. */
-export const lessonKindSchema = z.enum(COURSE_LESSON_KINDS);
+/** All lesson kinds the store accepts; the single zod enum lives next to the
+ * kind list in ./course. */
+export { lessonKindSchema } from "./course";
 
 /**
  * Maps a schema-validated content payload onto the stored `LessonContent`
@@ -182,6 +181,11 @@ export function toStoredLessonContent(
         kind: "video",
         videoUrl: rawContent.videoUrl,
       };
+    }
+    // oxlint-disable-next-line eslint/default-case -- exhaustive union arm added for the lint rule; TS still rejects a missing kind as never
+    default: {
+      const unhandledKind: never = rawContent;
+      return unhandledKind;
     }
   }
 }

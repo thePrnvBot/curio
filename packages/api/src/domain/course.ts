@@ -1,5 +1,6 @@
 import type { LessonContent } from "@curio/db/schema/course";
-import { Data } from "effect";
+import { Data, Predicate } from "effect";
+import { z } from "zod";
 
 import { describeCause } from "./cause-description";
 
@@ -11,12 +12,18 @@ export const COURSE_LESSON_KINDS = [
   "guided-explanation",
 ] as const;
 
-export type CourseLessonKind = (typeof COURSE_LESSON_KINDS)[number];
+/** All lesson kinds the store accepts. */
+export const lessonKindSchema = z.enum(COURSE_LESSON_KINDS);
 
-/** The model supplies lesson kinds as free strings; anything unrecognized
- * degrades to `cards` rather than failing the whole creation. */
-export function normalizeLessonKind(kind: string): CourseLessonKind {
-  return COURSE_LESSON_KINDS.find((candidate) => candidate === kind) ?? "cards";
+export type CourseLessonKind = z.infer<typeof lessonKindSchema>;
+
+/** The model supplies lesson kinds as free strings and storage rows may hold
+ * legacy values; anything outside the union degrades to `cards` rather than
+ * failing the whole operation. `safeParse` keeps the coercion a validated
+ * parse instead of chaining a promise-shaped `.catch()`. */
+export function normalizeLessonKind(kind: unknown): CourseLessonKind {
+  const parsed = lessonKindSchema.safeParse(kind);
+  return parsed.success ? parsed.data : "cards";
 }
 
 export class CourseOperationFailed extends Data.TaggedError(
@@ -56,19 +63,23 @@ export class BadgeNotFound extends Data.TaggedError("BadgeNotFound")<{
   }
 }
 
-/**
- * Type guard for the lookup failures callers may legitimately need to tell
- * apart from storage failures (routers answer these with 404). Store error
- * wrappers preserve failures matching this guard instead of flattening them
- * into a generic `CourseOperationFailed`.
- */
+/** Lookup failures callers may legitimately need to tell apart from storage
+ * failures (routers answer these with 404): the tags the three tagged classes
+ * above carry, checked with the Predicate module helpers instead of a hand
+ * rolled `instanceof` chain. Store error wrappers preserve failures matching
+ * this guard instead of flattening them into a generic
+ * `CourseOperationFailed`. */
+const COURSE_LOOKUP_FAILURE_TAGS = [
+  "CourseNotFound",
+  "LessonNotFound",
+  "BadgeNotFound",
+] as const;
+
 export function isCourseLookupFailure(
   cause: unknown
 ): cause is CourseNotFound | LessonNotFound | BadgeNotFound {
-  return (
-    cause instanceof CourseNotFound ||
-    cause instanceof LessonNotFound ||
-    cause instanceof BadgeNotFound
+  return COURSE_LOOKUP_FAILURE_TAGS.some((tag) =>
+    Predicate.isTagged(cause, tag)
   );
 }
 

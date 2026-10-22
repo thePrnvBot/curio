@@ -1,3 +1,5 @@
+import { COURSE_LESSON_KINDS } from "@curio/api/domain/course";
+import type { CourseLessonKind } from "@curio/api/domain/course";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeftIcon, CheckIcon } from "lucide-react";
@@ -5,21 +7,15 @@ import { useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 
+import { ProgressFromZero } from "@/components/animated-progress";
 import {
   CoursePageSkeleton,
   LessonContentSkeleton,
   MissingCourseNotice,
 } from "@/components/course/course-page-skeletons";
-import {
-  GuidedExplanationPlayer,
-} from "@/components/course/guided-explanation-player";
-import {
-  LessonContentView,
-} from "@/components/course/lesson-content-views";
-import {
-  LessonCompletionControls,
-} from "@/components/course/lesson-completion-controls";
-import { ProgressFromZero } from "@/components/animated-progress";
+import { GuidedExplanationPlayer } from "@/components/course/guided-explanation-player";
+import { LessonCompletionControls } from "@/components/course/lesson-completion-controls";
+import { LessonContentView } from "@/components/course/lesson-content-views";
 import { useTRPC } from "@/utils/trpc";
 
 // `lesson` is kept only when it's a non-empty string; anything else (missing,
@@ -44,17 +40,26 @@ interface LessonLike {
   readonly completed: boolean;
 }
 
-const LESSON_KIND_LABELS: Record<string, string> = {
-  animation: "Animation",
-  cards: "Cards",
-  recap: "Recap",
+const LESSON_KIND_LABELS: Record<CourseLessonKind, string> = {
   video: "Video",
+  cards: "Cards",
+  animation: "Animation",
+  recap: "Recap",
   "guided-explanation": "Guided explanation",
 };
 
+/** `kind` arrives as a plain string over the wire, so any value outside the
+ * domain union renders itself instead of an undefined label. */
+function lessonKindLabel(kind: string): string {
+  const known = COURSE_LESSON_KINDS.find((candidate) => candidate === kind);
+  return known === undefined ? kind : LESSON_KIND_LABELS[known];
+}
+
 /** The single lesson the reader currently has open: first incomplete lesson,
  * falling back to the last lesson of the course. */
-function pickInitialLesson(sections: readonly { lessons: readonly LessonLike[] }[]): string | null {
+function pickInitialLesson(
+  sections: readonly { lessons: readonly LessonLike[] }[]
+): string | null {
   const allLessons = sections.flatMap((section) => section.lessons);
   const firstIncomplete = allLessons.find((lesson) => !lesson.completed);
   return firstIncomplete?.id ?? allLessons.at(-1)?.id ?? null;
@@ -93,9 +98,10 @@ function CoursePageRoute() {
   const selectedLesson = flatLessons.find(
     (lesson) => lesson.id === selectedLessonId
   );
-  const nextLesson = selectedLesson === undefined || selectedLessonId === null
-    ? flatLessons.at(1)
-    : flatLessons.at(flatLessons.indexOf(selectedLesson) + 1);
+  const nextLesson =
+    selectedLesson === undefined || selectedLessonId === null
+      ? flatLessons.at(1)
+      : flatLessons.at(flatLessons.indexOf(selectedLesson) + 1);
 
   function goToLesson(nextLessonId: string | null): void {
     void navigate({
@@ -146,16 +152,12 @@ function CoursePageRoute() {
       } catch {
         // Background prefetch failure — tell the reader briefly; the call
         // retries automatically the next time they open a lesson.
-        toast.error("Couldn't generate the next lesson yet — it'll retry when you return to it");
+        toast.error(
+          "Couldn't generate the next lesson yet — it'll retry when you return to it"
+        );
       }
     })();
-  }, [
-    openedLessonId,
-    courseId,
-    generateNextLesson,
-    queryClient,
-    trpc,
-  ]);
+  }, [openedLessonId, courseId, generateNextLesson, queryClient, trpc]);
 
   if (courseQuery.isPending) {
     return <CoursePageSkeleton />;
@@ -175,9 +177,7 @@ function CoursePageRoute() {
     course.lessonCount === 0
       ? 0
       : Math.min(
-          Math.round(
-            (course.completedLessonCount / course.lessonCount) * 100
-          ),
+          Math.round((course.completedLessonCount / course.lessonCount) * 100),
           100
         );
 
@@ -242,7 +242,7 @@ function CoursePageRoute() {
                               <span className="truncate">{lesson.title}</span>
                             </span>
                             <span className="text-muted-foreground/70 text-[11px]">
-                              {LESSON_KIND_LABELS[lesson.kind] ?? lesson.kind}
+                              {lessonKindLabel(lesson.kind)}
                             </span>
                           </button>
                         </li>
@@ -257,7 +257,9 @@ function CoursePageRoute() {
 
         {/* Center: lesson content — scrolls internally, never the page */}
         <main className="flex min-h-0 flex-1 flex-col md:overflow-y-auto">
-          {lessonQuery.isPending || selectedLessonId === null || lessonQuery.isError ? (
+          {lessonQuery.isPending ||
+          selectedLessonId === null ||
+          lessonQuery.isError ? (
             <div className="mx-auto w-full max-w-2xl flex-1 px-6 py-10">
               <LessonContentSkeleton />
             </div>
@@ -278,9 +280,8 @@ function CoursePageRoute() {
               <article>
                 <header className="mb-8">
                   <p className="text-muted-foreground mb-2 text-xs tracking-widest uppercase">
-                    {LESSON_KIND_LABELS[lessonQuery.data.kind] ??
-                      lessonQuery.data.kind}{" "}
-                    · Lesson {lessonQuery.data.position ?? 1}
+                    {lessonKindLabel(lessonQuery.data.kind)} · Lesson{" "}
+                    {lessonQuery.data.position ?? 1}
                   </p>
                   <h2 className="text-3xl font-semibold tracking-tight text-balance">
                     {lessonQuery.data.title}
