@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import type { UIMessage } from "ai";
 import { isToolUIPart } from "ai";
+import { Option } from "effect";
 import {
   FileIcon,
   FilmIcon,
@@ -33,8 +34,6 @@ export interface ChatSessionEntry {
   /** Message id — used to scroll the conversation to the source. */
   readonly messageId: string;
   readonly title: string;
-  readonly mediaType?: string;
-  readonly url?: string;
 }
 
 const ENTRY_KIND_ORDER: readonly SessionEntryKind[] = [
@@ -74,16 +73,22 @@ function pushCreateArtifactEntry(
   messageId: string,
   toolCallId: string
 ): void {
-  const parsedInput = toArtifactToolEntry(partInput);
-  if (parsedInput === null) {
+  const artifactInput = toArtifactToolEntry(partInput);
+  if (Option.isNone(artifactInput)) {
     return;
   }
   entries.push({
     kind: "artifact",
     key: `tool-${toolCallId}`,
-    mediaType: parsedInput.mediaType,
     messageId,
-    title: parsedInput.title ?? parsedInput.filename ?? "Artifact",
+    // The Director names artifacts; fall back through the filename, then
+    // the generic label when the model wrote neither.
+    title: Option.getOrElse(
+      artifactInput.value.title.pipe(
+        Option.orElse(() => artifactInput.value.filename)
+      ),
+      () => "Artifact"
+    ),
   });
 }
 
@@ -93,16 +98,15 @@ function pushInlineDataArtifactEntry(
   messageId: string,
   partIndex: number
 ): void {
-  const parsedData = toInlineDataArtifact(partData);
-  if (parsedData === null) {
+  const inlineArtifact = toInlineDataArtifact(partData);
+  if (Option.isNone(inlineArtifact)) {
     return;
   }
   entries.push({
     kind: "artifact",
     key: `data-${messageId}-${partIndex}`,
-    mediaType: parsedData.mediaType,
     messageId,
-    title: parsedData.title ?? "Artifact",
+    title: Option.getOrElse(inlineArtifact.value.title, () => "Artifact"),
   });
 }
 
@@ -112,19 +116,22 @@ function pushSourceUrlEntry(
   messageId: string,
   partIndex: number
 ): void {
-  if (typeof part.url !== "string" || part.url.length === 0) {
+  // The panel lists source citations only when they carry a usable URL.
+  const sourceUrl = Option.fromNullishOr(part.url).pipe(
+    Option.filter((candidateUrl) => candidateUrl.length > 0)
+  );
+  if (Option.isNone(sourceUrl)) {
     return;
   }
-  const resolvedTitle =
-    typeof part.title === "string" && part.title.length > 0
-      ? part.title
-      : part.url;
   entries.push({
     kind: "link",
     key: `link-${messageId}-${partIndex}`,
     messageId,
-    title: resolvedTitle,
-    url: part.url,
+    title: Option.match(Option.fromNullishOr(part.title), {
+      onNone: () => sourceUrl.value,
+      onSome: (sourceTitle) =>
+        sourceTitle === "" ? sourceUrl.value : sourceTitle,
+    }),
   });
 }
 
@@ -134,18 +141,18 @@ function pushFilePartEntry(
   messageId: string,
   partIndex: number
 ): void {
-  const fileMediaType = partMedia.mediaType ?? "";
-  const fileTitle =
-    typeof partMedia.filename === "string" && partMedia.filename.length > 0
-      ? partMedia.filename
-      : "Attachment";
+  const fileMediaType = Option.fromNullishOr(partMedia.mediaType);
   entries.push({
-    kind: classifyMediaEntry(fileMediaType),
+    kind: Option.match(fileMediaType, {
+      onNone: () => "file" as const,
+      onSome: (mediaType) => classifyMediaEntry(mediaType),
+    }),
     key: `file-${messageId}-${partIndex}`,
-    mediaType: fileMediaType,
     messageId,
-    title: fileTitle,
-    url: partMedia.url,
+    title: Option.match(Option.fromNullishOr(partMedia.filename), {
+      onNone: () => "Attachment",
+      onSome: (filename) => (filename.length === 0 ? "Attachment" : filename),
+    }),
   });
 }
 

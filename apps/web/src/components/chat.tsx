@@ -27,7 +27,6 @@ import {
   PromptInputTools,
 } from "@curio/ui/components/ai-elements/prompt-input";
 import type { PromptInputMessage } from "@curio/ui/components/ai-elements/prompt-input";
-import { useTRPC } from "@/utils/trpc";
 import {
   Reasoning,
   ReasoningContent,
@@ -37,20 +36,19 @@ import {
   Suggestion,
   Suggestions,
 } from "@curio/ui/components/ai-elements/suggestion";
+import { useQueryClient } from "@tanstack/react-query";
 import { isToolUIPart } from "ai";
 import type { UIMessage } from "ai";
-import { useQueryClient } from "@tanstack/react-query";
+import { Option } from "effect";
 import { CopyIcon, RefreshCwIcon, SparklesIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import {
-  ArtifactActionButton,
-  ArtifactInlineView,
-  ArtifactToolView,
-  InlineFilePartView,
-  PromptInputAttachmentsDisplay,
-} from "@/components/chat/chat-artifacts";
+import { ArtifactActionButton } from "@/components/chat/chat-artifact-button";
+import { ArtifactInlineView } from "@/components/chat/chat-artifact-card";
+import { ArtifactToolView } from "@/components/chat/chat-artifact-tool-card";
+import { InlineFilePartView } from "@/components/chat/chat-file-media";
+import { PromptInputAttachmentsDisplay } from "@/components/chat/chat-input-attachments";
 import {
   ChatSkeleton,
   CourseCreatedNote,
@@ -61,6 +59,7 @@ import {
   PendingQuestionsPanel,
 } from "@/components/chat/chat-questions";
 import { WebToolView } from "@/components/chat/chat-web-tools";
+import { useTRPC } from "@/utils/trpc";
 
 export { ChatSkeleton };
 import ChatSessionPanel from "@/components/chat-session-panel";
@@ -71,15 +70,13 @@ import {
   titleFromMessages,
 } from "@/utils/chat-runtime";
 import {
-  playInteractionCue,
-} from "@/utils/sound";
-import {
-  restoreUIMessages,
-} from "@/utils/ui-messages";
-import {
   toArtifactData,
   toCourseCreatedData,
+  toLessonChunkData,
 } from "@/utils/chat-schemas";
+import { playInteractionCue } from "@/utils/sound";
+import type { ArtifactUIData } from "@/utils/ui-messages";
+import { restoreUIMessages } from "@/utils/ui-messages";
 
 export interface PersistedChatMessageRecord {
   readonly id: string;
@@ -105,7 +102,6 @@ const CHAT_STARTER_SUGGESTIONS = [
 type RestoredMessagesState =
   | { readonly status: "restoring" }
   | { readonly status: "ready"; readonly messages: UIMessage[] };
-
 
 function useRestoredMessages(
   persistedMessages: readonly PersistedChatMessageRecord[] | undefined
@@ -166,8 +162,15 @@ function ChatConversation({
   // while the page was closed catches up when it is reopened.
   const chat = getChatInstance(chatId, initialMessages);
 
-  const { messages, status, sendMessage, regenerate, stop, setMessages, error } =
-    useChat({ chat, resume: true });
+  const {
+    messages,
+    status,
+    sendMessage,
+    regenerate,
+    stop,
+    setMessages,
+    error,
+  } = useChat({ chat, resume: true });
 
   const isStreaming = status === "submitted" || status === "streaming";
   const pendingQuestions = useMemo(
@@ -245,7 +248,7 @@ function ChatConversation({
   }, [error]);
 
   function handleMessageSubmit(message: PromptInputMessage) {
-    if (pendingQuestions !== null) {
+    if (Option.isSome(pendingQuestions)) {
       // The question panel owns the input while questions are unanswered
       if (message.text.trim().length > 0) {
         sendPendingQuestionAnswers(message.text);
@@ -398,12 +401,12 @@ function ChatConversation({
 
                     if (part.type === "data-artifact") {
                       const inlineArtifactData = toArtifactData(part.data);
-                      if (!inlineArtifactData) {
+                      if (Option.isNone(inlineArtifactData)) {
                         return null;
                       }
                       return (
                         <ArtifactInlineView
-                          data={inlineArtifactData}
+                          data={inlineArtifactData.value}
                           key={structuralKey}
                         />
                       );
@@ -433,12 +436,14 @@ function ChatConversation({
                         const createdCourseData = toCourseCreatedData(
                           part.output
                         );
-                        if (createdCourseData === null) {
+                        if (Option.isNone(createdCourseData)) {
                           return null;
                         }
                         return (
                           <div className="w-full" key={structuralKey}>
-                            <CourseCreatedNote courseData={createdCourseData} />
+                            <CourseCreatedNote
+                              courseData={createdCourseData.value}
+                            />
                           </div>
                         );
                       }
@@ -448,31 +453,23 @@ function ChatConversation({
                         if (part.state !== "output-available") {
                           return null;
                         }
-                        const lessonOutput = part.output as
-                          | {
-                              done?: boolean;
-                              position?: number;
-                              title?: string;
-                            }
-                          | null
-                          | undefined;
-                        if (
-                          lessonOutput === null ||
-                          lessonOutput === undefined ||
-                          lessonOutput.done !== true
-                        ) {
+                        const lessonChunkData = toLessonChunkData(part.output);
+                        if (Option.isNone(lessonChunkData)) {
                           return null;
                         }
                         return (
                           <div className="w-full" key={structuralKey}>
                             <LessonChunkNote
-                              position={lessonOutput.position ?? 0}
-                              title={lessonOutput.title ?? ""}
+                              position={lessonChunkData.value.position}
+                              title={lessonChunkData.value.title}
                             />
                           </div>
                         );
                       }
-                      if (part.type === TOOL_WEB_SEARCH || part.type === TOOL_WEB_READ) {
+                      if (
+                        part.type === TOOL_WEB_SEARCH ||
+                        part.type === TOOL_WEB_READ
+                      ) {
                         // Web tool calls render as collapsible cards, live:
                         // running while the Director searches, completed
                         // with results/previews once committed.
@@ -487,16 +484,18 @@ function ChatConversation({
                       const publishedArtifactData =
                         part.state === "output-available"
                           ? toArtifactData(part.input)
-                          : null;
+                          : Option.none<ArtifactUIData>();
 
                       return (
                         <div className="w-full space-y-2" key={structuralKey}>
                           <ArtifactToolView
-                            hideArtifact={publishedArtifactData !== null}
+                            hideArtifact={Option.isSome(publishedArtifactData)}
                             part={part}
                           />
-                          {publishedArtifactData && (
-                            <ArtifactInlineView data={publishedArtifactData} />
+                          {Option.isSome(publishedArtifactData) && (
+                            <ArtifactInlineView
+                              data={publishedArtifactData.value}
+                            />
                           )}
                         </div>
                       );
@@ -552,13 +551,13 @@ function ChatConversation({
                 }}
                 onSubmit={handleMessageSubmit}
               >
-                {pendingQuestions !== null ? (
+                {Option.isSome(pendingQuestions) ? (
                   /* While the Director is asking, the input area IS the
                     questionnaire: no textarea, no tools, no submit button. */
                   <PendingQuestionsPanel
                     busy={isStreaming}
                     onAnswered={sendPendingQuestionAnswers}
-                    pendingQuestions={pendingQuestions}
+                    pendingQuestions={pendingQuestions.value}
                   />
                 ) : (
                   <>
@@ -618,7 +617,6 @@ function ChatConversation({
     </div>
   );
 }
-
 
 export default function Chat({
   chatId,

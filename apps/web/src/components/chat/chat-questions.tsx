@@ -1,6 +1,7 @@
 import { ASK_USER_TOOL_NAME } from "@curio/api/infrastructure/ask-user-tool";
 import { isToolUIPart } from "ai";
 import type { UIMessage } from "ai";
+import { Option } from "effect";
 import { useState } from "react";
 
 import { toPendingQuestions } from "@/utils/chat-schemas";
@@ -8,7 +9,7 @@ import type { PendingQuestions } from "@/utils/chat-schemas";
 
 export function extractPendingQuestions(
   messages: readonly UIMessage[]
-): PendingQuestions | null {
+): Option.Option<PendingQuestions> {
   for (
     let messageIndex = messages.length - 1;
     messageIndex >= 0;
@@ -17,7 +18,7 @@ export function extractPendingQuestions(
     const candidateMessage = messages[messageIndex];
     if (candidateMessage.role !== "assistant") {
       // The panel only applies to the most recent exchange
-      break;
+      return Option.none<PendingQuestions>();
     }
     for (const part of candidateMessage.parts) {
       if (
@@ -29,9 +30,9 @@ export function extractPendingQuestions(
         return toPendingQuestions(part.input);
       }
     }
-    break;
+    return Option.none<PendingQuestions>();
   }
-  return null;
+  return Option.none<PendingQuestions>();
 }
 
 export function PendingQuestionsPanel({
@@ -45,21 +46,27 @@ export function PendingQuestionsPanel({
 }) {
   const questions = pendingQuestions.questions;
   const [currentStep, setCurrentStep] = useState(0);
-  const [pickedOptions, setPickedOptions] = useState<
-    Record<number, number | undefined>
-  >({});
+  const [pickedChoices, setPickedChoices] = useState<
+    ReadonlyMap<number, number>
+  >(new Map());
 
   const isLastStep = currentStep >= questions.length - 1;
   const currentQuestion = questions[currentStep];
 
   function sendAllAnswers(
-    finalPicks: Record<number, number | undefined> = pickedOptions
+    finalPicks: ReadonlyMap<number, number> = pickedChoices
   ): void {
     const header = pendingQuestions.intro;
     const answerLines = questions.map((question, questionIndex) => {
-      const pickedOption = finalPicks[questionIndex];
-      const answer =
-        pickedOption === undefined ? "" : question.options[pickedOption];
+      // Steps the user never answered contribute a blank line, so the
+      // Director still sees the question with an empty response.
+      const answer = Option.match(
+        Option.fromNullishOr(finalPicks.get(questionIndex)),
+        {
+          onNone: () => "",
+          onSome: (pickedOptionIndex) => question.options[pickedOptionIndex],
+        }
+      );
       return `- ${question.question}: ${answer}`;
     });
     onAnswered([header, ...answerLines].join("\n"));
@@ -68,9 +75,12 @@ export function PendingQuestionsPanel({
   function pickOption(optionIndex: number): void {
     // Compose the next picks map up front: the final pick must be part of
     // the answers that get sent (state updates are async - reading
-    // `pickedOptions` here would send without the last answer).
-    const nextPicks = { ...pickedOptions, [currentStep]: optionIndex };
-    setPickedOptions(nextPicks);
+    // `pickedChoices` here would send without the last answer).
+    const nextPicks: ReadonlyMap<number, number> = new Map([
+      ...pickedChoices,
+      [currentStep, optionIndex] as const,
+    ]);
+    setPickedChoices(nextPicks);
     // One question per step: picking lands on the next question; the last
     // pick sends the whole answer set.
     if (isLastStep) {
@@ -79,6 +89,10 @@ export function PendingQuestionsPanel({
     }
     setCurrentStep(currentStep + 1);
   }
+
+  const pickedChoiceIndex = Option.fromNullishOr(
+    pickedChoices.get(currentStep)
+  );
 
   return (
     // data-align="block-start" tells the wrapping InputGroup this render owns
@@ -106,7 +120,10 @@ export function PendingQuestionsPanel({
         </p>
         <div className="mt-3 flex w-full flex-col gap-2">
           {currentQuestion.options.map((option, optionIndex) => {
-            const isPicked = pickedOptions[currentStep] === optionIndex;
+            const isPicked = Option.match(pickedChoiceIndex, {
+              onNone: () => false,
+              onSome: (pickedOptionIndex) => pickedOptionIndex === optionIndex,
+            });
             return (
               <button
                 aria-pressed={isPicked}
@@ -145,7 +162,9 @@ export function PendingQuestionsPanel({
           aria-label={`Question ${currentStep + 1} of ${questions.length}`}
         >
           {questions.map((question, questionIndex) => {
-            const isAnswered = pickedOptions[questionIndex] !== undefined;
+            const isAnswered = Option.isSome(
+              Option.fromNullishOr(pickedChoices.get(questionIndex))
+            );
             const isCurrent = questionIndex === currentStep;
             return (
               <span
