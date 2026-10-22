@@ -28,7 +28,6 @@ import {
   XIcon,
 } from "lucide-react";
 import { nanoid } from "nanoid";
-import { Children } from "react";
 import type {
   ChangeEvent,
   ChangeEventHandler,
@@ -43,6 +42,7 @@ import type {
   RefObject,
 } from "react";
 import {
+  Children,
   createContext,
   useCallback,
   useContext,
@@ -863,8 +863,7 @@ export const PromptInputButton = ({
   ...props
 }: PromptInputButtonProps) => {
   const newSize =
-    size ??
-    (Children.count(props.children) > 1 ? "sm" : "icon-sm");
+    size ?? (Children.count(props.children) > 1 ? "sm" : "icon-sm");
 
   const button = (
     <InputGroupButton
