@@ -21,6 +21,9 @@ import type {
   ThemedToken,
 } from "shiki";
 import { createHighlighter } from "shiki";
+
+/** Re-exported so app code can type Shiki languages without importing shiki directly. */
+export type { BundledLanguage };
 // Shiki uses bitflags for font styles: 1=italic, 2=bold, 4=underline
 const isItalic = (fontStyle: number | undefined) => fontStyle && fontStyle & 1;
 const isBold = (fontStyle: number | undefined) => fontStyle && fontStyle & 2;
