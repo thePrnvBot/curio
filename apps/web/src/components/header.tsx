@@ -36,6 +36,15 @@ const NAV_LINKS = [
   },
 ] as const;
 
+/** Rect of one nav option inside the mobile dropdown, used to position its
+ * gliding pills (vertical counterpart of the desktop dock's pill rects). */
+type MenuPill = {
+  readonly height: number;
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+};
+
 /**
  * Floating nav dock: a glassy pill fixed to the top of the viewport. On
  * sm+ screens the highlighted "button" is one absolutely-positioned pill
@@ -187,12 +196,68 @@ function DesktopDock() {
  * both the dock and the dropdown it opens. The dropdown therefore always
  * opens at exactly the dock's width, and its "start" alignment is shifted
  * back by the dock's 0.25rem padding so the two rectangles' top-left
- * corners coincide. The dock contains only these three fixed elements, so
- * no padding-based tricks are needed. */
+ * corners coincide.
+ *
+ * The option list reproduces the desktop dock's hover treatment so both
+ * docks animate identically: a soft translucent pill glides under the
+ * hovered option while the solid primary pill marks the current route,
+ * with the same durations and easings as the desktop version. */
 function MobileDock() {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
+  const activeIndex = Math.max(
+    0,
+    NAV_LINKS.findIndex((navLink) => navLink.match(pathname))
+  );
+
+  const [navMenuOpen, setNavMenuOpen] = useState(false);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const itemRefs = useRef<Record<string, HTMLAnchorElement | null>>({});
+  const [activePill, setActivePill] = useState<MenuPill | null>(null);
+  const [hoveredPill, setHoveredPill] = useState<MenuPill | null>(null);
+
+  // Measure the active option so the primary pill can glide to it, plus the
+  // hovered option for the softer hover pill — vertically stacked, mirroring
+  // the desktop dock's left-to-right glide. Re-measured on route changes and
+  // whenever the pointer moves to another option; only measured while the
+  // menu is open (the options are otherwise not mounted). Only this dock
+  // attaches item refs — the hidden desktop dock above sm must not
+  // overwrite them with zero-width measurements.
+  useLayoutEffect(() => {
+    if (!navMenuOpen) {
+      return;
+    }
+    function measurePills(): void {
+      const activeItem = itemRefs.current[String(activeIndex)];
+      if (activeItem !== null && activeItem !== undefined) {
+        setActivePill({
+          height: activeItem.offsetHeight,
+          left: activeItem.offsetLeft,
+          top: activeItem.offsetTop,
+          width: activeItem.offsetWidth,
+        });
+      }
+      if (hoveredIndex === null) {
+        setHoveredPill(null);
+        return;
+      }
+      const hoveredItem = itemRefs.current[String(hoveredIndex)];
+      if (hoveredItem === null || hoveredItem === undefined) {
+        setHoveredPill(null);
+        return;
+      }
+      setHoveredPill({
+        height: hoveredItem.offsetHeight,
+        left: hoveredItem.offsetLeft,
+        top: hoveredItem.offsetTop,
+        width: hoveredItem.offsetWidth,
+      });
+    }
+    measurePills();
+  }, [navMenuOpen, activeIndex, hoveredIndex]);
+
+  const showHoverPill = hoveredIndex !== null && hoveredIndex !== activeIndex;
 
   return (
     <nav
@@ -200,8 +265,11 @@ function MobileDock() {
     >
       <DropdownMenu
         onOpenChange={(open) => {
+          setNavMenuOpen(open);
           if (open) {
             playInteractionCue("toggle", { emphasis: "subtle" });
+          } else {
+            setHoveredIndex(null);
           }
         }}
       >
@@ -221,18 +289,60 @@ function MobileDock() {
           align="start"
           alignOffset={-4}
           className="bg-card"
+          onMouseLeave={() => {
+            setHoveredIndex(null);
+          }}
           style={{ width: "6.25rem", minWidth: "6.25rem" }}
         >
+          {hoveredPill === null ? null : (
+            <span
+              aria-hidden="true"
+              className={`bg-foreground/[0.06] absolute rounded-full transition-[left,top,width,height,opacity,scale] duration-200 ease-out ${
+                showHoverPill ? "scale-100 opacity-100" : "scale-90 opacity-0"
+              }`}
+              style={{
+                height: hoveredPill.height,
+                left: hoveredPill.left,
+                top: hoveredPill.top,
+                width: hoveredPill.width,
+              }}
+            />
+          )}
+          {activePill === null ? null : (
+            <span
+              aria-hidden="true"
+              className="bg-primary absolute rounded-full shadow-xs transition-[left,top,width,height,opacity] duration-300 ease-out"
+              style={{
+                height: activePill.height,
+                left: activePill.left,
+                top: activePill.top,
+                width: activePill.width,
+              }}
+            />
+          )}
           <DropdownMenuGroup>
-            {NAV_LINKS.map((navLink) => {
-              const isActive = navLink.match(pathname);
+            {NAV_LINKS.map((navLink, navLinkIndex) => {
+              const isActive = navLinkIndex === activeIndex;
               return (
                 <DropdownMenuItem
                   key={navLink.to}
                   render={
                     <Link
-                      className={isActive ? "bg-muted/60" : undefined}
+                      className={
+                        isActive
+                          // The pill layers live in this menu, so the item's
+                          // own hover background is suppressed and the
+                          // active option sits in primary fg on its pill.
+                          ? "relative z-10 text-primary-foreground! data-[highlighted]:bg-transparent!"
+                          : "relative z-10 text-muted-foreground data-[highlighted]:bg-transparent! data-[highlighted]:text-foreground"
+                      }
                       data-cue="navigate"
+                      onMouseEnter={() => {
+                        setHoveredIndex(navLinkIndex);
+                      }}
+                      ref={(anchor) => {
+                        itemRefs.current[String(navLinkIndex)] = anchor;
+                      }}
                       to={navLink.to}
                     />
                   }
