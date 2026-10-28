@@ -11,7 +11,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   AtSignIcon,
-  EyeIcon,
+  InfoIcon,
   MonitorIcon,
   MoonStarIcon,
   SunIcon,
@@ -75,7 +75,7 @@ interface ProviderFormState {
 /* ------------------------------- row layout ------------------------------- */
 
 /** Vercel-style settings row: title on the left (with the explanation hidden
- * behind a hover eye), the one control that belongs to the setting on the
+ * behind a hover ⓘ icon), the one control that belongs to the setting on the
  * right, hairline dividers between rows. No cards, no boxed panels. */
 function SettingsRow({
   children,
@@ -97,7 +97,7 @@ function SettingsRow({
                 aria-label={`About ${title}`}
                 className="focus-visible:ring-ring/60 text-muted-foreground/50 hover:text-muted-foreground inline-flex cursor-help items-center rounded-sm outline-none focus-visible:ring-2"
               >
-                <EyeIcon aria-hidden="true" className="size-3.5" />
+                <InfoIcon aria-hidden="true" className="size-3.5" />
               </TooltipTrigger>
               <TooltipContent
                 className="text-left leading-relaxed"
