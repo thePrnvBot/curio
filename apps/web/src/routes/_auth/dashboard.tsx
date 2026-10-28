@@ -1,10 +1,17 @@
 import { Badge } from "@curio/ui/components/badge";
 import { Button } from "@curio/ui/components/button";
 import { Skeleton } from "@curio/ui/components/skeleton";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@curio/ui/components/tooltip";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   AtSignIcon,
+  EyeIcon,
   MonitorIcon,
   MoonStarIcon,
   SunIcon,
@@ -67,9 +74,9 @@ interface ProviderFormState {
 
 /* ------------------------------- row layout ------------------------------- */
 
-/** Vercel-style settings row: title and explanation on the left, the one
- * control that belongs to the setting on the right, hairline dividers
- * between rows. No cards, no boxed panels. */
+/** Vercel-style settings row: title on the left (with the explanation hidden
+ * behind a hover eye), the one control that belongs to the setting on the
+ * right, hairline dividers between rows. No cards, no boxed panels. */
 function SettingsRow({
   children,
   description,
@@ -82,10 +89,25 @@ function SettingsRow({
   return (
     <div className="grid gap-3 py-6 md:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] md:gap-10">
       <div>
-        <h2 className="text-foreground text-sm font-medium">{title}</h2>
-        <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
-          {description}
-        </p>
+        <div className="flex items-center gap-1.5">
+          <h2 className="text-foreground text-sm font-medium">{title}</h2>
+          <TooltipProvider delay={120}>
+            <Tooltip>
+              <TooltipTrigger
+                aria-label={`About ${title}`}
+                className="focus-visible:ring-ring/60 text-muted-foreground/50 hover:text-muted-foreground inline-flex cursor-help items-center rounded-sm outline-none focus-visible:ring-2"
+              >
+                <EyeIcon aria-hidden="true" className="size-3.5" />
+              </TooltipTrigger>
+              <TooltipContent
+                className="text-left leading-relaxed"
+                side="top"
+              >
+                {description}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
       </div>
       <div className="min-w-0">{children}</div>
     </div>
