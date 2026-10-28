@@ -19,16 +19,19 @@ import type {
   CourseBadgeView,
   CourseSummaryView,
 } from "@/components/courses-index/section-shared";
+import { CoursesPageSkeleton } from "@/components/page-skeletons";
 import { useTRPC } from "@/utils/trpc";
 
 export const Route = createFileRoute("/_auth/courses/")({
   component: CoursesRoute,
+  pendingComponent: CoursesPageSkeleton,
 });
 
 /**
  * Courses tab. Data comes from the Director: chat-driven course creation
- * populates the list; the badge showcase fills as courses complete. Each
- * section carries its own loading skeleton and empty view.
+ * populates the list; the badge showcase fills as courses complete. While
+ * the course or badge queries are pending, the whole page renders as one
+ * layout-faithful skeleton instead of per-section placeholders.
  */
 function CoursesRoute() {
   const trpc = useTRPC();
@@ -37,6 +40,10 @@ function CoursesRoute() {
 
   const coursesLoading = coursesQuery.isPending;
   const badgesLoading = badgesQuery.isPending;
+
+  if (coursesLoading || badgesLoading) {
+    return <CoursesPageSkeleton />;
+  }
 
   const courses: CourseSummaryView[] = coursesQuery.data ?? [];
   const badges: CourseBadgeView[] = (badgesQuery.data ?? []).map((badge) => {
