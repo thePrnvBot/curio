@@ -61,29 +61,14 @@ export function LessonChunkNote({
   );
 }
 
-/** Skeleton view shown while the restored conversation loads — laid out like
- * the real Director page (chat list rail, conversation column, session
- * files rail) so nothing jumps when the actual UI replaces it. */
+/** Skeleton view shown as the pending route component — laid out like the
+ * real Director page (conversation column, session files rail) so nothing
+ * jumps when the actual UI replaces it. The chat list rail is not mimicked
+ * here: it is rendered once by the parent chat layout that wraps this
+ * skeleton, so drawing it again would duplicate the sidebar. */
 export function ChatSkeleton() {
-  const chatRows = [0, 1, 2, 3, 4, 5];
   return (
-    <div className="flex h-full">
-      {/* Chat list rail */}
-      <aside className="bg-sidebar flex h-full w-64 shrink-0 flex-col border-r">
-        <div className="flex items-center justify-between px-3 py-3">
-          <Skeleton className="h-3 w-10" />
-          <Skeleton className="size-7 rounded-md" />
-        </div>
-        <nav className="flex-1 space-y-1 overflow-hidden px-2 pb-2">
-          {chatRows.map((chatRow) => (
-            <Skeleton
-              className="h-6 w-full rounded-md"
-              key={`chat-row-${chatRow}`}
-            />
-          ))}
-        </nav>
-      </aside>
-
+    <div className="flex size-full">
       {/* Conversation column */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <div className="mx-auto w-full max-w-3xl flex-1 space-y-6 overflow-hidden px-4 py-6">
@@ -110,10 +95,10 @@ export function ChatSkeleton() {
         <div className="px-3 pt-3 pb-2">
           <Skeleton className="h-3 w-24" />
         </div>
-        <div className="flex items-center gap-1.5 px-3 pb-3">
-          {[0, 1, 2, 3].map((filterChip) => (
+        <div className="flex items-center justify-center gap-1 px-2 pb-2">
+          {[0, 1, 2, 3, 4, 5].map((filterChip) => (
             <Skeleton
-              className="size-7 rounded-md"
+              className="size-7 border"
               key={`filter-${filterChip}`}
             />
           ))}
@@ -121,12 +106,12 @@ export function ChatSkeleton() {
         <div className="flex-1 space-y-4 overflow-hidden px-3">
           <div className="space-y-2">
             <Skeleton className="h-2.5 w-16" />
-            <Skeleton className="h-8 w-full rounded-lg" />
-            <Skeleton className="h-8 w-full rounded-lg" />
+            <Skeleton className="h-8 w-full" />
+            <Skeleton className="h-8 w-full" />
           </div>
           <div className="space-y-2">
             <Skeleton className="h-2.5 w-20" />
-            <Skeleton className="h-8 w-full rounded-lg" />
+            <Skeleton className="h-8 w-full" />
           </div>
         </div>
       </aside>
