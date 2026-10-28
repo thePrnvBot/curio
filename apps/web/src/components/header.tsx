@@ -180,49 +180,26 @@ function DesktopDock() {
 }
 
 /** Compact dock below sm (640px): hamburger menu with the four links,
- * plus quick access to theme and the account menu. The dropdown opens at
- * the same width as the dock itself, so the two read as one element. */
+ * plus quick access to theme and the account menu.
+ *
+ * Every size here is a fixed constant so the layout is deterministic:
+ * hamburger 1.75rem, divider 1px, theme 1.75rem, account pill 8rem, 1px
+ * gaps, 0.25rem dock padding → 13rem total for both the dock and the
+ * dropdown it opens. The dropdown therefore always opens at exactly the
+ * dock's width, and its "start" alignment is shifted back by the dock's
+ * 0.25rem padding so the two rectangles' top-left corners coincide. */
 function MobileDock() {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
-  const navRef = useRef<HTMLElement | null>(null);
-  const [dockWidth, setDockWidth] = useState<number | null>(null);
-
-  // Measure the dock so the dropdown content can be styled to exactly the
-  // same width. Re-measured on viewport resizes, after late font/rendering
-  // shifts, and — critically — each time the menu opens: the dock's width
-  // changes when the user-menu skeleton swaps to the real name pill, so a
-  // mount-time measurement alone goes stale.
-  useLayoutEffect(() => {
-    measureDock();
-    window.addEventListener("resize", measureDock);
-    const fitTimer = window.setTimeout(measureDock, 300);
-    return () => {
-      window.removeEventListener("resize", measureDock);
-      window.clearTimeout(fitTimer);
-    };
-  }, []);
-
-  function measureDock(): void {
-    const nav = navRef.current;
-    if (nav === null) {
-      return;
-    }
-    setDockWidth(nav.offsetWidth);
-  }
 
   return (
     <nav
-      className="border-border/70 bg-card/80 pointer-events-auto flex items-center gap-1 rounded-full border p-1 pl-1.5 shadow-lg backdrop-blur-md sm:hidden"
-      ref={navRef}
+      className="border-border/70 bg-card/80 pointer-events-auto flex w-52 items-center justify-between rounded-full border p-1 shadow-lg backdrop-blur-md sm:hidden"
     >
       <DropdownMenu
         onOpenChange={(open) => {
           if (open) {
-            // Width is measured fresh on open so the dropdown always
-            // matches the dock as it is right now.
-            measureDock();
             playInteractionCue("toggle", { emphasis: "subtle" });
           }
         }}
@@ -236,8 +213,9 @@ function MobileDock() {
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="start"
+          alignOffset={-4}
           className="bg-card"
-          style={{ width: dockWidth ?? undefined }}
+          style={{ width: "13rem" }}
         >
           <DropdownMenuGroup>
             {NAV_LINKS.map((navLink) => {
@@ -260,10 +238,10 @@ function MobileDock() {
           </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
-      <div aria-hidden="true" className="bg-border/70 mx-0.5 h-6 w-px" />
-      <div className="flex items-center gap-0.5">
+      <div aria-hidden="true" className="bg-border/70 h-6 w-px" />
+      <div className="flex items-center gap-1">
         <ThemeToggle />
-        <UserMenu />
+        <UserMenu compact />
       </div>
     </nav>
   );
