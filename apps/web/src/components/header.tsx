@@ -207,7 +207,12 @@ function MobileDock() {
       >
         <DropdownMenuTrigger
           render={
-            <Button aria-label="Open navigation menu" size="icon" variant="ghost" />
+            <Button
+              aria-label="Open navigation menu"
+              className="rounded-full"
+              size="icon"
+              variant="ghost"
+            />
           }
         >
           <MenuIcon aria-hidden="true" />
