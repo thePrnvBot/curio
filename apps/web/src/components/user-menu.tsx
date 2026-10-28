@@ -12,6 +12,7 @@ import { Skeleton } from "@curio/ui/components/skeleton";
 import { Link, useNavigate } from "@tanstack/react-router";
 
 import { authClient } from "@/lib/auth-client";
+import { playInteractionCue } from "@/utils/sound";
 
 export default function UserMenu() {
   const navigate = useNavigate();
@@ -48,6 +49,7 @@ export default function UserMenu() {
           <DropdownMenuItem
             variant="destructive"
             onClick={() => {
+              playInteractionCue("close", { emphasis: "subtle" });
               authClient.signOut({
                 fetchOptions: {
                   onSuccess: () => {

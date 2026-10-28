@@ -1,5 +1,6 @@
 ﻿import { Badge } from "@curio/ui/components/badge";
 import { Skeleton } from "@curio/ui/components/skeleton";
+import { Link } from "@tanstack/react-router";
 
 import { CourseSummaryView, SectionHeader, progressPercent } from "./section-shared";
 
@@ -32,9 +33,16 @@ export function CurrentCourseSection({
           </div>
         </div>
       ) : activeCourse !== null ? (
-        <div className="bg-card rounded-xl border p-5 md:p-6">
+        <Link
+          className="hover:border-ring bg-card hover:shadow-sm group block rounded-xl border p-5 transition-shadow md:p-6"
+          data-cue="navigate"
+          params={{ courseId: activeCourse.id }}
+          to="/courses/$courseId"
+        >
           <div className="mb-4 flex items-center justify-between gap-4">
-            <span className="truncate font-medium">{activeCourse.title}</span>
+            <span className="truncate font-medium">
+              {activeCourse.title}
+            </span>
             <Badge>{`${progressPercent(activeCourse)}%`}</Badge>
           </div>
           <div className="bg-muted h-2 w-full overflow-hidden rounded-full">
@@ -43,7 +51,7 @@ export function CurrentCourseSection({
               style={{ width: `${Math.max(progressPercent(activeCourse), 2)}%` }}
             />
           </div>
-          <div className="text-muted-foreground mt-3 flex items-center justify-between gap-4 text-xs">
+          <div className="text-muted-foreground group-hover:text-foreground/80 mt-3 flex items-center justify-between gap-4 text-xs transition-colors">
             <span
               className="truncate"
             >
@@ -53,7 +61,7 @@ export function CurrentCourseSection({
               {activeCourse.status === "active" ? "In progress" : "Paused"}
             </span>
           </div>
-        </div>
+        </Link>
       ) : (
         empty
       )}

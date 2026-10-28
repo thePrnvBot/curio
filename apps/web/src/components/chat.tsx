@@ -333,6 +333,7 @@ function ChatConversation({
                     <Suggestion
                       key={suggestion}
                       onClick={() => {
+                        playInteractionCue("tap", { emphasis: "subtle" });
                         sendMessage({ text: suggestion });
                       }}
                       suggestion={suggestion}
@@ -511,6 +512,7 @@ function ChatConversation({
                         onClick={async () => {
                           try {
                             await navigator.clipboard.writeText(messageText);
+                            playInteractionCue("tap", { emphasis: "subtle" });
                             toast.success("Copied to clipboard");
                           } catch {
                             toast.error("Copy failed");
@@ -523,6 +525,7 @@ function ChatConversation({
                       <MessageAction
                         label="Regenerate"
                         onClick={() => {
+                          playInteractionCue("tap", { emphasis: "subtle" });
                           regenerate();
                         }}
                         tooltip="Regenerate"

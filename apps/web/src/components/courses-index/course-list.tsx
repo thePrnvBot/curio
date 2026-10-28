@@ -74,6 +74,7 @@ export function CourseListSection({
               >
                 <Link
                   className="hover:border-ring block"
+                  data-cue="navigate"
                   params={{ courseId: course.id }}
                   to="/courses/$courseId"
                 >
@@ -178,6 +179,7 @@ export function CardActions({
           className={cardActionButtonClass}
           disabled={isSharing || deleteCourse.isPending}
           onClick={() => {
+            playInteractionCue("tap", { emphasis: "subtle" });
             void shareCourse();
           }}
           title="Share course"

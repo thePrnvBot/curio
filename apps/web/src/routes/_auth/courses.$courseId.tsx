@@ -16,6 +16,7 @@ import {
 import { GuidedExplanationPlayer } from "@/components/course/guided-explanation-player";
 import { LessonCompletionControls } from "@/components/course/lesson-completion-controls";
 import { LessonContentView } from "@/components/course/lesson-content-views";
+import { playInteractionCue } from "@/utils/sound";
 import { useTRPC } from "@/utils/trpc";
 
 // `lesson` is kept only when it's a non-empty string; anything else (missing,
@@ -223,7 +224,26 @@ function CoursePageRoute() {
                                 ? "bg-accent text-foreground hover:bg-accent w-full rounded-md px-2 py-1.5 text-left text-sm"
                                 : "hover:bg-accent text-muted-foreground hover:text-foreground w-full rounded-md px-2 py-1.5 text-left text-sm"
                             }
-                            onClick={() => goToLesson(lesson.id)}
+                            onClick={() => {
+                              // Direction-aware cue: going up the course
+                              // reads "back", going down reads "forward".
+                              const nextIndex = flatLessons.findIndex(
+                                (flatLesson) => flatLesson.id === lesson.id
+                              );
+                              const currentIndex =
+                                selectedLessonId !== null
+                                  ? flatLessons.findIndex(
+                                      (flatLesson) =>
+                                        flatLesson.id === selectedLessonId
+                                    )
+                                  : -1;
+                              playInteractionCue("select", {
+                                direction:
+                                  currentIndex > nextIndex ? "back" : "forward",
+                                emphasis: "subtle",
+                              });
+                              goToLesson(lesson.id);
+                            }}
                             type="button"
                           >
                             <span className="flex items-center gap-2">

@@ -2,6 +2,8 @@ import { Button } from "@curio/ui/components/button";
 import { MoonIcon, SunIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 
+import { playInteractionCue } from "@/utils/sound";
+
 export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
 
@@ -12,6 +14,7 @@ export function ThemeToggle() {
       aria-label="Toggle theme"
       className="rounded-full hover:-translate-y-0.5"
       onClick={() => {
+        playInteractionCue("toggle", { emphasis: "subtle" });
         setTheme(nextTheme);
       }}
       size="icon"

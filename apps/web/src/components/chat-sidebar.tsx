@@ -1,4 +1,5 @@
 import { Button } from "@curio/ui/components/button";
+import { Skeleton } from "@curio/ui/components/skeleton";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import {
@@ -14,6 +15,7 @@ import {
   getStreamingChatsSnapshot,
   subscribeToChatActivity,
 } from "@/utils/chat-runtime";
+import { playInteractionCue } from "@/utils/sound";
 import { useTRPC } from "@/utils/trpc";
 
 export default function ChatSidebar() {
@@ -40,6 +42,7 @@ export default function ChatSidebar() {
   const deleteChatMutation = useMutation(
     trpc.chats.remove.mutationOptions({
       onSuccess: async (_data, variables) => {
+        playInteractionCue("close", { emphasis: "strong" });
         await queryClient.invalidateQueries({
           queryKey: trpc.chats.list.queryKey(),
         });
@@ -49,6 +52,7 @@ export default function ChatSidebar() {
         toast.success("Chat deleted");
       },
       onError: (error) => {
+        playInteractionCue("error", { emphasis: "subtle" });
         toast.error(error.message);
       },
     })
@@ -64,6 +68,7 @@ export default function ChatSidebar() {
         isCollapsed ? "Expand chats sidebar" : "Collapse chats sidebar"
       }
       onClick={() => {
+        playInteractionCue("toggle", { emphasis: "subtle" });
         setIsCollapsed((previous) => !previous);
       }}
       size="icon-xs"
@@ -110,6 +115,7 @@ export default function ChatSidebar() {
         <div className="flex items-center gap-1">
           <Button
             onClick={() => {
+              playInteractionCue("navigate", { emphasis: "subtle" });
               navigate({ to: "/chat" });
             }}
             size="icon-xs"
@@ -123,8 +129,13 @@ export default function ChatSidebar() {
       </div>
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-2">
         {chatsQuery.isLoading && (
-          <div className="text-muted-foreground p-2 text-xs">
-            Loading chats...
+          <div aria-busy="true" className="space-y-0.5 p-2">
+            {[0, 1, 2, 3].map((chatRow) => (
+              <Skeleton
+                className="h-6 w-full rounded-md"
+                key={`chats-loading-${chatRow}`}
+              />
+            ))}
           </div>
         )}
         {chatsQuery.data?.length === 0 && (
@@ -156,6 +167,7 @@ export default function ChatSidebar() {
                       ? "text-foreground"
                       : "text-muted-foreground"
                 }`}
+                data-cue="navigate"
                 to="/chat/$chatId"
                 params={{ chatId: chat.id }}
               >
