@@ -292,7 +292,18 @@ function MobileDock() {
           onMouseLeave={() => {
             setHoveredIndex(null);
           }}
-          style={{ width: "6.25rem", minWidth: "6.25rem" }}
+          /* Fully-rounded treatment matching the pill dock: near-capsule
+           * corner radius on a ~6.25rem-wide panel. 40px is the widest
+           * radius that keeps the gliding option pills (which sit 8px
+           * inside) clear of the rounded corners, so nothing gets
+           * clipped; a literal 9999px radius would form a dome that
+           * cuts through the top and bottom options. */
+          style={{
+            borderRadius: "40px",
+            minWidth: "6.25rem",
+            padding: "8px",
+            width: "6.25rem",
+          }}
         >
           {hoveredPill === null ? null : (
             <span
