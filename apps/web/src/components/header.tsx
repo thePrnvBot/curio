@@ -21,7 +21,7 @@ const NAV_LINKS = [
   {
     match: (pathname: string) =>
       pathname === "/dashboard" || pathname.startsWith("/dashboard/"),
-    label: "Dashboard",
+    label: "Settings",
     to: "/dashboard",
   },
 ] as const;

@@ -5,13 +5,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   AtSignIcon,
-  CpuIcon,
   MonitorIcon,
   MoonStarIcon,
   SunIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useEffect, useState, type ReactElement } from "react";
+import { useEffect, useState, type ReactElement, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { getRuntimeSettings } from "@/functions/get-runtime-settings";
@@ -32,7 +31,7 @@ import type { VoiceCatalogEntry } from "@/utils/voice/voice-worker-protocol";
 import { useTRPC } from "@/utils/trpc";
 
 export const Route = createFileRoute("/_auth/dashboard")({
-  component: DashboardRoute,
+  component: SettingsRoute,
 });
 
 const THEME_OPTIONS: Array<{
@@ -66,6 +65,118 @@ interface ProviderFormState {
   provider: ProviderChoice;
 }
 
+/* ------------------------------- row layout ------------------------------- */
+
+/** Vercel-style settings row: title and explanation on the left, the one
+ * control that belongs to the setting on the right, hairline dividers
+ * between rows. No cards, no boxed panels. */
+function SettingsRow({
+  children,
+  description,
+  title,
+}: {
+  children: ReactNode;
+  description: string;
+  title: string;
+}): ReactElement {
+  return (
+    <div className="grid gap-3 py-6 md:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] md:gap-10">
+      <div>
+        <h2 className="text-foreground text-sm font-medium">{title}</h2>
+        <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
+          {description}
+        </p>
+      </div>
+      <div className="min-w-0">{children}</div>
+    </div>
+  );
+}
+
+/* ----------------------------- shared controls ---------------------------- */
+
+interface SegmentedOption {
+  readonly icon?: ReactElement;
+  readonly label: string;
+  readonly value: string;
+}
+
+/** Flat segmented control: a single hairline border with divider separators.
+ * The active segment is tinted; nothing is raised or boxed. */
+function SegmentedControl({
+  ariaLabel,
+  onSelect,
+  options,
+  value,
+}: {
+  ariaLabel: string;
+  onSelect: (value: string) => void;
+  options: readonly SegmentedOption[];
+  value: string;
+}): ReactElement {
+  return (
+    <div
+      aria-label={ariaLabel}
+      className="border-border inline-flex h-9 items-stretch divide-x overflow-hidden rounded-lg border"
+      role="group"
+    >
+      {options.map((option) => {
+        const isActive = value === option.value;
+        return (
+          <button
+            aria-pressed={isActive}
+            className={`flex min-w-0 items-center justify-center gap-1.5 whitespace-nowrap px-3 text-xs font-medium transition-colors ${
+              isActive
+                ? "bg-muted text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+            key={option.value}
+            onClick={() => {
+              onSelect(option.value);
+            }}
+            type="button"
+          >
+            {option.icon}
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Minimal switch: track + knob, no surrounding chrome. */
+function SettingSwitch({
+  ariaLabel,
+  checked,
+  disabled,
+  onToggle,
+}: {
+  ariaLabel: string;
+  checked: boolean;
+  disabled?: boolean;
+  onToggle: () => void;
+}): ReactElement {
+  return (
+    <button
+      aria-checked={checked}
+      aria-label={ariaLabel}
+      className={`focus-visible:ring-ring/40 relative h-5 w-9 shrink-0 rounded-full outline-none focus-visible:ring-2 transition-colors ${
+        checked ? "bg-primary" : "bg-input"
+      } ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+      disabled={disabled}
+      onClick={onToggle}
+      role="switch"
+      type="button"
+    >
+      <span
+        className={`absolute top-0.5 left-0.5 rounded-full bg-background shadow-xs transition-transform ${
+          checked ? "translate-x-4" : "translate-x-0"
+        } size-4`}
+      />
+    </button>
+  );
+}
+
 function ProviderField(props: {
   label: string;
   onChange: (value: string) => void;
@@ -79,7 +190,7 @@ function ProviderField(props: {
         {props.label}
       </span>
       <input
-        className="bg-input/20 placeholder:text-muted-foreground/60 text-foreground w-full rounded-lg border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        className="bg-input/20 placeholder:text-muted-foreground/60 text-foreground h-9 w-full rounded-lg border px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         onChange={(inputEvent) => props.onChange(inputEvent.target.value)}
         placeholder={props.placeholder}
         type={props.type ?? "text"}
@@ -89,13 +200,7 @@ function ProviderField(props: {
   );
 }
 
-function SectionHeader({ children }: { children: string }): ReactElement {
-  return (
-    <h2 className="text-muted-foreground mb-3 text-sm font-medium tracking-widest uppercase">
-      {children}
-    </h2>
-  );
-}
+/* --------------------------- model provider row --------------------------- */
 
 function ModelProviderSection(): ReactElement {
   const trpc = useTRPC();
@@ -181,14 +286,7 @@ function ModelProviderSection(): ReactElement {
 
   if (settingsQuery.isPending) {
     return (
-      <div className="space-y-3">
-        <div className="flex gap-2">
-          <Skeleton className="h-9 w-40" />
-          <Skeleton className="h-9 w-52" />
-        </div>
-        <Skeleton className="h-10 w-full" />
-        <Skeleton className="h-10 w-full" />
-      </div>
+      <Skeleton className="h-9 w-full max-w-72" />
     );
   }
 
@@ -221,62 +319,40 @@ function ModelProviderSection(): ReactElement {
 
   return (
     <div className="space-y-4">
-      {/* Active model - the single most important fact on this card. */}
-      <div className="border-primary/15 bg-primary/5 flex items-center gap-3.5 rounded-xl border p-4">
-        <span className="bg-primary/10 text-primary flex size-11 shrink-0 items-center justify-center rounded-full">
-          <CpuIcon className="size-5" aria-hidden="true" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-muted-foreground text-[11px] font-medium tracking-widest uppercase">
-            Active model
-          </p>
-          <p className="truncate text-base font-semibold tracking-tight">
-            {activeModel}
-          </p>
-          <p className="text-muted-foreground truncate text-xs">
-            {activeProviderLabel}
-            {activeHost !== null ? ` · ${activeHost}` : ""}
-          </p>
+      {/* Current state: model + origin, stated plainly - no banner. */}
+      <div>
+        <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+          Active model
+        </p>
+        <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-4">
+          <div className="flex min-w-0 items-baseline gap-3">
+            <p className="truncate text-sm font-semibold tracking-tight">
+              {activeModel}
+            </p>
+            <p className="text-muted-foreground truncate text-xs">
+              {activeProviderLabel}
+              {activeHost !== null ? ` · ${activeHost}` : ""}
+            </p>
+          </div>
+          {isUsingSavedProvider ? (
+            <Badge>Custom</Badge>
+          ) : (
+            <Badge variant="outline">Default</Badge>
+          )}
         </div>
-        {isUsingSavedProvider ? (
-          <Badge>Custom</Badge>
-        ) : (
-          <Badge variant="outline">Default</Badge>
-        )}
       </div>
 
-      <div
-        className="bg-muted/50 inline-flex items-center rounded-lg border p-1"
-        role="group"
-        aria-label="Provider"
-      >
-        {(
-          [
-            { label: "OpenAI", value: "openai" },
-            { label: "OpenAI-compatible", value: "openai-compatible" },
-          ] as const
-        ).map((option) => {
-          const isActive = form.provider === option.value;
-          return (
-            <button
-              aria-pressed={isActive}
-              className={
-                isActive
-                  ? "bg-background border-border text-foreground flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium shadow-xs"
-                  : "text-muted-foreground hover:text-foreground flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-              }
-              key={option.value}
-              onClick={() => {
-                setForm({ ...form, provider: option.value });
-              }}
-              type="button"
-            >
-              <CpuIcon className="size-3.5" aria-hidden="true" />
-              {option.label}
-            </button>
-          );
-        })}
-      </div>
+      <SegmentedControl
+        ariaLabel="Provider"
+        onSelect={(value) => {
+          setForm({ ...form, provider: value as ProviderChoice });
+        }}
+        options={[
+          { label: "OpenAI", value: "openai" },
+          { label: "OpenAI-compatible", value: "openai-compatible" },
+        ]}
+        value={form.provider}
+      />
 
       <div className="grid gap-3 sm:grid-cols-2">
         {form.provider === "openai-compatible" ? (
@@ -315,7 +391,7 @@ function ModelProviderSection(): ReactElement {
         />
       </div>
 
-      <div className="flex items-center justify-end gap-2 pt-1">
+      <div className="flex items-center justify-end gap-2">
         {settingsQuery.data !== null ? (
           <Button
             disabled={isBusy}
@@ -342,7 +418,9 @@ function ModelProviderSection(): ReactElement {
   );
 }
 
-function DashboardRoute(): ReactElement {
+/* ------------------------------ page - rows ------------------------------- */
+
+function SettingsRoute(): ReactElement {
   const { session } = Route.useRouteContext();
   const { theme, setTheme } = useTheme();
   const [isHydrated, setIsHydrated] = useState(false);
@@ -372,6 +450,7 @@ function DashboardRoute(): ReactElement {
     if (isSoundEnabled) {
       disableInteractionSounds();
       setIsSoundEnabled(false);
+      playInteractionCue("toggle", { emphasis: "subtle" });
       return;
     }
     setIsSoundBusy(true);
@@ -392,106 +471,104 @@ function DashboardRoute(): ReactElement {
 
   return (
     <div className="mx-auto w-full max-w-3xl shrink-0 px-6 pt-8 pb-20">
-      <div className="mb-8">
-        <header>
-          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        </header>
-      </div>
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+        <p className="text-muted-foreground mt-1 text-sm">
+          Your account, appearance, narration voice and model provider.
+        </p>
+      </header>
 
-      <div className="space-y-7">
+      <div className="mt-6 divide-y divide-border">
         {/* Profile */}
-        <div>
-          <SectionHeader>Profile</SectionHeader>
+        <SettingsRow
+          description="Your account details, used to greet you and attribute your work."
+          title="Profile"
+        >
           <div className="flex items-center gap-3">
-            <span className="bg-primary/10 text-primary flex size-10 items-center justify-center rounded-full text-sm font-semibold">
+            <span className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold">
               {(session?.user.name ?? "C").slice(0, 1).toUpperCase()}
             </span>
-            <div>
-              <p className="font-medium">{session?.user.name}</p>
-              <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
-                <AtSignIcon className="size-3" aria-hidden="true" />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">
+                {session?.user.name}
+              </p>
+              <p className="text-muted-foreground flex items-center gap-1.5 truncate text-xs">
+                <AtSignIcon className="size-3 shrink-0" aria-hidden="true" />
                 {session?.user.email}
               </p>
             </div>
           </div>
-        </div>
+        </SettingsRow>
 
         {/* Appearance */}
-        <div>
-          <SectionHeader>Appearance</SectionHeader>
-          {!isHydrated ? <Skeleton className="h-9 w-64" /> : null}
+        <SettingsRow
+          description="Choose whether Curio follows your device theme or stays light or dark here."
+          title="Appearance"
+        >
+          {!isHydrated ? <Skeleton className="h-9 w-56" /> : null}
           {isHydrated ? (
-            <div
-              className="bg-muted/50 inline-flex items-center rounded-lg border p-1"
-              role="group"
-              aria-label="Theme"
-            >
-              {THEME_OPTIONS.map((option) => {
-                // The segmented control reflects the stored preference (the
-                // persisted choice), not the resolved appearance - otherwise
-                // picking System while the OS is dark would highlight two
-                // chips at once.
-                const storedTheme = theme ?? "system";
-                const isActive = storedTheme === option.theme;
-                return (
-                  <button
-                    aria-pressed={isActive}
-                    className={
-                      isActive
-                        ? "bg-background border-border text-foreground flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium shadow-xs"
-                        : "text-muted-foreground hover:text-foreground flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-                    }
-                    key={option.theme}
-                    onClick={() => {
-                      playInteractionCue("select", {
-                        emphasis: "subtle",
-                      });
-                      setTheme(option.theme);
-                    }}
-                    type="button"
-                  >
-                    {option.icon}
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
+            <SegmentedControl
+              ariaLabel="Theme"
+              onSelect={(value) => {
+                playInteractionCue("select", { emphasis: "subtle" });
+                setTheme(value as "dark" | "light" | "system");
+              }}
+              options={THEME_OPTIONS.map((themeOption) => ({
+                icon: themeOption.icon,
+                label: themeOption.label,
+                value: themeOption.theme,
+              }))}
+              // The control reflects the stored preference (the persisted
+              // choice), not the resolved appearance - otherwise picking
+              // System while the OS is dark would highlight two chips.
+              value={theme ?? "system"}
+            />
           ) : null}
+        </SettingsRow>
+
+        {/* Interaction sounds */}
+        <SettingsRow
+          description="Play soft audio cues when you act across Curio. No audio plays until the browser allows it."
+          title="Interaction sounds"
+        >
+          {!isHydrated ? <Skeleton className="h-5 w-9" /> : null}
           {isHydrated ? (
-            <div className="mt-3 flex items-center gap-3">
-              <span className="text-sm font-medium">Interaction sounds</span>
-              <Button
-                disabled={isSoundBusy}
-                onClick={() => {
-                  void toggleSound();
-                }}
-                size="sm"
-                variant="outline"
-              >
-                {isSoundEnabled ? "Sound on" : "Sound off"}
-              </Button>
-            </div>
+            <SettingSwitch
+              ariaLabel="Interaction sounds"
+              checked={isSoundEnabled}
+              disabled={isSoundBusy}
+              onToggle={() => {
+                void toggleSound();
+              }}
+            />
           ) : null}
+        </SettingsRow>
+
+        {/* Lesson narration */}
+        <SettingsRow
+          description="Read guided lessons aloud. Pick the voice and the playback speed."
+          title="Lesson narration"
+        >
+          {!isHydrated ? <Skeleton className="h-9 w-full" /> : null}
           {isHydrated ? (
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <span className="text-sm font-medium">Lesson narration</span>
-              <Button
-                onClick={() => {
+            <div className="flex flex-wrap items-center gap-3">
+              <SettingSwitch
+                ariaLabel="Lesson narration"
+                checked={narrationPreferences.enabled}
+                onToggle={() => {
+                  playInteractionCue("toggle", { emphasis: "subtle" });
                   saveVoicePreferences({
                     ...narrationPreferences,
                     enabled: !narrationPreferences.enabled,
                   });
                 }}
-                size="sm"
-                variant="outline"
-              >
-                {narrationPreferences.enabled ? "Voice on" : "Voice off"}
-              </Button>
+              />
               <select
                 aria-label="Narration voice"
-                className="border-border bg-background h-8 max-w-52 rounded-md border px-2 text-xs"
+                className="border-border bg-background h-9 max-w-52 rounded-lg border px-2.5 text-sm outline-none disabled:opacity-60"
                 disabled={!narrationPreferences.enabled}
                 onChange={(changeEvent) => {
+                  playInteractionCue("select", { emphasis: "subtle" });
                   saveVoicePreferences({
                     ...narrationPreferences,
                     voiceId: changeEvent.target.value,
@@ -541,9 +618,10 @@ function DashboardRoute(): ReactElement {
               </select>
               <select
                 aria-label="Narration speed"
-                className="border-border bg-background h-8 rounded-md border px-2 text-xs"
+                className="border-border bg-background h-9 rounded-lg border px-2.5 text-sm"
                 disabled={!narrationPreferences.enabled}
                 onChange={(changeEvent) => {
+                  playInteractionCue("select", { emphasis: "subtle" });
                   saveVoicePreferences({
                     ...narrationPreferences,
                     speed: Number(changeEvent.target.value),
@@ -559,13 +637,15 @@ function DashboardRoute(): ReactElement {
               </select>
             </div>
           ) : null}
-        </div>
+        </SettingsRow>
 
         {/* Model provider */}
-        <div>
-          <SectionHeader>Model provider</SectionHeader>
+        <SettingsRow
+          description="The AI model behind the Director. Use OpenAI directly, or point at any OpenAI-compatible endpoint."
+          title="Model provider"
+        >
           <ModelProviderSection />
-        </div>
+        </SettingsRow>
       </div>
     </div>
   );
