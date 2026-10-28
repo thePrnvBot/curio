@@ -189,16 +189,12 @@ function MobileDock() {
   const navRef = useRef<HTMLElement | null>(null);
   const [dockWidth, setDockWidth] = useState<number | null>(null);
 
-  // Measure the dock once mounted (and on resizes/late font loads) so the
-  // dropdown content can be styled to exactly the same width.
+  // Measure the dock so the dropdown content can be styled to exactly the
+  // same width. Re-measured on viewport resizes, after late font/rendering
+  // shifts, and — critically — each time the menu opens: the dock's width
+  // changes when the user-menu skeleton swaps to the real name pill, so a
+  // mount-time measurement alone goes stale.
   useLayoutEffect(() => {
-    function measureDock(): void {
-      const nav = navRef.current;
-      if (nav === null) {
-        return;
-      }
-      setDockWidth(nav.offsetWidth);
-    }
     measureDock();
     window.addEventListener("resize", measureDock);
     const fitTimer = window.setTimeout(measureDock, 300);
@@ -208,6 +204,14 @@ function MobileDock() {
     };
   }, []);
 
+  function measureDock(): void {
+    const nav = navRef.current;
+    if (nav === null) {
+      return;
+    }
+    setDockWidth(nav.offsetWidth);
+  }
+
   return (
     <nav
       className="border-border/70 bg-card/80 pointer-events-auto flex items-center gap-1 rounded-full border p-1 pl-1.5 shadow-lg backdrop-blur-md sm:hidden"
@@ -216,6 +220,9 @@ function MobileDock() {
       <DropdownMenu
         onOpenChange={(open) => {
           if (open) {
+            // Width is measured fresh on open so the dropdown always
+            // matches the dock as it is right now.
+            measureDock();
             playInteractionCue("toggle", { emphasis: "subtle" });
           }
         }}
