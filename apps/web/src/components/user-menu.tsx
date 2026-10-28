@@ -37,7 +37,10 @@ export default function UserMenu() {
       <DropdownMenuTrigger
         render={
           <Button
-            className="hover:-translate-y-0.5 max-w-28 truncate rounded-full hover:shadow-sm"
+            // min-w-32 mirrors the dropdown's own min-w-32 floor: the popup
+            // sizes to the trigger anchor, so pinning the pill at the same
+            // floor keeps pill and menu exactly the same width.
+            className="hover:-translate-y-0.5 min-w-32 max-w-40 truncate rounded-full hover:shadow-sm"
             variant="outline"
           />
         }

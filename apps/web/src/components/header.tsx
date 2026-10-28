@@ -180,14 +180,39 @@ function DesktopDock() {
 }
 
 /** Compact dock below sm (640px): hamburger menu with the four links,
- * plus quick access to theme and the account menu. */
+ * plus quick access to theme and the account menu. The dropdown opens at
+ * the same width as the dock itself, so the two read as one element. */
 function MobileDock() {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
+  const navRef = useRef<HTMLElement | null>(null);
+  const [dockWidth, setDockWidth] = useState<number | null>(null);
+
+  // Measure the dock once mounted (and on resizes/late font loads) so the
+  // dropdown content can be styled to exactly the same width.
+  useLayoutEffect(() => {
+    function measureDock(): void {
+      const nav = navRef.current;
+      if (nav === null) {
+        return;
+      }
+      setDockWidth(nav.offsetWidth);
+    }
+    measureDock();
+    window.addEventListener("resize", measureDock);
+    const fitTimer = window.setTimeout(measureDock, 300);
+    return () => {
+      window.removeEventListener("resize", measureDock);
+      window.clearTimeout(fitTimer);
+    };
+  }, []);
 
   return (
-    <nav className="border-border/70 bg-card/80 pointer-events-auto flex items-center gap-1 rounded-full border p-1 pl-1.5 shadow-lg backdrop-blur-md sm:hidden">
+    <nav
+      className="border-border/70 bg-card/80 pointer-events-auto flex items-center gap-1 rounded-full border p-1 pl-1.5 shadow-lg backdrop-blur-md sm:hidden"
+      ref={navRef}
+    >
       <DropdownMenu
         onOpenChange={(open) => {
           if (open) {
@@ -202,7 +227,11 @@ function MobileDock() {
         >
           <MenuIcon aria-hidden="true" />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="bg-card min-w-40">
+        <DropdownMenuContent
+          align="start"
+          className="bg-card"
+          style={{ width: dockWidth ?? undefined }}
+        >
           <DropdownMenuGroup>
             {NAV_LINKS.map((navLink) => {
               const isActive = navLink.match(pathname);
