@@ -182,12 +182,13 @@ function DesktopDock() {
 /** Compact dock below sm (640px): hamburger menu with the four links,
  * plus quick access to theme and the account menu.
  *
- * Every size here is a fixed constant so the layout is deterministic:
- * hamburger 1.75rem, divider 1px, theme 1.75rem, account pill 8rem, 1px
- * gaps, 0.25rem dock padding → 13rem total for both the dock and the
- * dropdown it opens. The dropdown therefore always opens at exactly the
- * dock's width, and its "start" alignment is shifted back by the dock's
- * 0.25rem padding so the two rectangles' top-left corners coincide. */
+ * Every element is a fixed 1.75rem box (hamburger, theme toggle, account
+ * circle) with 1px gaps inside 0.25rem dock padding → exactly 6.25rem for
+ * both the dock and the dropdown it opens. The dropdown therefore always
+ * opens at exactly the dock's width, and its "start" alignment is shifted
+ * back by the dock's 0.25rem padding so the two rectangles' top-left
+ * corners coincide. The dock contains only these three fixed elements, so
+ * no padding-based tricks are needed. */
 function MobileDock() {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
@@ -195,7 +196,7 @@ function MobileDock() {
 
   return (
     <nav
-      className="border-border/70 bg-card/80 pointer-events-auto flex w-52 items-center justify-between rounded-full border p-1 shadow-lg backdrop-blur-md sm:hidden"
+      className="border-border/70 bg-card/80 pointer-events-auto flex w-[6.25rem] items-center gap-1 rounded-full border p-1 shadow-lg backdrop-blur-md sm:hidden"
     >
       <DropdownMenu
         onOpenChange={(open) => {
@@ -215,7 +216,7 @@ function MobileDock() {
           align="start"
           alignOffset={-4}
           className="bg-card"
-          style={{ width: "13rem" }}
+          style={{ width: "6.25rem" }}
         >
           <DropdownMenuGroup>
             {NAV_LINKS.map((navLink) => {
@@ -238,7 +239,6 @@ function MobileDock() {
           </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
-      <div aria-hidden="true" className="bg-border/70 h-6 w-px" />
       <div className="flex items-center gap-1">
         <ThemeToggle />
         <UserMenu compact />

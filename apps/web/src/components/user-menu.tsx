@@ -9,7 +9,9 @@ import {
   DropdownMenuTrigger,
 } from "@curio/ui/components/dropdown-menu";
 import { Skeleton } from "@curio/ui/components/skeleton";
+import { LogInIcon } from "lucide-react";
 import { Link, useNavigate } from "@tanstack/react-router";
+import type { ReactElement } from "react";
 
 import { authClient } from "@/lib/auth-client";
 import { playInteractionCue } from "@/utils/sound";
@@ -17,22 +19,37 @@ import { playInteractionCue } from "@/utils/sound";
 export default function UserMenu({
   compact = false,
 }: {
-  /** Mobile-dock variant: a fixed-width pill so the dock's total width is
-   * constant and the pending skeleton never shifts the layout. */
+  /** Mobile-dock variant: a fixed-diameter circular trigger so the dock's
+   * total width is constant, and the pending skeleton never shifts it. */
   compact?: boolean;
 }) {
-  const navigate = useNavigate();
   const { data: session, isPending } = authClient.useSession();
 
   if (isPending) {
     return compact ? (
-      <Skeleton className="h-7 w-32 rounded-full" />
+      <Skeleton className="size-7 rounded-full" />
     ) : (
       <Skeleton className="h-7 w-24 rounded-full" />
     );
   }
 
   if (!session) {
+    if (compact) {
+      // Fixed footprint (size-7) like every other dock element, so the
+      // dock's width stays deterministic regardless of auth state.
+      return (
+        <Link to="/login">
+          <Button
+            aria-label="Sign in"
+            className="rounded-full"
+            size="icon"
+            variant="outline"
+          >
+            <LogInIcon aria-hidden="true" />
+          </Button>
+        </Link>
+      );
+    }
     return (
       <Link to="/login">
         <Button variant="outline" className="rounded-full">
@@ -42,50 +59,77 @@ export default function UserMenu({
     );
   }
 
-  const triggerClassName = compact
-    // Fixed width: the dropdown panel matches the trigger anchor, so the
-    // pill must hold a constant width for the dock/menu relationship to
-    // stay pixel-stable. w-32 (8rem) is exactly the account dropdown's own
-    // 8rem floor, so that menu and its pill are the same width too.
-    ? "w-32"
-    : "hover:-translate-y-0.5 min-w-32 max-w-40";
+  if (compact) {
+    // A 1.75rem circle with the name's initial: same fixed footprint as the
+    // dock's other elements. Its dropdown is anchored to the circle and
+    // keeps the library's own min-width floor for the email content.
+    const initial = (session.user.name ?? "C").slice(0, 1).toUpperCase();
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              aria-label="Open account menu"
+              className="rounded-full font-semibold"
+              size="icon"
+              variant="outline"
+            >
+              {initial}
+            </Button>
+          }
+        />
+        <AccountMenuContent session={session} />
+      </DropdownMenu>
+    );
+  }
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
           <Button
-            className={`truncate rounded-full hover:shadow-sm ${triggerClassName}`}
+            className="hover:-translate-y-0.5 min-w-32 max-w-40 truncate rounded-full hover:shadow-sm"
             variant="outline"
           />
         }
       >
         {session.user.name}
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="bg-card">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>My Account</DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem>{session.user.email}</DropdownMenuItem>
-          <DropdownMenuItem
-            variant="destructive"
-            onClick={() => {
-              playInteractionCue("close", { emphasis: "subtle" });
-              authClient.signOut({
-                fetchOptions: {
-                  onSuccess: () => {
-                    navigate({
-                      to: "/",
-                    });
-                  },
-                },
-              });
-            }}
-          >
-            Sign Out
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-      </DropdownMenuContent>
+      <AccountMenuContent session={session} />
     </DropdownMenu>
+  );
+}
+
+function AccountMenuContent({
+  session,
+}: {
+  session: { user: { email: string } };
+}): ReactElement {
+  const navigate = useNavigate();
+  return (
+    <DropdownMenuContent className="bg-card">
+      <DropdownMenuGroup>
+        <DropdownMenuLabel>My Account</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem>{session.user.email}</DropdownMenuItem>
+        <DropdownMenuItem
+          variant="destructive"
+          onClick={() => {
+            playInteractionCue("close", { emphasis: "subtle" });
+            authClient.signOut({
+              fetchOptions: {
+                onSuccess: () => {
+                  navigate({
+                    to: "/",
+                  });
+                },
+              },
+            });
+          }}
+        >
+          Sign Out
+        </DropdownMenuItem>
+      </DropdownMenuGroup>
+    </DropdownMenuContent>
   );
 }
