@@ -216,7 +216,7 @@ function MobileDock() {
           align="start"
           alignOffset={-4}
           className="bg-card"
-          style={{ width: "6.25rem" }}
+          style={{ width: "6.25rem", minWidth: "6.25rem" }}
         >
           <DropdownMenuGroup>
             {NAV_LINKS.map((navLink) => {
