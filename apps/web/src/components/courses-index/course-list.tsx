@@ -1,4 +1,4 @@
-﻿import { Badge } from "@curio/ui/components/badge";
+import { Badge } from "@curio/ui/components/badge";
 import { Skeleton } from "@curio/ui/components/skeleton";
 import {
   useMutation,

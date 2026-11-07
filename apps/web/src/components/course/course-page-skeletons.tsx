@@ -1,4 +1,4 @@
-﻿import { Skeleton } from "@curio/ui/components/skeleton";
+import { Skeleton } from "@curio/ui/components/skeleton";
 import { Link } from "@tanstack/react-router";
 import type { ReactElement } from "react";
 

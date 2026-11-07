@@ -1,4 +1,4 @@
-﻿import { Button } from "@curio/ui/components/button";
+import { Button } from "@curio/ui/components/button";
 import {
   MessageResponse,
 } from "@curio/ui/components/ai-elements/message";

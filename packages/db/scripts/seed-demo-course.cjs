@@ -1,6 +1,7 @@
 const { Client } = require("pg");
 
-async function main() {  const client = new Client({ connectionString: process.env.DATABASE_URL });
+async function main() {
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
 
   const userRows = await client.query(

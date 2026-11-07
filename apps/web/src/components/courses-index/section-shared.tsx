@@ -1,4 +1,4 @@
-﻿/** Shared types and header for the Courses tab sections. */
+/** Shared types and header for the Courses tab sections. */
 
 
 

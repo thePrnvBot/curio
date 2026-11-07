@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Interaction-independent narration voice preferences and the persistent
  * utterance cache. Utterances are keyed by (provider, voice, speed, sha256 of
  * the sentence text), so a sentence synthesized once replays instantly on

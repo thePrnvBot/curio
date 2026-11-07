@@ -1,3 +1,7 @@
+import { tool } from "ai";
+import type { ToolSet } from "ai";
+import { z } from "zod";
+
 /**
  * The AI SDK 7 ask_user tool: pausing the chat to quiz the user on their
  * preferences in the Director.
@@ -10,10 +14,6 @@
  * sanitization in the chat API route).
  */
 export const ASK_USER_TOOL_NAME = "ask_user";
-
-import { tool } from "ai";
-import type { ToolSet } from "ai";
-import { z } from "zod";
 
 export interface AskUserQuestionInput {
   readonly question: string;

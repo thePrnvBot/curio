@@ -1,4 +1,4 @@
-﻿import type { Database } from "@curio/db";
+import type { Database } from "@curio/db";
 import {
   course,
   courseBadge,

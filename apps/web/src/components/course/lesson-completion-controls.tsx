@@ -1,4 +1,4 @@
-﻿import { Badge } from "@curio/ui/components/badge";
+import { Badge } from "@curio/ui/components/badge";
 import { Button } from "@curio/ui/components/button";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronRightIcon } from "lucide-react";

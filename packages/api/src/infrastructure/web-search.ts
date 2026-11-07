@@ -1,4 +1,4 @@
-﻿import { Data, Effect } from "effect";
+import { Data, Effect } from "effect";
 
 import { describeCause } from "../domain/cause-description";
 

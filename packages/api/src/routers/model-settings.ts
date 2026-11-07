@@ -30,15 +30,28 @@ const modelSettingsErrorMapping = Effect.catchTags({
   ModelOperationFailed: respondInternalError,
 });
 
+/**
+ * The stored API key is a bearer credential: it is only ever needed on the
+ * server to build the model. Never send it back over the wire, even to the
+ * user who owns it - a stolen session (or any XSS) must not reveal it.
+ */
+function withoutApiKey<T extends { readonly apiKey: string | null }>(
+  settings: T
+): Omit<T, "apiKey"> & { readonly hasApiKey: boolean } {
+  const { apiKey, ...publicSettings } = settings;
+  return { ...publicSettings, hasApiKey: apiKey !== null && apiKey !== "" };
+}
+
 export function createModelSettingsRouter(runtime: CurioRuntime) {
   return router({
     get: protectedProcedure.query(({ ctx }) =>
       runtime.runPromise(
         Effect.gen(function* getModelSettings() {
           const modelSettingsStore = yield* ModelSettingsStore;
-          return yield* modelSettingsStore.getUserModelSettings(
+          const settings = yield* modelSettingsStore.getUserModelSettings(
             ctx.session.user.id
           );
+          return settings === null ? null : withoutApiKey(settings);
         }).pipe(modelSettingsErrorMapping)
       )
     ),
@@ -49,7 +62,7 @@ export function createModelSettingsRouter(runtime: CurioRuntime) {
         runtime.runPromise(
           Effect.gen(function* setModelSettings() {
             const modelSettingsStore = yield* ModelSettingsStore;
-            return yield* modelSettingsStore.setUserModelSettings({
+            const settings = yield* modelSettingsStore.setUserModelSettings({
               apiKey: input.apiKey ?? null,
               baseUrl:
                 input.provider === "openai-compatible"
@@ -59,6 +72,7 @@ export function createModelSettingsRouter(runtime: CurioRuntime) {
               provider: input.provider,
               userId: ctx.session.user.id,
             });
+            return withoutApiKey(settings);
           }).pipe(modelSettingsErrorMapping)
         )
       ),

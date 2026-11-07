@@ -17,6 +17,10 @@ interface UserModelSettingsRow {
   readonly provider: string;
 }
 
+function normalizeProvider(provider: string): UserModelProvider {
+  return provider === "openai" ? "openai" : "openai-compatible";
+}
+
 function rowToRecord(row: UserModelSettingsRow): UserModelSettingsRecord {
   return {
     apiKey: row.apiKey,
@@ -24,10 +28,6 @@ function rowToRecord(row: UserModelSettingsRow): UserModelSettingsRecord {
     model: row.model,
     provider: normalizeProvider(row.provider),
   };
-}
-
-function normalizeProvider(provider: string): UserModelProvider {
-  return provider === "openai" ? "openai" : "openai-compatible";
 }
 
 function withModelError(operation: string) {

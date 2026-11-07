@@ -1,4 +1,6 @@
-﻿import { spawn, type ChildProcess } from "node:child_process";
+import { spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
+import { isIP } from "node:net";
 
 import { Data, Effect } from "effect";
 
@@ -36,6 +38,77 @@ const OBSCURA_DEFAULT_TIMEOUT_MS = 45_000;
 const WEB_READ_MAX_CHARS = 12_000;
 const MAX_SPAWN_OUTPUT_CHARS = 1_000_000;
 
+/**
+ * Blocks every non-public IPv4 range the reader must never reach: "this"
+ * network, private, loopback, carrier-grade NAT, link-local (including cloud
+ * metadata at 169.254.169.254), benchmarking, multicast and reserved space.
+ */
+function isBlockedIpv4(hostname: string): boolean {
+  const octets = hostname.split(".").map(Number);
+  if (
+    octets.length !== 4 ||
+    octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)
+  ) {
+    return false;
+  }
+  const [first, second] = octets as [number, number, number, number];
+  return (
+    first === 0 ||
+    first === 10 ||
+    first === 127 ||
+    (first === 100 && second >= 64 && second <= 127) ||
+    (first === 169 && second === 254) ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168) ||
+    (first === 198 && (second === 18 || second === 19)) ||
+    first >= 224
+  );
+}
+
+/**
+ * IPv6 is intentionally blocked conservatively: loopback, unspecified,
+ * unique-local, link-local, and IPv4-mapped addresses (which could smuggle a
+ * private IPv4 through `::ffff:`).
+ */
+function isBlockedIpv6(hostname: string): boolean {
+  const address = hostname.replaceAll(/^\[|\]$/gu, "").toLowerCase();
+  if (address === "::" || address === "::1") {
+    return true;
+  }
+  // Unique-local fc00::/7.
+  if (address.startsWith("fc") || address.startsWith("fd")) {
+    return true;
+  }
+  // Link-local fe80::/10.
+  const firstGroup = Number.parseInt(address.split(":")[0] ?? "", 16);
+  if (Number.isInteger(firstGroup) && firstGroup >= 65_152 && firstGroup <= 65_215) {
+    return true;
+  }
+  if (address.startsWith("::ffff:")) {
+    const mapped = address.slice("::ffff:".length);
+    if (mapped.includes(".")) {
+      return isBlockedIpv4(mapped);
+    }
+    // Hex-mapped form (e.g. ::ffff:7f00:1) -> rebuild the dotted quad.
+    const groups = mapped.split(":");
+    if (groups.length === 2) {
+      const high = Number.parseInt(groups[0] ?? "", 16);
+      const low = Number.parseInt(groups[1] ?? "", 16);
+      if (Number.isInteger(high) && Number.isInteger(low)) {
+        const firstOctet = Math.floor(high / 256);
+        const secondOctet = high % 256;
+        const thirdOctet = Math.floor(low / 256);
+        const fourthOctet = low % 256;
+        return isBlockedIpv4(
+          `${firstOctet}.${secondOctet}.${thirdOctet}.${fourthOctet}`
+        );
+      }
+    }
+    return true;
+  }
+  return false;
+}
+
 function isPublicHttpUrl(candidate: string): boolean {
   let parsed: URL;
   try {
@@ -46,19 +119,35 @@ function isPublicHttpUrl(candidate: string): boolean {
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     return false;
   }
-  const hostname = parsed.hostname.toLowerCase();
+  const hostname = parsed.hostname
+    .toLowerCase()
+    .replaceAll(/^\[|\]$/gu, "")
+    .replace(/\.$/u, "");
+
   if (
     hostname === "localhost" ||
+    hostname.endsWith(".localhost") ||
     hostname.endsWith(".local") ||
     hostname.endsWith(".internal") ||
-    /^127\./.test(hostname) ||
-    /^10\./.test(hostname) ||
-    /^192\.168\./.test(hostname) ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
-    hostname === "::1" ||
+    hostname.endsWith(".home.arpa") ||
     hostname === "0.0.0.0"
   ) {
     return false;
+  }
+
+  // Decimal/hex/octal IPv4 spellings (e.g. 2130706433, 0x7f000001) are
+  // interpreted by some resolvers as loopback; refuse anything that is not a
+  // normal dotted quad or a real hostname.
+  if (/^\d+$/u.test(hostname) || /^0x[\da-f]+$/iu.test(hostname)) {
+    return false;
+  }
+
+  const ipVersion = isIP(hostname);
+  if (ipVersion === 4) {
+    return !isBlockedIpv4(hostname);
+  }
+  if (ipVersion === 6) {
+    return !isBlockedIpv6(hostname);
   }
   return true;
 }

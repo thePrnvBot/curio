@@ -4,8 +4,8 @@ import type { Effect } from "effect";
 import type {
   ChatTitleCompositionRequest,
   ChatTitleCompositionResult,
+  TitleCompositionFailed,
 } from "../domain/chat-title";
-import type { TitleCompositionFailed } from "../domain/chat-title";
 
 export interface ChatTitleComposerContract {
   /**

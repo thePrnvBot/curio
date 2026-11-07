@@ -29,9 +29,6 @@ local.db-*
 *~
 .DS_Store
 
-# Vendored repositories (read-only reference material for coding agents)
-repos/
-
 # Logs
 logs
 .evlog/

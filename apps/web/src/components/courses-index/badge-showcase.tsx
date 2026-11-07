@@ -1,4 +1,4 @@
-﻿import { Skeleton } from "@curio/ui/components/skeleton";
+import { Skeleton } from "@curio/ui/components/skeleton";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { PencilIcon, TrophyIcon, XIcon } from "lucide-react";
 import { useState, type ReactNode } from "react";
