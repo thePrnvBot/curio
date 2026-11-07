@@ -5,6 +5,7 @@ import type { CurioRuntime } from "../composition/runtime";
 import {
   lessonContentSchema,
   lessonKindSchema,
+  toStoredLessonContent,
 } from "../domain/lesson-content";
 import { CourseStore } from "../services/course-store";
 import { LessonCompletion } from "../services/lesson-completion";
@@ -175,7 +176,10 @@ export function createCoursesRouter(runtime: CurioRuntime) {
               description: input.description ?? "",
               sections: input.sections.map((section) => ({
                 lessons: section.lessons.map((lesson) => ({
-                  content: lesson.content ?? undefined,
+                  content:
+                    lesson.content === undefined
+                      ? undefined
+                      : toStoredLessonContent(lesson.content),
                   kind: lesson.kind,
                   title: lesson.title,
                 })),

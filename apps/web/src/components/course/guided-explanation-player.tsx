@@ -438,6 +438,14 @@ export function GuidedExplanationPlayer(props: {
 
   const currentStep = steps[stepIndex];
 
+  // Consecutive code steps sharing a source keep the same stage mounted, so
+  // the narration spotlight and floating cursor animate between steps instead
+  // of the whole excerpt re-entering. Prose steps always re-enter per step.
+  const currentStageKey =
+    currentStep.visual.kind === "code"
+      ? `code:${currentStep.visual.language ?? ""}:${currentStep.visual.source}`
+      : `step:${stepIndex}`;
+
   // Long narrations are broken into sub-lesson modules - contiguous step
   // groups kept short enough that the transcript never grows tall enough to
   // need heavy wheel scrolling. Playback crosses module boundaries on its
@@ -620,7 +628,7 @@ export function GuidedExplanationPlayer(props: {
               custom={stepDirection}
               exit="exit"
               initial="enter"
-              key={stepIndex}
+              key={currentStageKey}
               variants={
                 prefersReducedMotion ? reducedStageVariants : stageVariants
               }
@@ -638,10 +646,12 @@ export function GuidedExplanationPlayer(props: {
               <div className="p-5">
                 {currentStep.visual.kind === "code" ? (
                   <GuidedCodeStage
+                    focus={currentStep.visual.focus}
                     language={guidedCodeLanguageHint(
                       currentStep.visual.language,
                       currentStep.visual.source
                     )}
+                    narration={currentStep.narration}
                     source={currentStep.visual.source}
                   />
                 ) : (

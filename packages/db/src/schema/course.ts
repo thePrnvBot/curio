@@ -47,6 +47,25 @@ export interface RecapLessonContent {
   readonly questions: readonly RecapExercise[];
 }
 
+/** Where the floating cursor should point inside a code visual.
+ * Columns and lines are 1-based, matching how authors count code. */
+export interface GuidedExplanationCursor {
+  /** 1-based line; defaults to the first focused line. */
+  readonly line?: number;
+  /** 1-based character column. */
+  readonly column?: number;
+  /** Number of characters highlighted below the cursor. */
+  readonly length?: number;
+}
+
+/** Effect-Institute-style code focus: the focused lines stay bright while the
+ * rest of the excerpt dims, and the floating cursor travels to this range. */
+export interface GuidedExplanationFocus {
+  /** 1-based line numbers the narration is currently explaining. */
+  readonly lines: readonly number[];
+  readonly cursor?: GuidedExplanationCursor;
+}
+
 /** Narrated, step-sequenced explanation rendered one step per view.
  * Steps reveal code or prose in sync with the narration script. */
 export interface GuidedExplanationVisual {
@@ -54,6 +73,8 @@ export interface GuidedExplanationVisual {
   /** Syntax hint for code visuals. */
   readonly language?: string;
   readonly source: string;
+  /** Code-only spotlight for the line(s) and token being narrated. */
+  readonly focus?: GuidedExplanationFocus;
 }
 
 export interface GuidedExplanationStep {

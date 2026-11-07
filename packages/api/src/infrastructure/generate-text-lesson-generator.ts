@@ -29,7 +29,16 @@ const LESSON_GENERATOR_INSTRUCTIONS =
   "- guided-explanation: 4-8 sequential steps. Each step is one narration beat " +
   "(one or two spoken sentences) plus a visual that ADDS information beyond the " +
   "narration: a SHORT code excerpt, a formula, or compact notes/a table. Never " +
-  "repeat the narration text in the visual; code excerpts stay under 80 lines.\n\n" +
+  "repeat the narration text in the visual; code excerpts stay under 80 lines. " +
+  "For every code visual set visual.focus.lines to the 1-based line number(s) the " +
+  "narration is currently explaining - usually exactly one line - and set " +
+  "visual.focus.cursor to the exact identifier/expression being discussed (1-based " +
+  "line and column, plus its character length). Reuse the same source across " +
+  "consecutive steps that continue one walkthrough so the highlight and floating " +
+  "cursor travel across the panel instead of the panel remounting. When every step " +
+  "reuses one excerpt, set code { language, source } ONCE at the lesson level and " +
+  "omit visual.source from the steps; each step then only carries narration and " +
+  "focus. That keeps the payload small without changing what is rendered.\n\n" +
   "For animation HTML, embed this exact baseline stylesheet inside <head> and " +
   `build only on its variables:
   

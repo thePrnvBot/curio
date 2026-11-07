@@ -138,7 +138,11 @@ export function createCourseTool(chunks: {
     [CREATE_LESSON_TOOL_NAME]: tool({
       description:
         "Step 2 of course creation: fill ONE lesson (by id from create_course) " +
-        "with its finished content. Call once per lesson, in order.",
+        "with its finished content. Call once per lesson, in order. " +
+        "Pass content as a JSON object, never as a stringified JSON blob. " +
+        "For a guided-explanation that walks one code excerpt, set content.code " +
+        "once and omit visual.source from each step; steps then only need " +
+        "narration and visual.focus, which keeps the tool call small.",
       execute: async (input) => chunks.createScopedCourseLesson(input),
       inputSchema: z.object({
         content: lessonContentSchema,
