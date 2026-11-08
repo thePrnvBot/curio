@@ -1,10 +1,3 @@
-import { Badge } from "@curio/ui/components/badge";
-import { Skeleton } from "@curio/ui/components/skeleton";
-import {
-  useMutation,
-  useQueryClient,
-} from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,99 +9,22 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@curio/ui/components/alert-dialog";
+import { Badge } from "@curio/ui/components/badge";
+import { Skeleton } from "@curio/ui/components/skeleton";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { LoaderIcon, Share2Icon, Trash2Icon } from "lucide-react";
-import { useState, type ReactElement } from "react";
+import { useState } from "react";
+import type { ReactElement } from "react";
 import { toast } from "sonner";
 
 import { playInteractionCue } from "@/utils/sound";
 import { useTRPC } from "@/utils/trpc";
-import {
-  CourseSummaryView,
-  progressPercent,
-  SectionHeader,
-} from "./section-shared";
+
+import { progressPercent, SectionHeader } from "./section-shared";
+import type { CourseSummaryView } from "./section-shared";
+
 const COURSE_CARD_SKELETONS = [0, 1, 2];
-
-
-
-export function CourseListSection({
-  courses,
-  empty,
-  loading,
-}: {
-  courses: readonly CourseSummaryView[];
-  empty: React.ReactNode;
-  loading: boolean;
-}) {
-  return (
-    <section>
-      <SectionHeader>Your courses</SectionHeader>
-      {loading ? (
-        <div className="grid gap-5 sm:grid-cols-2">
-          {COURSE_CARD_SKELETONS.map((index) => (
-            <div
-              key={index}
-              className="bg-card overflow-hidden rounded-xl border"
-            >
-              <div className="relative aspect-video w-full overflow-hidden">
-                <Skeleton className="absolute inset-0 rounded-none" />
-                <div className="from-background via-background/70 absolute inset-x-0 bottom-0 bg-gradient-to-t to-transparent p-4 pt-12">
-                  <Skeleton className="mb-2 h-4 w-3/4" />
-                  <Skeleton className="h-3 w-1/2" />
-                  <div className="mt-3 flex items-center gap-2">
-                    <Skeleton className="h-5 w-14 rounded-full" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : courses.length > 0 ? (
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {courses.map((course, courseIndex) => {
-            const isActive = course.status === "active" && courseIndex === 0;
-            return (
-              <div
-                className="group relative w-full overflow-hidden rounded-xl border"
-                key={course.id}
-              >
-                <Link
-                  className="hover:border-ring block"
-                  data-cue="navigate"
-                  params={{ courseId: course.id }}
-                  to="/courses/$courseId"
-                >
-                  <div className="bg-muted/50 relative aspect-video w-full">
-                    <span className="text-muted-foreground/40 absolute inset-0 flex items-center justify-center text-xs tracking-widest uppercase">
-                      Video slot
-                    </span>
-                    <div className="from-background via-background/70 absolute inset-x-0 bottom-0 bg-gradient-to-t to-transparent p-4 pt-12">
-                      <div className="flex items-center justify-between gap-2 pr-20">
-                        <span className="truncate font-medium">
-                          {course.title}
-                        </span>
-                        {isActive ? <Badge>In progress</Badge> : null}
-                      </div>
-                      <p className="text-muted-foreground mt-1 text-sm">
-                        {`${course.completedLessonCount} of ${course.lessonCount} lessons · ${progressPercent(course)}%`}
-                      </p>
-                      <div className="mt-3 flex items-center gap-2">
-                        <Badge variant="outline">{`${course.lessonCount} lessons`}</Badge>
-                      </div>
-                    </div>
-                  </div>
-                </Link>
-                <CardActions courseId={course.id} title={course.title} />
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        empty
-      )}
-    </section>
-  );
-}
 
 const cardActionButtonClass =
   "bg-background/85 text-muted-foreground hover:text-foreground hover:bg-background rounded-lg border p-2 shadow-xs transition-colors";
@@ -133,13 +49,13 @@ export function CardActions({
     const shareUrl = `${window.location.origin}/courses/${courseId}`;
     // Native share sheet where available (mobile); clipboard otherwise.
     if (typeof navigator.share === "function") {
+      setIsSharing(true);
       try {
-        setIsSharing(true);
         await navigator.share({ title, url: shareUrl });
+        setIsSharing(false);
         return;
       } catch {
-        // User dismissed the sheet - fall through to copying the link.
-      } finally {
+        // User dismissed the sheet - reset state and fall through to copying.
         setIsSharing(false);
       }
     }
@@ -171,6 +87,10 @@ export function CardActions({
     );
   }
 
+  const deleteButtonClass = deleteCourse.isPending
+    ? `${cardActionButtonClass} text-destructive`
+    : `${cardActionButtonClass} hover:border-destructive/40 hover:text-destructive`;
+
   return (
     <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
       <div className="absolute right-3 bottom-3 z-10 flex items-center gap-1.5">
@@ -189,15 +109,11 @@ export function CardActions({
         </button>
         <AlertDialogTrigger
           aria-label={`Delete ${title}`}
-          className={
-            deleteCourse.isPending
-              ? `${cardActionButtonClass} text-destructive`
-              : `${cardActionButtonClass} hover:border-destructive/40 hover:text-destructive`
-          }
+          className={deleteButtonClass}
           title="Delete course"
         >
           {deleteCourse.isPending ? (
-            <LoaderIcon className="animate-spin size-4" aria-hidden="true" />
+            <LoaderIcon className="size-4 animate-spin" aria-hidden="true" />
           ) : (
             <Trash2Icon className="size-4" aria-hidden="true" />
           )}
@@ -232,5 +148,103 @@ export function CardActions({
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+  );
+}
+
+function CourseCard({
+  course,
+  courseIndex,
+}: {
+  course: CourseSummaryView;
+  courseIndex: number;
+}) {
+  const isActive = course.status === "active" && courseIndex === 0;
+  return (
+    <div
+      className="group relative w-full overflow-hidden rounded-xl border"
+      key={course.id}
+    >
+      <Link
+        className="hover:border-ring block"
+        data-cue="navigate"
+        params={{ courseId: course.id }}
+        to="/courses/$courseId"
+      >
+        <div className="bg-muted/50 relative aspect-video w-full">
+          <span className="text-muted-foreground/40 absolute inset-0 flex items-center justify-center text-xs tracking-widest uppercase">
+            Video slot
+          </span>
+          <div className="from-background via-background/70 absolute inset-x-0 bottom-0 bg-gradient-to-t to-transparent p-4 pt-12">
+            <div className="flex items-center justify-between gap-2 pr-20">
+              <span className="truncate font-medium">{course.title}</span>
+              {isActive ? <Badge>In progress</Badge> : null}
+            </div>
+            <p className="text-muted-foreground mt-1 text-sm">
+              {`${course.completedLessonCount} of ${course.lessonCount} lessons · ${progressPercent(course)}%`}
+            </p>
+            <div className="mt-3 flex items-center gap-2">
+              <Badge variant="outline">{`${course.lessonCount} lessons`}</Badge>
+            </div>
+          </div>
+        </div>
+      </Link>
+      <CardActions courseId={course.id} title={course.title} />
+    </div>
+  );
+}
+
+function CourseListSkeleton() {
+  return (
+    <div className="grid gap-5 sm:grid-cols-2">
+      {COURSE_CARD_SKELETONS.map((index) => (
+        <div
+          key={index}
+          className="bg-card overflow-hidden rounded-xl border"
+        >
+          <div className="relative aspect-video w-full overflow-hidden">
+            <Skeleton className="absolute inset-0 rounded-none" />
+            <div className="from-background via-background/70 absolute inset-x-0 bottom-0 bg-gradient-to-t to-transparent p-4 pt-12">
+              <Skeleton className="mb-2 h-4 w-3/4" />
+              <Skeleton className="h-3 w-1/2" />
+              <div className="mt-3 flex items-center gap-2">
+                <Skeleton className="h-5 w-14 rounded-full" />
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function CourseListSection({
+  courses,
+  empty,
+  loading,
+}: {
+  courses: readonly CourseSummaryView[];
+  empty: React.ReactNode;
+  loading: boolean;
+}) {
+  let content: React.ReactNode;
+  if (loading) {
+    content = <CourseListSkeleton />;
+  } else if (courses.length > 0) {
+    content = (
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        {courses.map((course, courseIndex) => (
+          <CourseCard key={course.id} course={course} courseIndex={courseIndex} />
+        ))}
+      </div>
+    );
+  } else {
+    content = empty;
+  }
+
+  return (
+    <section>
+      <SectionHeader>Your courses</SectionHeader>
+      {content}
+    </section>
   );
 }
