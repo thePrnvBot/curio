@@ -3,16 +3,8 @@ import type { ToolSet } from "ai";
 import { Effect } from "effect";
 import { z } from "zod";
 
-import {
-  ObscuraUnavailable,
-  webPageReadEffect,
-  WEB_READ_TOOL_NAME,
-} from "./web-reader";
-import {
-  DdgBlocked,
-  duckDuckGoSearchEffect,
-  WEB_SEARCH_TOOL_NAME,
-} from "./web-search";
+import { webPageReadEffect, WEB_READ_TOOL_NAME } from "./web-reader";
+import { duckDuckGoSearchEffect, WEB_SEARCH_TOOL_NAME } from "./web-search";
 
 export {
   WEB_SEARCH_TOOL_NAME,
@@ -39,25 +31,25 @@ export function createWebTools(): ToolSet {
       description:
         "Search the public web with DuckDuckGo. Returns titles, urls and short snippets ordered by relevance. " +
         "Use it when up-to-date or external facts matter, then use web_read on the most promising urls.",
-      execute: async ({ freshness = "any", limit = 5, query }) => {
-        const attempt = await Effect.runPromise(
-          Effect.result(duckDuckGoSearchEffect(query, limit, freshness))
-        );
-        if (attempt._tag === "Failure") {
-          return attempt.failure instanceof DdgBlocked
-            ? {
-                blocked: true,
-                note: "DuckDuckGo temporarily blocked the request. Answer from your own knowledge or try again shortly with a different phrasing.",
-                results: [],
-              }
-            : {
-                blocked: false,
-                error: attempt.failure.message,
-                results: [],
-              };
-        }
-        return attempt.success;
-      },
+      execute: async ({ freshness = "any", limit = 5, query }) =>
+        await Effect.runPromise(
+          duckDuckGoSearchEffect(query, limit, freshness).pipe(
+            Effect.catchTags({
+              DdgBlocked: () =>
+                Effect.succeed({
+                  blocked: true,
+                  note: "DuckDuckGo temporarily blocked the request. Answer from your own knowledge or try again shortly with a different phrasing.",
+                  results: [],
+                }),
+              WebSearchFailed: (failure) =>
+                Effect.succeed({
+                  blocked: false,
+                  error: failure.message,
+                  results: [],
+                }),
+            })
+          )
+        ),
       inputSchema: z.object({
         freshness: z
           .enum(["any", "day", "week", "month", "year"])
@@ -83,19 +75,20 @@ export function createWebTools(): ToolSet {
       description:
         "Read a public web page and get its main content as clean markdown, rendered with a real browser engine (JavaScript included). " +
         "Use it on urls returned by web_search; never guess urls.",
-      execute: async ({ selector, url }) => {
-        const attempt = await Effect.runPromise(
-          Effect.result(webPageReadEffect(url, selector))
-        );
-        if (attempt._tag === "Success") {
-          return attempt.success;
-        }
-        const installHint =
-          attempt.failure instanceof ObscuraUnavailable
-            ? OBSCURA_INSTALL_HINT
-            : "";
-        return { error: `${attempt.failure.message}${installHint}`, url };
-      },
+      execute: async ({ selector, url }) =>
+        await Effect.runPromise(
+          webPageReadEffect(url, selector).pipe(
+            Effect.catchTags({
+              ObscuraUnavailable: (failure) =>
+                Effect.succeed({
+                  error: `${failure.message}${OBSCURA_INSTALL_HINT}`,
+                  url,
+                }),
+              WebReadFailed: (failure) =>
+                Effect.succeed({ error: failure.message, url }),
+            })
+          )
+        ),
       inputSchema: z.object({
         selector: z
           .string()
