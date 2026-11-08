@@ -361,34 +361,35 @@ export const CodeBlockContent = ({
   language: BundledLanguage;
   showLineNumbers?: boolean;
 }) => {
-  const rawTokens = useMemo(() => createRawTokens(code), [code]);
+  const safeCode = code ?? "";
+  const rawTokens = useMemo(() => createRawTokens(safeCode), [safeCode]);
 
   const syncTokens = useMemo(
-    () => highlightCode(code, language) ?? rawTokens,
-    [code, language, rawTokens]
+    () => highlightCode(safeCode, language) ?? rawTokens,
+    [safeCode, language, rawTokens]
   );
 
   const [asyncTokens, setAsyncTokens] = useState<TokenizedCode | null>(null);
-  const asyncKeyRef = useRef({ code, language });
+  const asyncKeyRef = useRef({ code: safeCode, language });
 
   // Synchronously invalidate stale async tokens during render (upstream AI
   // Elements pattern); reading the ref here keeps the invalidation exact.
   // oxlint-disable-next-line react(refs)
   if (
     // oxlint-disable-next-line react(refs)
-    asyncKeyRef.current.code !== code ||
+    asyncKeyRef.current.code !== safeCode ||
     // oxlint-disable-next-line react(refs)
     asyncKeyRef.current.language !== language
   ) {
     // oxlint-disable-next-line react(refs)
-    asyncKeyRef.current = { code, language };
+    asyncKeyRef.current = { code: safeCode, language };
     setAsyncTokens(null);
   }
 
   useEffect(() => {
     let cancelled = false;
 
-    highlightCode(code, language, (result) => {
+    highlightCode(safeCode, language, (result) => {
       if (!cancelled) {
         setAsyncTokens(result);
       }
@@ -397,7 +398,7 @@ export const CodeBlockContent = ({
     return () => {
       cancelled = true;
     };
-  }, [code, language]);
+  }, [safeCode, language]);
 
   const tokenized = asyncTokens ?? syncTokens;
 

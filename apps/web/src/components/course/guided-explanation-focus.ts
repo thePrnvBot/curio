@@ -202,12 +202,12 @@ function normalizeCursor(inputs: CursorInputs): GuidedCodeCursorTarget | null {
       Math.max(lineText.length, 1)
     );
     const range =
-      focusCursor.length !== undefined
-        ? { column, length: Math.max(Math.round(focusCursor.length), 1) }
-        : (wordAtColumn(lineText, column) ?? {
+      focusCursor.length === undefined
+        ? (wordAtColumn(lineText, column) ?? {
             column,
             length: 1,
-          });
+          })
+        : { column, length: Math.max(Math.round(focusCursor.length), 1) };
     return {
       column: range.column,
       length: range.length,
@@ -221,9 +221,9 @@ function normalizeCursor(inputs: CursorInputs): GuidedCodeCursorTarget | null {
   return {
     column: firstWord.column,
     length:
-      focusCursor?.length !== undefined
-        ? Math.max(Math.round(focusCursor.length), 1)
-        : firstWord.length,
+      focusCursor?.length === undefined
+        ? firstWord.length
+        : Math.max(Math.round(focusCursor.length), 1),
     line,
   };
 }
@@ -250,10 +250,10 @@ export function resolveGuidedCodeFocus(options: {
     return null;
   }
   const sourceLines = codeLinesOf(options.source);
-  const focus = options.focus;
+  const { focus } = options;
   if (focus !== undefined) {
     const sourceLineCount = sourceLines.length;
-    const lines = Array.from(new Set(focus.lines)).filter(
+    const lines = [...new Set(focus.lines)].filter(
       (line) => line >= 1 && line <= sourceLineCount
     );
     if (lines.length > 0) {
@@ -266,7 +266,7 @@ export function resolveGuidedCodeFocus(options: {
         cursorFromNarration(options.narration, sourceLines);
       return {
         cursor: cursor === null ? null : cursor,
-        lines: lines.sort((left, right) => left - right),
+        lines: lines.toSorted((left, right) => left - right),
       };
     }
   }

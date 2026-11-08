@@ -471,11 +471,13 @@ export function GuidedExplanationPlayer(props: {
     ) ?? transcriptModules[0];
   const activeModuleIndex = transcriptModules.indexOf(activeModule);
 
-  // Module-ahead voice prefetch: fill the cache for the sub-lesson module the
-  // reader is on, plus exactly one module ahead — crossing a boundary never
-  // waits on the WASM engine, and nothing beyond that is generated. Cache
-  // hits resolve instantly; the narration loop shares the in-flight promises,
-  // so playback rides this synthesis instead of racing it.
+  // Whole-lesson voice prefetch: as soon as a guided lesson opens (voice on),
+  // every narration line in the lesson is queued for background synthesis —
+  // the active module first, then the next, then the remainder in reading
+  // order. Playback rides the shared in-flight promises, so the long queue
+  // never blocks the line being spoken, and pages are ready before they are
+  // reached. Cached lines replay instantly, so re-ordering the queue after a
+  // module change only re-probes the cache for completed work.
   useEffect(() => {
     if (!voicePreferences.enabled) {
       return;
@@ -489,13 +491,12 @@ export function GuidedExplanationPlayer(props: {
             sentence.stepIndex < module.endStep
         )
         .map((sentence) => sentence.text);
-    const nextModule = transcriptModules[activeModuleIndex + 1];
-    const moduleQueue: string[] = [
-      ...sentencesForModule(activeModule),
-      ...(nextModule === undefined ? [] : sentencesForModule(nextModule)),
-    ];
+    const sentenceQueue: string[] = [
+      activeModule,
+      ...transcriptModules.filter((module) => module !== activeModule),
+    ].flatMap(sentencesForModule);
     void (async () => {
-      for (const sentenceText of moduleQueue) {
+      for (const sentenceText of sentenceQueue) {
         if (cancelled) {
           return;
         }
@@ -511,7 +512,6 @@ export function GuidedExplanationPlayer(props: {
     };
   }, [
     activeModule,
-    activeModuleIndex,
     transcriptModules,
     transcriptSentences,
     voicePreferences,
@@ -607,7 +607,7 @@ export function GuidedExplanationPlayer(props: {
   const stageAndControls = (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex flex-1 flex-col overflow-y-auto p-6">
-        <div className="mx-auto w-full max-w-3xl">
+        <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col">
           {props.content.intro !== undefined && stepIndex === 0 && (
             <div
               className="text-muted-foreground mt-2 mb-4 text-sm leading-relaxed"
@@ -624,7 +624,7 @@ export function GuidedExplanationPlayer(props: {
           <AnimatePresence custom={stepDirection} initial={false} mode="wait">
             <motion.div
               animate="center"
-              className="bg-card rounded-xl border"
+              className="flex flex-1 flex-col"
               custom={stepDirection}
               exit="exit"
               initial="enter"
@@ -633,17 +633,17 @@ export function GuidedExplanationPlayer(props: {
                 prefersReducedMotion ? reducedStageVariants : stageVariants
               }
             >
-              <div className="flex items-center justify-between border-b px-4 py-2.5">
-                <p className="text-muted-foreground text-xs font-medium tracking-widest uppercase">
+              <div className="flex items-center justify-between py-2.5">
+                <p className="text-muted-foreground text-xs font-medium">
                   {currentStep.visual.kind === "code"
                     ? (currentStep.visual.language ?? "Code")
                     : "Notes"}
                 </p>
                 <p className="text-muted-foreground text-xs tabular-nums">
-                  {`Step ${stepIndex + 1} of ${steps.length}`}
+                  {`${stepIndex + 1}/${steps.length}`}
                 </p>
               </div>
-              <div className="p-5">
+              <div className="flex flex-1 flex-col">
                 {currentStep.visual.kind === "code" ? (
                   <GuidedCodeStage
                     focus={currentStep.visual.focus}

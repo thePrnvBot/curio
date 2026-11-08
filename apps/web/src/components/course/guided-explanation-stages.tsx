@@ -462,9 +462,9 @@ export function GuidedCodeStage(props: {
       };
 
   return (
-    <div className="overflow-x-auto">
+    <div className="flex flex-1 items-center justify-center overflow-x-auto">
       <pre
-        className="relative w-max min-w-full rounded-sm p-4 pb-10 font-mono text-sm leading-6 dark:!bg-[var(--shiki-dark-bg)] dark:!text-[var(--shiki-dark)]"
+        className="relative w-max rounded-sm p-4 pb-10 font-mono text-lg leading-8 dark:!bg-[var(--shiki-dark-bg)] dark:!text-[var(--shiki-dark)]"
         ref={codeRef}
         style={
           highlighted === null
