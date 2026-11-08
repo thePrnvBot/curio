@@ -63,8 +63,11 @@ const LANGUAGE_LOADERS = {
 const THEME_LOADERS = {
   "github-dark": () =>
     import("shiki/themes/github-dark.mjs").then((module) => module.default),
-  "github-light": () =>
-    import("shiki/themes/github-light.mjs").then((module) => module.default),
+  // Light mode uses One Light instead of GitHub Light: its darker foreground,
+  // blue-purple keywords and green strings keep contrast readable against the
+  // app's off-white surfaces instead of washing out.
+  "one-light": () =>
+    import("shiki/themes/one-light.mjs").then((module) => module.default),
 } satisfies Record<string, ThemeInput>;
 
 type SupportedLanguage = keyof typeof LANGUAGE_LOADERS;
@@ -238,7 +241,7 @@ const getHighlighter = (
 
   const highlighterPromise = createCurioHighlighter({
     langs: [language],
-    themes: ["github-light", "github-dark"],
+    themes: ["one-light", "github-dark"],
   });
 
   highlighterCache.set(language, highlighterPromise);
@@ -295,7 +298,7 @@ export const highlightCode = (
         lang: supportedLanguage,
         themes: {
           dark: "github-dark",
-          light: "github-light",
+          light: "one-light",
         },
       });
 

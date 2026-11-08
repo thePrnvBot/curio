@@ -16,7 +16,7 @@ import {
 export const streamdownCodePlugin: CodeHighlighterPlugin = {
   getSupportedLanguages: () =>
     [...HIGHLIGHT_LANGUAGES] as unknown as BundledLanguage[],
-  getThemes: () => ["github-light", "github-dark"],
+  getThemes: () => ["one-light", "github-dark"],
   highlight: (options, callback) =>
     highlightCode(
       options.code,
