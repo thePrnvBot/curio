@@ -13,5 +13,24 @@ export default defineConfig({
   resolve: {
     tsconfigPaths: true,
   },
+  build: {
+    // The WebGPU landing shader and the local voice worker are intentionally
+    // large lazy chunks; the warning budget applies to eager route code.
+    chunkSizeWarningLimit: 3000,
+    rollupOptions: {
+      onwarn(warning, warn) {
+        // kokoro-js ships an IIFE bundle that reads `import.meta`; the
+        // worker build replaces it with an empty object by design. Plugin
+        // timings are informational and noisy for this known slow transform.
+        if (
+          warning.code === "EMPTY_IMPORT_META" ||
+          warning.code === "PLUGIN_TIMINGS"
+        ) {
+          return;
+        }
+        warn(warning);
+      },
+    },
+  },
   plugins: [tailwindcss(), tanstackStart(), viteReact()],
 });

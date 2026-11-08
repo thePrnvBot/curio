@@ -1,14 +1,8 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import {
-  Share2,
-  Sparkles,
-  TrendingUp,
-  Trophy,
-} from "lucide-react";
+import { Share2, Sparkles, TrendingUp, Trophy } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { MeshGradient, Shader } from "shaders/react";
 
 import AnimatedContent from "@/components/animated-content";
 import CountUp from "@/components/count-up";
@@ -26,6 +20,7 @@ import SplitText from "@/components/split-text";
 import StarBorder from "@/components/star-border";
 
 const Aurora = lazy(() => import("@/components/aurora"));
+const LandingShader = lazy(() => import("@/components/landing-shader"));
 
 const FEATURES: {
   icon: LucideIcon;
@@ -63,23 +58,6 @@ const STATS: { value: number; suffix: string; label: string }[] = [
   { value: 24, suffix: "/7", label: "recaps waiting when you return" },
   { value: 100, suffix: "%", label: "taught at your own pace" },
 ];
-
-const SHADER_STOPS = {
-  dark: [
-    { color: "#020617", position: 0 },
-    { color: "#042f2e", position: 0.25 },
-    { color: "#115e59", position: 0.5 },
-    { color: "#0d9488", position: 0.72 },
-    { color: "#34d399", position: 1 },
-  ],
-  light: [
-    { color: "#ecfdf5", position: 0 },
-    { color: "#ccfbf1", position: 0.3 },
-    { color: "#99f6e4", position: 0.55 },
-    { color: "#5eead4", position: 0.78 },
-    { color: "#34d399", position: 1 },
-  ],
-};
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -157,19 +135,9 @@ function HomeComponent() {
             }}
             aria-hidden="true"
           >
-            <Shader className="absolute inset-0" disableTelemetry>
-              <MeshGradient
-                stops={isLight ? SHADER_STOPS.light : SHADER_STOPS.dark}
-                colorSpace="oklab"
-                count={4}
-                smoothness={3.4}
-                variation={0.2}
-                swirl={0.1}
-                drift={0.3}
-                speed={0.25}
-                seed={7}
-              />
-            </Shader>
+            <Suspense fallback={null}>
+              <LandingShader isLight={isLight} />
+            </Suspense>
           </div>
         )}
         {/* Scrim: flat tint + fades. No backdrop-blur - it repaints the canvas
@@ -232,7 +200,7 @@ function HomeComponent() {
               Start learning
             </StarBorder>
             <Link
-              to="/dashboard"
+              to="/courses"
               className="hover:bg-accent hover:text-accent-foreground rounded-lg px-6 py-3 text-sm font-medium transition-colors"
             >
               Track your progress
@@ -363,8 +331,8 @@ function HomeComponent() {
             </Link>
           </div>
           <p className="text-muted-foreground mt-16 text-xs">
-            © {CURRENT_YEAR} Curio · Built with TanStack Start,
-            Vercel AI SDK and React Bits
+            © {CURRENT_YEAR} Curio · Built with TanStack Start, Vercel AI SDK
+            and React Bits
           </p>
         </AnimatedContent>
       </section>

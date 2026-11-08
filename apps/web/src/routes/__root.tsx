@@ -14,12 +14,13 @@ import type { ThemeProviderProps } from "next-themes";
 import { ThemeProvider } from "next-themes";
 import { useEffect } from "react";
 
+import { bindInteractionSounds } from "@/utils/sound";
+
 import Header from "../components/header";
 import {
   RouteErrorComponent,
   RouteNotFoundComponent,
 } from "../components/route-fallbacks";
-import { bindInteractionSounds } from "@/utils/sound";
 
 import appCss from "../index.css?url";
 
@@ -63,8 +64,8 @@ const themeProviderProps: ThemeProviderProps = {
 };
 
 function RootDocument() {
-  // Once for the document: delegated data-cuelume-* bindings + the saved
-  // sound preference. bindInteractionSounds returns the unbind cleanup.
+  // Once for the document: delegated data-cue bindings + the saved sound
+  // preference. bindInteractionSounds returns the unbind cleanup.
   useEffect(() => bindInteractionSounds(), []);
 
   return (
@@ -83,8 +84,15 @@ function RootDocument() {
             </main>
           </div>
           <Toaster richColors />
-          <TanStackRouterDevtools position="bottom-left" />
-          <ReactQueryDevtools position="bottom" buttonPosition="bottom-right" />
+          {import.meta.env.DEV && (
+            <>
+              <TanStackRouterDevtools position="bottom-left" />
+              <ReactQueryDevtools
+                buttonPosition="bottom-right"
+                position="bottom"
+              />
+            </>
+          )}
         </ThemeProvider>
         <Scripts />
       </body>
