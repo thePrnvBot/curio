@@ -39,11 +39,6 @@ const createCourseInputSchema = z.object({
   title: z.string().min(1).max(200).optional(),
 });
 
-const badgeAwardInputSchema = z.object({
-  courseId: z.string().min(1).max(64).nullable(),
-  label: z.string().min(1).max(120),
-});
-
 const courseLessonLookupSchema = z.object({
   courseId: z.string().min(1).max(64),
   lessonId: z.string().min(1).max(64),
@@ -128,8 +123,24 @@ export function createCoursesRouter(runtime: CurioRuntime) {
         )
       ),
 
-    /** Progressive course filling: generates the nearest unfilled lesson at
-     * or after the one the reader has open — one lesson per call. */
+    /** Progressive course filling: resolves the nearest unfilled lesson at
+     * or after the one the reader has open and generates it in a detached
+     * fiber. The frontend polls the course structure for the filled content. */
+    scheduleNextLessonModule: protectedProcedure
+      .input(courseLessonLookupSchema)
+      .mutation(({ ctx, input }) =>
+        runtime.runPromise(
+          Effect.gen(function* scheduleNextLessonModule() {
+            const lessonGenerator = yield* LessonGenerator;
+            return yield* lessonGenerator.scheduleNextLessonModule({
+              courseId: input.courseId,
+              currentLessonId: input.lessonId,
+              userId: ctx.session.user.id,
+            });
+          }).pipe(coursesErrorMapping)
+        )
+      ),
+
     generateNextLessonModule: protectedProcedure
       .input(courseLessonLookupSchema)
       .mutation(({ ctx, input }) =>
@@ -186,21 +197,6 @@ export function createCoursesRouter(runtime: CurioRuntime) {
                 title: section.title,
               })),
               title: input.title ?? "Untitled course",
-              userId: ctx.session.user.id,
-            });
-          }).pipe(coursesErrorMapping)
-        )
-      ),
-
-    awardBadge: protectedProcedure
-      .input(badgeAwardInputSchema)
-      .mutation(({ ctx, input }) =>
-        runtime.runPromise(
-          Effect.gen(function* awardBadge() {
-            const courseStore = yield* CourseStore;
-            return yield* courseStore.awardBadge({
-              courseId: input.courseId,
-              label: input.label,
               userId: ctx.session.user.id,
             });
           }).pipe(coursesErrorMapping)

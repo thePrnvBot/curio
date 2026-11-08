@@ -1,4 +1,4 @@
-import type { GuidedExplanationStep } from "@curio/db/schema/course";
+import type { GuidedExplanationStep } from "@curio/api/domain/course";
 
 /** Breath between sentence audio takes so stitched lines don't collide. */
 export const NARRATION_SENTENCE_GAP_MS = 260;

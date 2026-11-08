@@ -1,4 +1,3 @@
-import { Skeleton } from "@curio/ui/components/skeleton";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { PencilIcon, TrophyIcon, XIcon } from "lucide-react";
 import { useState } from "react";
@@ -11,18 +10,14 @@ import { useTRPC } from "@/utils/trpc";
 import { SectionHeader } from "./section-shared";
 import type { CourseBadgeView } from "./section-shared";
 
-const BADGE_SKELETONS = [0, 1, 2, 3, 4, 5, 6, 7];
-
 /** Earned medal row, or an invite to earn the first one. The pencil at the
  * header's right end toggles an edit mode that lets each badge be removed. */
 export function BadgeShowcaseSection({
   badges,
   empty,
-  loading,
 }: {
   badges: readonly CourseBadgeView[];
   empty: ReactNode;
-  loading: boolean;
 }) {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
@@ -51,30 +46,10 @@ export function BadgeShowcaseSection({
     );
   }
 
-  const canEdit = !loading && badges.length > 0;
+  const canEdit = badges.length > 0;
 
-  let badgeContent: ReactNode;
-  if (loading) {
-    // Same card chrome as the empty and earned states, so stepping
-    // between skeleton → earned badges never changes layout language.
-    badgeContent = (
-      <div className="bg-card/50 rounded-xl border p-5 md:p-6">
-        <div className="flex flex-wrap gap-x-7 gap-y-5">
-          {BADGE_SKELETONS.map((index) => (
-            <div
-              key={index}
-              className="flex w-16 flex-col items-center gap-2"
-              aria-hidden="true"
-            >
-              <Skeleton className="size-14 rounded-full" />
-              <Skeleton className="h-3 w-12" />
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  } else if (badges.length > 0) {
-    badgeContent = (
+  const badgeContent: ReactNode =
+    badges.length > 0 ? (
       <div className="bg-card/50 rounded-xl border p-5 md:p-6">
         <div className="flex flex-wrap gap-x-7 gap-y-5">
           {badges.map((badge) => (
@@ -91,11 +66,7 @@ export function BadgeShowcaseSection({
               {isEditing ? (
                 <button
                   aria-label={`Delete badge ${badge.label}`}
-                  className={
-                    deleteBadge.isPending
-                      ? "bg-background border-destructive/50 text-destructive absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full border shadow-xs"
-                      : "bg-background hover:bg-destructive hover:text-destructive-foreground hover:border-destructive absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full border shadow-xs transition-colors"
-                  }
+                  className={`${deleteBadge.isPending ? "bg-background border-destructive/50 text-destructive" : "bg-background hover:bg-destructive hover:text-destructive-foreground hover:border-destructive"} focus-visible:ring-ring absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full border shadow-xs transition-colors focus-visible:ring-2 focus-visible:outline-none`}
                   disabled={deleteBadge.isPending}
                   onClick={() => {
                     removeBadge(badge.id, badge.label);
@@ -110,19 +81,18 @@ export function BadgeShowcaseSection({
           ))}
         </div>
       </div>
+    ) : (
+      empty
     );
-  } else {
-    badgeContent = empty;
-  }
 
   return (
     <section>
-      <div className="flex items-end justify-between gap-3">
-        <SectionHeader>Badge showcase</SectionHeader>
+      <div className="flex items-center justify-between gap-3">
+        <SectionHeader className="mb-0">Badge showcase</SectionHeader>
         {canEdit ? (
           <button
             aria-pressed={isEditing}
-            className="text-muted-foreground hover:bg-accent hover:text-foreground inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors"
+            className="text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-ring inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
             onClick={() => {
               playInteractionCue("toggle");
               setIsEditing((currentlyEditing) => !currentlyEditing);

@@ -1,9 +1,11 @@
-import type { LessonContent } from "@curio/db/schema/course";
+import type { LessonContent } from "@curio/api/domain/course";
 import { MessageResponse } from "@curio/ui/components/ai-elements/message";
 import { Button } from "@curio/ui/components/button";
 import { CheckIcon, XIcon } from "lucide-react";
 import { useState } from "react";
 import type { ReactElement } from "react";
+
+import { toEmbeddableVideo } from "./lesson-video";
 
 interface RecapQuestion {
   readonly answerIndex: number;
@@ -101,9 +103,16 @@ function RecapExerciseView(props: {
         const pickedOption = pickedOptions[questionIndex];
         const isPickedCorrect = pickedOption === question.answerIndex;
         return (
-          <div className="bg-card rounded-xl border p-5" key={question.prompt}>
+          <section
+            aria-labelledby={`recap-question-${questionIndex}`}
+            className="bg-card rounded-xl border p-5"
+            key={`${question.prompt}-${questionIndex}`}
+          >
             <div className="flex items-start justify-between gap-3">
-              <p className="text-sm font-medium">
+              <p
+                className="text-sm font-medium"
+                id={`recap-question-${questionIndex}`}
+              >
                 <span className="text-muted-foreground mr-2">
                   {questionIndex + 1}
                 </span>
@@ -120,24 +129,33 @@ function RecapExerciseView(props: {
                   </span>
                 ))}
             </div>
-            <div className="mt-3 space-y-2">
+            <div
+              aria-labelledby={`recap-question-${questionIndex}`}
+              className="mt-3 space-y-2"
+              role="radiogroup"
+            >
               {question.options.map((option, optionIndex) => (
-                <button
-                  className={optionClass({
+                <label
+                  className={`${optionClass({
                     checked,
                     isPicked: pickedOption === optionIndex,
                     isAnswer: optionIndex === question.answerIndex,
-                  })}
-                  disabled={checked}
-                  key={option}
-                  onClick={() => {
-                    setPickedOptions({
-                      ...pickedOptions,
-                      [questionIndex]: optionIndex,
-                    });
-                  }}
-                  type="button"
+                  })} focus-within:ring-ring focus-within:ring-2 focus-within:outline-none`}
+                  key={`${question.prompt}-option-${optionIndex}`}
                 >
+                  <input
+                    checked={pickedOption === optionIndex}
+                    className="sr-only"
+                    disabled={checked}
+                    name={`recap-question-${questionIndex}`}
+                    onChange={() => {
+                      setPickedOptions({
+                        ...pickedOptions,
+                        [questionIndex]: optionIndex,
+                      });
+                    }}
+                    type="radio"
+                  />
                   <span>{option}</span>
                   {checked && optionIndex === question.answerIndex && (
                     <span className="text-xs font-medium opacity-70">
@@ -151,7 +169,7 @@ function RecapExerciseView(props: {
                         your answer
                       </span>
                     )}
-                </button>
+                </label>
               ))}
             </div>
             {checked && pickedOption !== undefined && !isPickedCorrect && (
@@ -168,7 +186,7 @@ function RecapExerciseView(props: {
                 </p>
               </div>
             )}
-          </div>
+          </section>
         );
       })}
 
@@ -265,13 +283,33 @@ export function LessonContentView(props: {
       return <RecapExerciseView questions={content.questions} />;
     }
     case "video": {
+      const video =
+        content.videoUrl === undefined
+          ? null
+          : toEmbeddableVideo(content.videoUrl);
       return (
         <div className="space-y-6">
-          <div className="bg-muted/50 flex aspect-video items-center justify-center rounded-xl border">
-            <span className="text-muted-foreground/50 text-xs tracking-widest uppercase">
-              Video slot
-            </span>
-          </div>
+          {video?.kind === "file" && (
+            <video
+              className="bg-muted aspect-video w-full rounded-xl border"
+              controls
+              preload="metadata"
+              src={video.url}
+            >
+              <track kind="captions" />
+            </video>
+          )}
+          {video?.kind === "iframe" && (
+            <iframe
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              className="aspect-video w-full rounded-xl border"
+              referrerPolicy="strict-origin-when-cross-origin"
+              sandbox="allow-scripts allow-presentation allow-popups"
+              src={video.url}
+              title="Lesson video"
+            />
+          )}
           <div className="prose-sm">
             <MessageResponse>{content.body}</MessageResponse>
           </div>

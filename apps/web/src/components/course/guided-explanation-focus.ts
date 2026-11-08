@@ -1,4 +1,4 @@
-import type { GuidedExplanationFocus } from "@curio/db/schema/course";
+import type { GuidedExplanationFocus } from "@curio/api/domain/course";
 
 /**
  * Resolver for `GuidedReasoningFile`-style narration spotlights on guided
@@ -124,14 +124,12 @@ interface CodeWordRange {
 
 /** First known code word on a 1-based source line, excluding comment markers. */
 function firstIdentifierOnLine(line: string): CodeWordRange | null {
-  let scanner = line.replace(/^[\s]*\/\/+[^\n]*$/u, "").replace(
-    /^[ \t]*\/\*+[\s\S]*?\*+\/\s*/u,
-    ""
-  );
-  scanner = scanner.replace(/^[ \t]*-[ \t]*/u, "").replace(
-    /^[ \t]*#+[ \t]*/u,
-    ""
-  );
+  let scanner = line
+    .replace(/^[\s]*\/\/+[^\n]*$/u, "")
+    .replace(/^[ \t]*\/\*+[\s\S]*?\*+\/\s*/u, "");
+  scanner = scanner
+    .replace(/^[ \t]*-[ \t]*/u, "")
+    .replace(/^[ \t]*#+[ \t]*/u, "");
   const match = scanner.match(CODE_WORD_PATTERN);
   if (match === null || match.index === undefined) {
     return null;
@@ -262,8 +260,7 @@ export function resolveGuidedCodeFocus(options: {
           fallbackLine: lines[0],
           focusCursor: focus.cursor,
           sourceLines,
-        }) ??
-        cursorFromNarration(options.narration, sourceLines);
+        }) ?? cursorFromNarration(options.narration, sourceLines);
       return {
         cursor: cursor === null ? null : cursor,
         lines: lines.toSorted((left, right) => left - right),

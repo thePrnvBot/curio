@@ -31,8 +31,16 @@ export function completionReducer(
       }
       break;
     }
-    case "completed":
+    case "completed": {
+      if (action.type === "reset") {
+        return { kind: "idle" };
+      }
+      break;
+    }
     case "error": {
+      if (action.type === "start") {
+        return { kind: "completing" };
+      }
       if (action.type === "reset") {
         return { kind: "idle" };
       }

@@ -62,7 +62,10 @@ export type CourseStoreFailure =
   | BadgeNotFound;
 
 export type {
+  GuidedExplanationCursor,
+  GuidedExplanationFocus,
   GuidedExplanationStep,
+  GuidedExplanationVisual,
   GuidedExplanationLessonContent,
   LessonContent,
   VideoLessonContent,
@@ -72,11 +75,19 @@ export type {
   RecapLessonContent,
 } from "@curio/db/schema/course";
 
+export type CourseStatus = "active" | "completed";
+
+/** Storage holds plain text; anything outside the closed set is treated as
+ * active rather than leaking an untyped status to the UI. */
+export function normalizeCourseStatus(status: string): CourseStatus {
+  return status === "completed" ? "completed" : "active";
+}
+
 export interface CourseSummary {
   readonly id: string;
   readonly title: string;
   readonly description: string;
-  readonly status: string;
+  readonly status: CourseStatus;
   readonly lessonCount: number;
   readonly completedLessonCount: number;
   readonly createdAt: string;
@@ -150,12 +161,16 @@ export interface CourseLessonContentInput {
   readonly courseId: string;
   readonly lessonId: string;
   readonly userId: string;
+  /** Leave an already-filled lesson untouched (background prefetch). */
+  readonly onlyIfEmpty?: boolean;
 }
 
 export interface CourseLessonWrittenResult {
   readonly lessonId: string;
   readonly position: number;
   readonly title: string;
+  /** False when `onlyIfEmpty` found content already present. */
+  readonly written: boolean;
 }
 
 export interface CourseSectionInput {
@@ -189,6 +204,8 @@ export interface CourseLessonSummary {
   readonly title: string;
   readonly position: number;
   readonly completed: boolean;
+  /** False while the lesson is still an unfilled outline skeleton. */
+  readonly hasContent: boolean;
 }
 
 export interface CourseLessonDetail {
@@ -204,6 +221,8 @@ export interface CourseLessonDetail {
 export interface LessonCompletionResult {
   readonly course: CourseSummary;
   readonly courseCompleted: boolean;
+  /** True only for the call that actually marked this lesson complete. */
+  readonly newlyCompleted: boolean;
 }
 
 export interface LessonCompletionInput {

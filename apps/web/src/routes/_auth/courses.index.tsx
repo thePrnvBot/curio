@@ -1,20 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 
-import {
-  BadgeShowcaseSection,
-} from "@/components/courses-index/badge-showcase";
+import { BadgeShowcaseSection } from "@/components/courses-index/badge-showcase";
 import {
   EmptyActiveCourseCard,
   EmptyBadgeShowcase,
   EmptyCourseGrid,
 } from "@/components/courses-index/course-empty-views";
-import {
-  CourseListSection,
-} from "@/components/courses-index/course-list";
-import {
-  CurrentCourseSection,
-} from "@/components/courses-index/current-course-section";
+import { CourseListSection } from "@/components/courses-index/course-list";
+import { CurrentCourseSection } from "@/components/courses-index/current-course-section";
 import type {
   CourseBadgeView,
   CourseSummaryView,
@@ -45,6 +39,33 @@ function CoursesRoute() {
     return <CoursesPageSkeleton />;
   }
 
+  if (coursesQuery.isError || badgesQuery.isError) {
+    const failure = coursesQuery.error ?? badgesQuery.error;
+    return (
+      <div className="mx-auto w-full max-w-5xl shrink-0 px-6 pt-8 pb-20">
+        <header className="mb-8">
+          <h1 className="text-2xl font-semibold tracking-tight">Courses</h1>
+        </header>
+        <div className="border-border bg-card flex flex-col items-start gap-3 rounded-xl border p-6">
+          <p className="text-sm font-medium">Could not load your courses</p>
+          <p className="text-muted-foreground text-xs">
+            {failure?.message ?? "The server did not answer. Try again."}
+          </p>
+          <button
+            className="border-border hover:bg-accent focus-visible:ring-ring rounded-md border px-3 py-1.5 text-xs font-medium focus-visible:ring-2 focus-visible:outline-none"
+            onClick={() => {
+              void coursesQuery.refetch();
+              void badgesQuery.refetch();
+            }}
+            type="button"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const courses: CourseSummaryView[] = coursesQuery.data ?? [];
   const badges: CourseBadgeView[] = (badgesQuery.data ?? []).map((badge) => ({
     id: badge.id,
@@ -67,21 +88,14 @@ function CoursesRoute() {
       <div className="space-y-10">
         <CurrentCourseSection
           activeCourse={activeCourse}
-          empty={
-            <EmptyActiveCourseCard />
-          }
-          loading={coursesLoading}
+          empty={<EmptyActiveCourseCard />}
         />
         <CourseListSection
+          activeCourseId={activeCourse?.id ?? null}
           courses={courses}
           empty={<EmptyCourseGrid />}
-          loading={coursesLoading}
         />
-        <BadgeShowcaseSection
-          badges={badges}
-          empty={<EmptyBadgeShowcase />}
-          loading={badgesLoading}
-        />
+        <BadgeShowcaseSection badges={badges} empty={<EmptyBadgeShowcase />} />
       </div>
     </div>
   );

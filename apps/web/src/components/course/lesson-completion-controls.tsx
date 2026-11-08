@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronRightIcon } from "lucide-react";
 import { useReducer } from "react";
 import type { ReactElement } from "react";
+import { toast } from "sonner";
 
 import { playInteractionCue } from "@/utils/sound";
 import { useTRPC } from "@/utils/trpc";
@@ -55,14 +56,18 @@ export function LessonCompletionControls(props: {
       }
       dispatch({ type: "success", badgeLabel });
       props.onGoToLesson(props.nextLessonId);
-    } catch {
-      // completeLesson surfaces failures through its own error state; the
-      // button disables itself while pending so no extra toast is needed.
+    } catch (completionError: unknown) {
       dispatch({ type: "error" });
+      playInteractionCue("error", { emphasis: "subtle" });
+      toast.error(
+        completionError instanceof Error
+          ? completionError.message
+          : "Couldn't complete the lesson"
+      );
     }
   }
 
-  const isBusy = state.kind === "completing";
+  const isBusy = state.kind === "completing" || completeLesson.isPending;
 
   let statusText: string;
   if (props.completed) {
@@ -75,15 +80,13 @@ export function LessonCompletionControls(props: {
 
   let buttonText: string;
   if (props.completed) {
-    buttonText =
-      props.nextLessonId === null ? "Back to courses" : "Continue";
+    buttonText = props.nextLessonId === null ? "Back to courses" : "Continue";
   } else {
     buttonText =
       props.nextLessonId === null ? "Complete course" : "Complete & continue";
   }
 
-  const earnedBadgeLabel =
-    state.kind === "completed" ? state.badgeLabel : null;
+  const earnedBadgeLabel = state.kind === "completed" ? state.badgeLabel : null;
 
   return (
     <div className={props.className ?? "mt-10"}>
@@ -97,7 +100,10 @@ export function LessonCompletionControls(props: {
         <div>
           <p className="text-sm font-medium">{statusText}</p>
           <p className="text-muted-foreground text-xs">
-            {props.nextLessonTitle ?? "One lesson away from a new badge"}
+            {props.nextLessonTitle ??
+              (props.completed
+                ? "You've reached the end of this course"
+                : "Completing this lesson finishes the course")}
           </p>
         </div>
         <Button

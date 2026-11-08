@@ -20,15 +20,16 @@ export function createCourseStoreLessonCompletion(
       Effect.gen(function* completeLessonAndAwardBadge() {
         const completion =
           yield* config.courseStore.completeLesson(completionInput);
-        const awardedBadge = completion.courseCompleted
-          ? yield* config.courseStore
-              .awardBadge({
-                courseId: completion.course.id,
-                label: completion.course.title,
-                userId: completionInput.userId,
-              })
-              .pipe(Effect.map(Option.some))
-          : Option.none();
+        const awardedBadge =
+          completion.newlyCompleted && completion.courseCompleted
+            ? yield* config.courseStore
+                .awardBadge({
+                  courseId: completion.course.id,
+                  label: completion.course.title,
+                  userId: completionInput.userId,
+                })
+                .pipe(Effect.map(Option.some))
+            : Option.none();
         return { awardedBadge, completion };
       }),
   } satisfies LessonCompletionContract;

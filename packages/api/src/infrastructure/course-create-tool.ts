@@ -2,6 +2,7 @@ import { tool } from "ai";
 import type { ToolSet } from "ai";
 import { z } from "zod";
 
+import type { CourseLessonKind } from "../domain/course";
 import { lessonContentSchema } from "../domain/lesson-content";
 import type { LessonContentToolPayload } from "../domain/lesson-content";
 
@@ -16,7 +17,7 @@ export const CREATE_LESSON_TOOL_NAME = "create_lesson";
  */
 export interface CourseChunkPlanToolSection {
   readonly lessons: readonly {
-    readonly kind: string;
+    readonly kind: CourseLessonKind;
     readonly title: string;
   }[];
   readonly title: string;
@@ -37,7 +38,7 @@ export interface CourseScaffoldToolResult {
   readonly lessons: readonly {
     readonly courseId: string;
     readonly id: string;
-    readonly kind: string;
+    readonly kind: CourseLessonKind;
     readonly position: number;
     readonly sectionTitle: string;
     readonly title: string;

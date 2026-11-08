@@ -1,4 +1,7 @@
-import type { GuidedExplanationLessonContent } from "@curio/db/schema/course";
+import type {
+  GuidedExplanationLessonContent,
+  GuidedExplanationStep,
+} from "@curio/api/domain/course";
 import { MessageResponse } from "@curio/ui/components/ai-elements/message";
 import { Button } from "@curio/ui/components/button";
 import {
@@ -225,15 +228,37 @@ export function GuidedExplanationPlayer(props: {
     [stepIndex, steps.length, stepSentenceOffsets, stopActiveNarration]
   );
 
-  // Keyboard: space toggles playback, arrows step (institute-style).
+  // Keyboard: space toggles playback, arrows step (institute-style). The
+  // listener is scoped to the player/body and never steals keys from inputs,
+  // buttons, links or contenteditable regions.
+  const playerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     function handleKeyDown(keyboardEvent: KeyboardEvent): void {
-      const eventTarget = keyboardEvent.target;
       if (
-        eventTarget instanceof HTMLElement &&
-        ["INPUT", "TEXTAREA", "SELECT"].includes(eventTarget.tagName)
+        keyboardEvent.metaKey ||
+        keyboardEvent.ctrlKey ||
+        keyboardEvent.altKey
       ) {
         return;
+      }
+      const eventTarget = keyboardEvent.target;
+      if (eventTarget instanceof HTMLElement) {
+        const player = playerRef.current;
+        if (
+          eventTarget !== document.body &&
+          player !== null &&
+          !player.contains(eventTarget)
+        ) {
+          return;
+        }
+        if (
+          eventTarget.isContentEditable ||
+          eventTarget.closest(
+            "input, textarea, select, button, a, summary, [role='button'], [role='link'], [contenteditable='true']"
+          ) !== null
+        ) {
+          return;
+        }
       }
       if (keyboardEvent.code === "Space") {
         keyboardEvent.preventDefault();
@@ -436,7 +461,13 @@ export function GuidedExplanationPlayer(props: {
       ?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [activeSentenceIndex]);
 
-  const currentStep = steps[stepIndex];
+  const currentStep =
+    steps[stepIndex] ??
+    steps.at(-1) ??
+    ({
+      narration: "",
+      visual: { kind: "markdown", source: "" },
+    } satisfies GuidedExplanationStep);
 
   // Consecutive code steps sharing a source keep the same stage mounted, so
   // the narration spotlight and floating cursor animate between steps instead
@@ -510,12 +541,7 @@ export function GuidedExplanationPlayer(props: {
     return () => {
       cancelled = true;
     };
-  }, [
-    activeModule,
-    transcriptModules,
-    transcriptSentences,
-    voicePreferences,
-  ]);
+  }, [activeModule, transcriptModules, transcriptSentences, voicePreferences]);
   useEffect(() => {
     transcriptRef.current?.scrollTo({ top: 0 });
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- activeModuleIndex exists to lash the scroll reset to module changes
@@ -751,7 +777,10 @@ export function GuidedExplanationPlayer(props: {
   );
 
   return (
-    <div className="grid h-full min-h-0 flex-1 lg:grid-cols-[minmax(300px,380px)_1fr]">
+    <div
+      className="grid h-full min-h-0 flex-1 lg:grid-cols-[minmax(300px,380px)_1fr]"
+      ref={playerRef}
+    >
       {transcript}
       {stageAndControls}
     </div>

@@ -10,10 +10,9 @@ import {
   AlertDialogTrigger,
 } from "@curio/ui/components/alert-dialog";
 import { Badge } from "@curio/ui/components/badge";
-import { Skeleton } from "@curio/ui/components/skeleton";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { LoaderIcon, Share2Icon, Trash2Icon } from "lucide-react";
+import { BookOpenIcon, LoaderIcon, Share2Icon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 import type { ReactElement } from "react";
 import { toast } from "sonner";
@@ -23,8 +22,6 @@ import { useTRPC } from "@/utils/trpc";
 
 import { progressPercent, SectionHeader } from "./section-shared";
 import type { CourseSummaryView } from "./section-shared";
-
-const COURSE_CARD_SKELETONS = [0, 1, 2];
 
 const cardActionButtonClass =
   "bg-background/85 text-muted-foreground hover:text-foreground hover:bg-background rounded-lg border p-2 shadow-xs transition-colors";
@@ -54,9 +51,13 @@ export function CardActions({
         await navigator.share({ title, url: shareUrl });
         setIsSharing(false);
         return;
-      } catch {
-        // User dismissed the sheet - reset state and fall through to copying.
+      } catch (shareError: unknown) {
         setIsSharing(false);
+        // A dismissed share sheet is not a fallback signal; only copy when
+        // sharing genuinely failed.
+        if (shareError instanceof Error && shareError.name === "AbortError") {
+          return;
+        }
       }
     }
     try {
@@ -152,27 +153,27 @@ export function CardActions({
 }
 
 function CourseCard({
+  active,
   course,
-  courseIndex,
 }: {
+  active: boolean;
   course: CourseSummaryView;
-  courseIndex: number;
 }) {
-  const isActive = course.status === "active" && courseIndex === 0;
+  const isActive = active;
   return (
     <div
-      className="group relative w-full overflow-hidden rounded-xl border"
+      className="group hover:border-ring focus-within:border-ring relative w-full overflow-hidden rounded-xl border transition-colors"
       key={course.id}
     >
       <Link
-        className="hover:border-ring block"
+        className="block focus-visible:outline-none"
         data-cue="navigate"
         params={{ courseId: course.id }}
         to="/courses/$courseId"
       >
         <div className="bg-muted/50 relative aspect-video w-full">
-          <span className="text-muted-foreground/40 absolute inset-0 flex items-center justify-center text-xs tracking-widest uppercase">
-            Video slot
+          <span className="text-muted-foreground/30 absolute inset-0 flex items-center justify-center">
+            <BookOpenIcon aria-hidden="true" className="size-8" />
           </span>
           <div className="from-background via-background/70 absolute inset-x-0 bottom-0 bg-gradient-to-t to-transparent p-4 pt-12">
             <div className="flex items-center justify-between gap-2 pr-20">
@@ -193,58 +194,31 @@ function CourseCard({
   );
 }
 
-function CourseListSkeleton() {
-  return (
-    <div className="grid gap-5 sm:grid-cols-2">
-      {COURSE_CARD_SKELETONS.map((index) => (
-        <div
-          key={index}
-          className="bg-card overflow-hidden rounded-xl border"
-        >
-          <div className="relative aspect-video w-full overflow-hidden">
-            <Skeleton className="absolute inset-0 rounded-none" />
-            <div className="from-background via-background/70 absolute inset-x-0 bottom-0 bg-gradient-to-t to-transparent p-4 pt-12">
-              <Skeleton className="mb-2 h-4 w-3/4" />
-              <Skeleton className="h-3 w-1/2" />
-              <div className="mt-3 flex items-center gap-2">
-                <Skeleton className="h-5 w-14 rounded-full" />
-              </div>
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export function CourseListSection({
+  activeCourseId,
   courses,
   empty,
-  loading,
 }: {
+  activeCourseId: string | null;
   courses: readonly CourseSummaryView[];
   empty: React.ReactNode;
-  loading: boolean;
 }) {
-  let content: React.ReactNode;
-  if (loading) {
-    content = <CourseListSkeleton />;
-  } else if (courses.length > 0) {
-    content = (
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        {courses.map((course, courseIndex) => (
-          <CourseCard key={course.id} course={course} courseIndex={courseIndex} />
-        ))}
-      </div>
-    );
-  } else {
-    content = empty;
-  }
-
   return (
     <section>
       <SectionHeader>Your courses</SectionHeader>
-      {content}
+      {courses.length > 0 ? (
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {courses.map((course) => (
+            <CourseCard
+              active={course.id === activeCourseId}
+              course={course}
+              key={course.id}
+            />
+          ))}
+        </div>
+      ) : (
+        empty
+      )}
     </section>
   );
 }

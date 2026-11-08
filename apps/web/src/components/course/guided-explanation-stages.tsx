@@ -1,4 +1,4 @@
-import type { GuidedExplanationFocus } from "@curio/db/schema/course";
+import type { GuidedExplanationFocus } from "@curio/api/domain/course";
 import { highlightCode } from "@curio/ui/components/ai-elements/code-block";
 import type {
   BundledLanguage,
@@ -251,10 +251,7 @@ function measureTextRange(
 
 /** Sums offsetTop up to the pre element. Layout offsets exclude the entrance
  * animation's translateY, so the cursor does not jump while code lines settle. */
-function offsetTopWithin(
-  container: HTMLElement,
-  element: HTMLElement
-): number {
+function offsetTopWithin(container: HTMLElement, element: HTMLElement): number {
   let top = 0;
   let node: HTMLElement | null = element;
   while (node !== null && node !== container) {
@@ -312,10 +309,7 @@ function useGuidedCursorLayout(options: {
       // Place MousePointer2's tip at the token's centre, just below its text.
       x: spotlight.left + spotlight.width / 2 - CURSOR_TIP_INSET,
       y:
-        spotlight.top +
-        spotlight.height +
-        CURSOR_BELOW_LINE -
-        CURSOR_TIP_INSET,
+        spotlight.top + spotlight.height + CURSOR_BELOW_LINE - CURSOR_TIP_INSET,
     });
   }, [containerRef, cursor]);
 

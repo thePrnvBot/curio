@@ -6,7 +6,7 @@ import {
   courseSection,
 } from "@curio/db/schema/course";
 import type { LessonContent } from "@curio/db/schema/course";
-import { asc, desc, eq, and } from "drizzle-orm";
+import { asc, desc, eq, and, isNull, sql } from "drizzle-orm";
 import { Effect } from "effect";
 
 import {
@@ -14,6 +14,7 @@ import {
   CourseNotFound,
   CourseOperationFailed,
   isCourseLookupFailure,
+  normalizeCourseStatus,
   normalizeLessonKind,
   LessonNotFound,
 } from "../domain/course";
@@ -73,7 +74,7 @@ function toCourseSummary(row: CourseRow): CourseSummary {
     description: row.description,
     id: row.id,
     lessonCount: row.lessonCount,
-    status: row.status,
+    status: normalizeCourseStatus(row.status),
     title: row.title,
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -238,19 +239,13 @@ export function createDrizzleCourseStore(
                 );
               };
 
-              const sectionPromises: Promise<unknown>[] = [];
-              for (
-                let sectionIndex = 0;
-                sectionIndex < sections.length;
-                sectionIndex += 1
-              ) {
-                const sectionInput = sections.at(sectionIndex);
-                if (sectionInput === undefined) {
-                  throw new Error("Course section vanished mid-transaction");
-                }
-                sectionPromises.push(writeSection(sectionInput, sectionIndex));
+              // Sequential on purpose: Drizzle transactions run on one
+              // connection, so parallel statements would interleave there
+              // anyway while making ordering non-deterministic.
+              for (const [sectionIndex, sectionInput] of sections.entries()) {
+                // oxlint-disable-next-line eslint/no-await-in-loop -- transaction order matters
+                await writeSection(sectionInput, sectionIndex);
               }
-              await Promise.all(sectionPromises);
 
               return createdCourseRows;
             }
@@ -310,7 +305,10 @@ export function createDrizzleCourseStore(
               sectionTitle: string;
             }> => {
               if (sectionInput.lessons.length === 0) {
-                return { insertedLessonRows: [], sectionTitle: sectionInput.title };
+                return {
+                  insertedLessonRows: [],
+                  sectionTitle: sectionInput.title,
+                };
               }
               const sectionId = generateId("section");
               await transactionDatabase.insert(courseSection).values({
@@ -341,22 +339,12 @@ export function createDrizzleCourseStore(
               return { insertedLessonRows, sectionTitle: sectionInput.title };
             };
 
-            const sectionPromises: ReturnType<typeof writeSection>[] = [];
-            for (
-              let sectionIndex = 0;
-              sectionIndex < sections.length;
-              sectionIndex += 1
-            ) {
-              const sectionInput = sections.at(sectionIndex);
-              if (sectionInput === undefined) {
-                throw new Error(
-                  "Course section vanished mid-scaffold-transaction"
-                );
-              }
-              sectionPromises.push(writeSection(sectionInput, sectionIndex));
-            }
-            const sectionResults = await Promise.all(sectionPromises);
-            for (const sectionResult of sectionResults) {
+            for (const [sectionIndex, sectionInput] of sections.entries()) {
+              // oxlint-disable-next-line eslint/no-await-in-loop -- transaction order matters
+              const sectionResult = await writeSection(
+                sectionInput,
+                sectionIndex
+              );
               for (const insertedLesson of sectionResult.insertedLessonRows) {
                 scaffoldLessons.push({
                   id: insertedLesson.id,
@@ -387,7 +375,13 @@ export function createDrizzleCourseStore(
         })
       ),
 
-    writeCourseLessonContent: ({ content, courseId, lessonId, userId }) =>
+    writeCourseLessonContent: ({
+      content,
+      courseId,
+      lessonId,
+      onlyIfEmpty = false,
+      userId,
+    }) =>
       withCourseError("writeCourseLessonContent")(
         Effect.gen(function* writeLessonContent() {
           const courseRows = yield* Effect.tryPromise(() =>
@@ -421,23 +415,39 @@ export function createDrizzleCourseStore(
           }
 
           const now = new Date();
-          yield* Effect.tryPromise(async () => {
-            await database.transaction(async (transactionDatabase) => {
-              await transactionDatabase
-                .update(courseLesson)
-                .set({ content })
-                .where(eq(courseLesson.id, lessonId));
-              await transactionDatabase
-                .update(course)
-                .set({ updatedAt: now })
-                .where(eq(course.id, courseId));
-            });
+          const wroteContent = yield* Effect.tryPromise(async () => {
+            const updatedRows = await database.transaction(
+              async (transactionDatabase) => {
+                const rows = await transactionDatabase
+                  .update(courseLesson)
+                  .set({ content })
+                  .where(
+                    onlyIfEmpty
+                      ? and(
+                          eq(courseLesson.id, lessonId),
+                          isNull(courseLesson.content)
+                        )
+                      : eq(courseLesson.id, lessonId)
+                  )
+                  .returning({ id: courseLesson.id });
+                if (rows.at(0) === undefined) {
+                  return false;
+                }
+                await transactionDatabase
+                  .update(course)
+                  .set({ updatedAt: now })
+                  .where(eq(course.id, courseId));
+                return true;
+              }
+            );
+            return updatedRows;
           });
 
           return {
             lessonId: lessonRow.id,
             position: normalizeLessonPosition(lessonRow.position),
             title: lessonRow.title,
+            written: wroteContent,
           } satisfies CourseLessonWrittenResult;
         })
       ),
@@ -481,6 +491,7 @@ export function createDrizzleCourseStore(
             lessonRow: CourseLessonRow
           ): CourseLessonSummary => ({
             completed: lessonRow.completedAt !== null,
+            hasContent: lessonRow.content !== null,
             id: lessonRow.id,
             kind: normalizeLessonKind(lessonRow.kind),
             position: normalizeLessonPosition(lessonRow.position),
@@ -619,75 +630,132 @@ export function createDrizzleCourseStore(
               courseCompleted:
                 courseRow.completedLessonCount >= courseRow.lessonCount &&
                 courseRow.lessonCount > 0,
+              newlyCompleted: false,
             } satisfies LessonCompletionResult;
           }
 
-          const updatedCourseRows = yield* Effect.tryPromise(async () => {
-            const now = new Date();
-            const { lessonCount } = courseRow;
-            const completedLessonCount = Math.min(
-              courseRow.completedLessonCount + 1,
-              lessonCount
-            );
-            const rows = await database.transaction(
-              async (transactionDatabase) => {
-                await transactionDatabase
-                  .update(courseLesson)
-                  .set({ completedAt: now })
-                  .where(eq(courseLesson.id, lessonId));
-                return transactionDatabase
-                  .update(course)
-                  .set({
-                    completedLessonCount,
-                    status:
-                      completedLessonCount >= lessonCount && lessonCount > 0
-                        ? "completed"
-                        : "active",
-                  })
-                  .where(eq(course.id, courseId))
-                  .returning(courseSelection);
+          const completion = yield* Effect.tryPromise(() =>
+            database.transaction(async (transactionDatabase) => {
+              const now = new Date();
+              // The conditional update is the idempotency gate: concurrent
+              // completions race here and only the winner increments.
+              const newlyCompletedRows = await transactionDatabase
+                .update(courseLesson)
+                .set({ completedAt: now })
+                .where(
+                  and(
+                    eq(courseLesson.id, lessonId),
+                    eq(courseLesson.courseId, courseId),
+                    isNull(courseLesson.completedAt)
+                  )
+                )
+                .returning({ id: courseLesson.id });
+              if (newlyCompletedRows.at(0) === undefined) {
+                const currentRows = await transactionDatabase
+                  .select(courseSelection)
+                  .from(course)
+                  .where(
+                    and(eq(course.id, courseId), eq(course.userId, userId))
+                  )
+                  .limit(1);
+                const currentRow = currentRows.at(0);
+                if (currentRow === undefined) {
+                  throw new CourseNotFound({ courseId });
+                }
+                return { courseRow: currentRow, newlyCompleted: false };
               }
-            );
-            return rows;
-          });
 
-          const updatedCourseRow = updatedCourseRows.at(0);
-          if (updatedCourseRow === undefined) {
-            throw new Error("Course completion update returned no rows");
-          }
-          const courseCompleted =
-            updatedCourseRow.completedLessonCount >=
-              updatedCourseRow.lessonCount && updatedCourseRow.lessonCount > 0;
+              const updatedRows = await transactionDatabase
+                .update(course)
+                .set({
+                  completedLessonCount: sql`least(${course.completedLessonCount} + 1, ${course.lessonCount})`,
+                  status: sql`case when ${course.completedLessonCount} + 1 >= ${course.lessonCount} and ${course.lessonCount} > 0 then 'completed' else 'active' end`,
+                })
+                .where(and(eq(course.id, courseId), eq(course.userId, userId)))
+                .returning(courseSelection);
+              const updatedRow = updatedRows.at(0);
+              if (updatedRow === undefined) {
+                throw new CourseNotFound({ courseId });
+              }
+              return { courseRow: updatedRow, newlyCompleted: true };
+            })
+          );
 
           return {
-            course: toCourseSummary(updatedCourseRow),
-            courseCompleted,
+            course: toCourseSummary(completion.courseRow),
+            courseCompleted:
+              completion.courseRow.completedLessonCount >=
+                completion.courseRow.lessonCount &&
+              completion.courseRow.lessonCount > 0,
+            newlyCompleted: completion.newlyCompleted,
           } satisfies LessonCompletionResult;
         })
       ),
 
     awardBadge: ({ courseId, label, userId }) =>
       withCourseError("awardBadge")(
-        Effect.tryPromise(async () => {
-          const insertedBadgeRows = await database
-            .insert(courseBadge)
-            .values({
-              courseId,
-              id: generateId("badge"),
-              label,
-              userId,
-            })
-            .returning({
-              courseId: courseBadge.courseId,
-              earnedAt: courseBadge.earnedAt,
-              id: courseBadge.id,
-              label: courseBadge.label,
-            });
-          const insertedBadgeRow = insertedBadgeRows.at(0);
-          if (insertedBadgeRow === undefined) {
-            throw new Error("Badge insert returned no rows");
+        Effect.gen(function* awardCourseBadge() {
+          if (courseId !== null) {
+            const ownedCourseRows = yield* Effect.tryPromise(() =>
+              database
+                .select({ id: course.id })
+                .from(course)
+                .where(and(eq(course.id, courseId), eq(course.userId, userId)))
+                .limit(1)
+            );
+            if (ownedCourseRows.at(0) === undefined) {
+              return yield* Effect.fail(new CourseNotFound({ courseId }));
+            }
           }
-          return toBadgeRecord(insertedBadgeRow);
+
+          const badgeSelection = {
+            courseId: courseBadge.courseId,
+            earnedAt: courseBadge.earnedAt,
+            id: courseBadge.id,
+            label: courseBadge.label,
+          } as const;
+          const insertedBadgeRows = yield* Effect.tryPromise(() =>
+            database
+              .insert(courseBadge)
+              .values({
+                courseId,
+                id: generateId("badge"),
+                label,
+                userId,
+              })
+              .onConflictDoNothing()
+              .returning(badgeSelection)
+          );
+          const insertedBadgeRow = insertedBadgeRows.at(0);
+          if (insertedBadgeRow !== undefined) {
+            return toBadgeRecord(insertedBadgeRow);
+          }
+
+          // Already earned: return the existing badge instead of minting a
+          // duplicate when a course is completed again.
+          const existingBadgeRows = yield* Effect.tryPromise(() =>
+            database
+              .select(badgeSelection)
+              .from(courseBadge)
+              .where(
+                courseId === null
+                  ? and(
+                      eq(courseBadge.userId, userId),
+                      isNull(courseBadge.courseId),
+                      eq(courseBadge.label, label)
+                    )
+                  : and(
+                      eq(courseBadge.userId, userId),
+                      eq(courseBadge.courseId, courseId)
+                    )
+              )
+              .limit(1)
+          );
+          const existingBadgeRow = existingBadgeRows.at(0);
+          if (existingBadgeRow === undefined) {
+            throw new Error("Badge insert and lookup both returned no rows");
+          }
+          return toBadgeRecord(existingBadgeRow);
         })
       ),
 

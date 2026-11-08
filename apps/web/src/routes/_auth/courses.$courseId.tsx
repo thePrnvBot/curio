@@ -1,9 +1,7 @@
-import { COURSE_LESSON_KINDS } from "@curio/api/domain/course";
-import type { CourseLessonKind } from "@curio/api/domain/course";
-import type { LessonContent } from "@curio/db/schema/course";
+import type { CourseLessonKind, LessonContent } from "@curio/api/domain/course";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeftIcon, CheckIcon } from "lucide-react";
+import { ArrowLeftIcon, CheckIcon, LoaderCircleIcon } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -40,10 +38,11 @@ export const Route = createFileRoute("/_auth/courses/$courseId")({
 
 interface LessonLike {
   readonly id: string;
-  readonly kind: string;
+  readonly kind: CourseLessonKind;
   readonly title: string;
   readonly position: number;
   readonly completed: boolean;
+  readonly hasContent: boolean;
 }
 
 interface CourseSidebarSection {
@@ -62,11 +61,10 @@ const LESSON_KIND_LABELS: Record<CourseLessonKind, string> = {
 
 const EMPTY_SECTIONS: readonly CourseSidebarSection[] = [];
 
-/** `kind` arrives as a plain string over the wire, so any value outside the
- * domain union renders itself instead of an undefined label. */
-function lessonKindLabel(kind: string): string {
-  const known = COURSE_LESSON_KINDS.find((candidate) => candidate === kind);
-  return known === undefined ? kind : LESSON_KIND_LABELS[known];
+/** The server now carries the typed lesson-kind union, so no runtime re-parse
+ * is needed; unknown legacy values are normalized in the API layer. */
+function lessonKindLabel(kind: CourseLessonKind): string {
+  return LESSON_KIND_LABELS[kind];
 }
 
 /** The single lesson the reader currently has open: first incomplete lesson,
@@ -95,8 +93,8 @@ function LessonListButton({
     <button
       className={
         isActive
-          ? "bg-accent text-foreground hover:bg-accent w-full rounded-md px-2 py-1.5 text-left text-sm"
-          : "hover:bg-accent text-muted-foreground hover:text-foreground w-full rounded-md px-2 py-1.5 text-left text-sm"
+          ? "bg-accent text-foreground hover:bg-accent focus-visible:ring-ring w-full rounded-md px-2 py-1.5 text-left text-sm focus-visible:ring-2 focus-visible:outline-none"
+          : "hover:bg-accent text-muted-foreground hover:text-foreground focus-visible:ring-ring w-full rounded-md px-2 py-1.5 text-left text-sm focus-visible:ring-2 focus-visible:outline-none"
       }
       onClick={() => {
         // Direction-aware cue: going up the course reads "back", going
@@ -133,6 +131,7 @@ function LessonListButton({
       </span>
       <span className="text-muted-foreground/70 text-[11px]">
         {lessonKindLabel(lesson.kind)}
+        {!lesson.hasContent && " · queued"}
       </span>
     </button>
   );
@@ -176,6 +175,7 @@ function CourseSidebar({
           </p>
           <ProgressFromZero
             className="bg-muted mt-3 h-1.5 w-full"
+            label={`Course progress: ${progressPercent}%`}
             percent={progressPercent}
           />
         </div>
@@ -209,7 +209,7 @@ interface LessonData {
   readonly completed: boolean;
   readonly content: LessonContent | null;
   readonly id: string;
-  readonly kind: string;
+  readonly kind: CourseLessonKind;
   readonly position: number;
   readonly title: string;
 }
@@ -221,6 +221,7 @@ function LessonMainContent({
   lessonIsError,
   lessonIsPending,
   nextLesson,
+  onRetryLesson,
   selectedLessonId,
 }: {
   courseId: string;
@@ -229,14 +230,40 @@ function LessonMainContent({
   lessonIsError: boolean;
   lessonIsPending: boolean;
   nextLesson: LessonLike | undefined;
+  onRetryLesson: () => void;
   selectedLessonId: string | null;
 }) {
-  if (
-    lessonIsPending ||
-    selectedLessonId === null ||
-    lessonIsError ||
-    lessonData === undefined
-  ) {
+  if (lessonIsError) {
+    return (
+      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col items-center justify-center gap-3 px-6 py-10 text-center">
+        <p className="text-sm font-medium">Could not load this lesson</p>
+        <p className="text-muted-foreground text-xs">
+          The lesson may still be generating. Try again in a moment.
+        </p>
+        <button
+          className="border-border hover:bg-accent focus-visible:ring-ring rounded-md border px-3 py-1.5 text-xs font-medium focus-visible:ring-2 focus-visible:outline-none"
+          onClick={onRetryLesson}
+          type="button"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (selectedLessonId === null) {
+    return (
+      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col items-center justify-center gap-3 px-6 py-10 text-center">
+        <LoaderCircleIcon className="text-muted-foreground size-5 animate-spin" />
+        <p className="text-sm font-medium">Lessons are being prepared</p>
+        <p className="text-muted-foreground text-xs">
+          The Director is filling this course. It will appear here shortly.
+        </p>
+      </div>
+    );
+  }
+
+  if (lessonIsPending || lessonData === undefined) {
     return (
       <div className="mx-auto w-full max-w-2xl flex-1 px-6 py-10">
         <LessonContentSkeleton />
@@ -254,6 +281,7 @@ function LessonMainContent({
         completed={lessonData.completed}
         content={lessonData.content}
         courseId={courseId}
+        key={lessonData.id}
         lessonId={lessonData.id}
         nextLessonId={nextLesson?.id ?? null}
         nextLessonTitle={nextLesson?.title ?? null}
@@ -263,12 +291,14 @@ function LessonMainContent({
   }
 
   return (
-    <div className="mx-auto w-full max-w-2xl flex-1 px-6 py-10">
+    <div
+      className="mx-auto w-full max-w-2xl flex-1 px-6 py-10"
+      key={lessonData.id}
+    >
       <article>
         <header className="mb-8">
           <p className="text-muted-foreground mb-2 text-xs tracking-widest uppercase">
-            {lessonKindLabel(lessonData.kind)} · Lesson{" "}
-            {lessonData.position ?? 1}
+            {lessonKindLabel(lessonData.kind)} · Lesson {lessonData.position}
           </p>
           <h2 className="text-3xl font-semibold tracking-tight text-balance">
             {lessonData.title}
@@ -294,7 +324,21 @@ function CoursePageRoute() {
   const { lesson: requestedLessonId } = Route.useSearch();
   const navigate = useNavigate();
 
-  const courseQuery = useQuery(trpc.courses.get.queryOptions({ courseId }));
+  const courseQuery = useQuery({
+    ...trpc.courses.get.queryOptions({ courseId }),
+    // The course fills live while the Director or the background lesson
+    // generator writes content; poll only while any lesson is still empty.
+    refetchInterval: (query) => {
+      const detail = query.state.data;
+      if (detail === undefined) {
+        return false;
+      }
+      const hasUnfilledLesson = detail.sections.some((section) =>
+        section.lessons.some((lesson) => !lesson.hasContent)
+      );
+      return hasUnfilledLesson ? 2500 : false;
+    },
+  });
   const sections = courseQuery.data?.sections ?? EMPTY_SECTIONS;
 
   const selectedLessonId = useMemo(() => {
@@ -315,6 +359,9 @@ function CoursePageRoute() {
       lessonId: selectedLessonId ?? "",
     }),
     enabled: selectedLessonId !== null,
+    // A skeleton lesson is filled in the background; poll until content lands.
+    refetchInterval: (query) =>
+      query.state.data?.content === null ? 2000 : false,
   });
 
   const flatLessons = sections.flatMap((section) => section.lessons);
@@ -327,9 +374,13 @@ function CoursePageRoute() {
       : flatLessons.at(flatLessons.indexOf(selectedLesson) + 1);
 
   function goToLesson(nextLessonId: string | null): void {
+    if (nextLessonId === null) {
+      void navigate({ to: "/courses" });
+      return;
+    }
     void navigate({
       params: { courseId },
-      search: nextLessonId === null ? {} : { lesson: nextLessonId },
+      search: { lesson: nextLessonId },
       to: "/courses/$courseId",
     });
   }
@@ -338,13 +389,18 @@ function CoursePageRoute() {
   // player (current sub-lesson module + one ahead) — no course-wide sweep.
 
   // Content fill: whenever the reader has a lesson open and the next lesson
-  // is still an unfilled skeleton, the server generates its content — one
-  // lesson per visit, so the course always has the next module ready.
+  // is still an unfilled skeleton, the server starts a detached generation
+  // fiber and answers immediately. The course/lesson queries poll until the
+  // content lands, so leaving the page never cancels the model work.
   const queryClient = useQueryClient();
-  const generateNextLesson = useMutation(
-    trpc.courses.generateNextLessonModule.mutationOptions()
+  const scheduleNextLesson = useMutation(
+    trpc.courses.scheduleNextLessonModule.mutationOptions()
   );
   const openedLessonTriggerRef = useRef<string | null>(null);
+  const scheduledLessonRef = useRef<{
+    readonly lessonId: string;
+    readonly title: string;
+  } | null>(null);
   const openedLessonId = selectedLessonId;
   useEffect(() => {
     if (openedLessonId === null) {
@@ -356,31 +412,49 @@ function CoursePageRoute() {
     openedLessonTriggerRef.current = openedLessonId;
     void (async () => {
       try {
-        const outcome = await generateNextLesson.mutateAsync({
+        const outcome = await scheduleNextLesson.mutateAsync({
           courseId,
           lessonId: openedLessonId,
         });
-        if (outcome.kind === "generated") {
-          toast.success(`Next lesson ready — ${outcome.title}`);
-          void queryClient.invalidateQueries({
-            queryKey: trpc.courses.getLesson.queryKey({
-              courseId,
-              lessonId: outcome.lessonId,
-            }),
-          });
+        if (outcome.kind === "scheduled") {
+          scheduledLessonRef.current = {
+            lessonId: outcome.lessonId,
+            title: outcome.title,
+          };
           void queryClient.invalidateQueries({
             queryKey: trpc.courses.get.queryKey({ courseId }),
           });
         }
       } catch {
-        // Background prefetch failure — tell the reader briefly; the call
-        // retries automatically the next time they open a lesson.
-        toast.error(
-          "Couldn't generate the next lesson yet — it'll retry when you return to it"
-        );
+        // Background prefetch failure — the reader can retry by reopening
+        // the lesson; nothing on screen is broken.
+        toast.error("Couldn't queue the next lesson — it will retry later");
       }
     })();
-  }, [openedLessonId, courseId, generateNextLesson, queryClient, trpc]);
+  }, [openedLessonId, courseId, scheduleNextLesson, queryClient, trpc]);
+
+  // Announce completion once the polled course structure sees the target
+  // lesson gain content. A ref keeps this out of React state: the toast is
+  // the only observable side effect.
+  useEffect(() => {
+    const scheduledLesson = scheduledLessonRef.current;
+    if (scheduledLesson === null) {
+      return;
+    }
+    const targetLesson = sections
+      .flatMap((section) => section.lessons)
+      .find((lesson) => lesson.id === scheduledLesson.lessonId);
+    if (targetLesson?.hasContent === true) {
+      scheduledLessonRef.current = null;
+      toast.success(`Next lesson ready — ${scheduledLesson.title}`);
+      void queryClient.invalidateQueries({
+        queryKey: trpc.courses.getLesson.queryKey({
+          courseId,
+          lessonId: scheduledLesson.lessonId,
+        }),
+      });
+    }
+  }, [courseId, queryClient, sections, trpc]);
 
   if (courseQuery.isPending) {
     return <CoursePageSkeleton />;
@@ -408,17 +482,46 @@ function CoursePageRoute() {
     <div className="bg-background text-foreground flex min-h-0 flex-1 flex-col">
       <div className="grid min-h-0 flex-1 md:grid-cols-[300px_1fr]">
         {/* Sidebar: course, headings (sections), subheadings (lessons) */}
-        <CourseSidebar
-          course={course}
-          flatLessons={flatLessons}
-          goToLesson={goToLesson}
-          progressPercent={progressPercent}
-          sections={sections}
-          selectedLessonId={selectedLessonId}
-        />
+        <div className="hidden min-h-0 md:block">
+          <CourseSidebar
+            course={course}
+            flatLessons={flatLessons}
+            goToLesson={goToLesson}
+            progressPercent={progressPercent}
+            sections={sections}
+            selectedLessonId={selectedLessonId}
+          />
+        </div>
 
         {/* Center: lesson content — scrolls internally, never the page */}
         <main className="flex min-h-0 flex-1 flex-col md:overflow-y-auto">
+          <details className="border-border/70 bg-sidebar mx-4 mt-4 rounded-lg border px-4 py-3 md:hidden">
+            <summary className="cursor-pointer text-sm font-medium">
+              Course lessons · {course.completedLessonCount}/
+              {course.lessonCount}
+            </summary>
+            <nav className="mt-3 space-y-4">
+              {sections.map((section) => (
+                <div key={section.id ?? section.title}>
+                  <p className="text-muted-foreground pb-1 text-[11px] font-semibold tracking-widest uppercase">
+                    {section.title}
+                  </p>
+                  <ul className="space-y-0.5">
+                    {section.lessons.map((lesson) => (
+                      <li key={lesson.id}>
+                        <LessonListButton
+                          flatLessons={flatLessons}
+                          goToLesson={goToLesson}
+                          lesson={lesson}
+                          selectedLessonId={selectedLessonId}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </nav>
+          </details>
           <LessonMainContent
             courseId={courseId}
             goToLesson={goToLesson}
@@ -426,6 +529,9 @@ function CoursePageRoute() {
             lessonIsError={lessonQuery.isError}
             lessonIsPending={lessonQuery.isPending}
             nextLesson={nextLesson}
+            onRetryLesson={() => {
+              void lessonQuery.refetch();
+            }}
             selectedLessonId={selectedLessonId}
           />
         </main>
