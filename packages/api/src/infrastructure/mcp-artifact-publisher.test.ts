@@ -1,11 +1,40 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  normalizeArtifactServerMcpUrl,
   toMcpError,
   unwrapToolResultRecord,
 } from "./mcp-artifact-publisher";
 
 describe("mcp-artifact-publisher", () => {
+  describe("normalizeArtifactServerMcpUrl", () => {
+    it("adds /mcp to an origin-only URL", () => {
+      expect(normalizeArtifactServerMcpUrl("http://localhost:8787")).toBe(
+        "http://127.0.0.1:8787/mcp"
+      );
+      expect(normalizeArtifactServerMcpUrl("http://localhost:8787/")).toBe(
+        "http://127.0.0.1:8787/mcp"
+      );
+    });
+
+    it("keeps a configured MCP path and strips trailing slashes", () => {
+      expect(normalizeArtifactServerMcpUrl("http://127.0.0.1:8787/mcp/")).toBe(
+        "http://127.0.0.1:8787/mcp"
+      );
+      expect(
+        normalizeArtifactServerMcpUrl(
+          "https://artifacts.example.com/custom/mcp"
+        )
+      ).toBe("https://artifacts.example.com/custom/mcp");
+    });
+
+    it("drops query strings and fragments", () => {
+      expect(
+        normalizeArtifactServerMcpUrl("http://127.0.0.1:8787/mcp?x=1#top")
+      ).toBe("http://127.0.0.1:8787/mcp");
+    });
+  });
+
   describe("unwrapToolResultRecord", () => {
     it("returns structured content when present", () => {
       const result = unwrapToolResultRecord(

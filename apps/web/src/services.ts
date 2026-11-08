@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
+
 import { createCurioRuntime } from "@curio/api/composition/runtime";
-import { ArtifactPublishFailed } from "@curio/api/domain/artifact";
-import { normalizeLessonKind } from "@curio/api/domain/course";
 import { toStoredLessonContent } from "@curio/api/domain/lesson-content";
+import { createApiKeyCipher } from "@curio/api/infrastructure/api-key-cipher";
+import type { ArtifactPublisherFunction } from "@curio/api/infrastructure/artifact-create-tool";
 import type {
   CreateLessonToolRequest,
   CreateLessonToolResult,
@@ -18,7 +20,6 @@ import {
   createOpenAiCompatibleChatModelProvider,
 } from "@curio/api/infrastructure/openai-chat-model-provider";
 import { createUserChatModel } from "@curio/api/infrastructure/user-chat-model";
-import type { ArtifactPublisherContract } from "@curio/api/services/artifact-publisher";
 import { ArtifactPublisher } from "@curio/api/services/artifact-publisher";
 import { ChatModelProvider } from "@curio/api/services/chat-model-provider";
 import { ChatRunStore } from "@curio/api/services/chat-run-store";
@@ -30,6 +31,8 @@ import type { LanguageModel } from "ai";
 import { Effect } from "effect";
 
 import { ENV } from "./env.server";
+import { persistCommittedPartial } from "./utils/durable-chat";
+import { logger } from "./utils/logger";
 
 export const db = createDb(ENV);
 export const auth = createAuth(ENV, db);
@@ -37,6 +40,9 @@ export const auth = createAuth(ENV, db);
 const chatStore = createDrizzleChatStore(db);
 const chatRunStore = createDrizzleChatRunStore(db);
 const courseStore = createDrizzleCourseStore(db);
+const apiKeyCipher = createApiKeyCipher(
+  ENV.MODEL_SETTINGS_ENCRYPTION_KEY ?? ENV.BETTER_AUTH_SECRET
+);
 
 const chatModelProvider = createOpenAiCompatibleChatModelProvider({
   // "responses" for Grok/GPT Luna models, "chat-completions" for GLM/Kimi/...
@@ -56,13 +62,103 @@ const artifactPublisher = ENV.ARTIFACT_SERVER_URL
     })
   : null;
 
+/**
+ * Non-blocking startup diagnostic. `/health` proves the process is listening;
+ * the MCP initialize probe proves the configured bearer key is accepted, so a
+ * stale `ARTIFACT_SERVER_API_KEY` is visible at boot instead of only when the
+ * Director tries to publish.
+ */
+if (ENV.ARTIFACT_SERVER_URL !== undefined) {
+  const artifactServerUrl = ENV.ARTIFACT_SERVER_URL;
+  const apiKey = ENV.ARTIFACT_SERVER_API_KEY;
+  void (async () => {
+    const healthUrl = new URL("/health", artifactServerUrl);
+    try {
+      const healthResponse = await fetch(healthUrl, {
+        signal: AbortSignal.timeout(2500),
+      });
+      if (!healthResponse.ok) {
+        logger.warn(
+          "Artifact Server health check failed",
+          `${healthUrl.origin} responded ${healthResponse.status}`
+        );
+        return;
+      }
+      logger.info("Artifact Server health check passed", healthUrl.origin);
+    } catch (probeError: unknown) {
+      logger.warn(
+        `Artifact Server is not reachable at ${healthUrl.origin}. Start it or fix ARTIFACT_SERVER_URL.`,
+        probeError
+      );
+      return;
+    }
+
+    if (apiKey === undefined) {
+      logger.warn(
+        "ARTIFACT_SERVER_API_KEY is not set; the Artifact Server will reject /mcp with 401. Copy the server's API token into apps/web/.env and restart Curio."
+      );
+      return;
+    }
+
+    const keyFingerprint = createHash("sha256")
+      .update(apiKey)
+      .digest("hex")
+      .slice(0, 12);
+    try {
+      const mcpResponse = await fetch(artifactServerUrl, {
+        body: JSON.stringify({
+          id: 1,
+          jsonrpc: "2.0",
+          method: "initialize",
+          params: {
+            capabilities: {},
+            clientInfo: { name: "curio-boot-probe", version: "0.1.0" },
+            protocolVersion: "2024-11-05",
+          },
+        }),
+        headers: {
+          Accept: "application/json, text/event-stream",
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+        signal: AbortSignal.timeout(3000),
+      });
+      try {
+        await mcpResponse.body?.cancel();
+      } catch {
+        // The status is all this probe needs.
+      }
+      if (mcpResponse.ok) {
+        logger.info(
+          `Artifact Server MCP auth passed (key ${keyFingerprint})`,
+          artifactServerUrl
+        );
+        return;
+      }
+      logger.warn(
+        `Artifact Server rejected ARTIFACT_SERVER_API_KEY (key ${keyFingerprint}, HTTP ${mcpResponse.status}). ` +
+          "The running process holds a stale key: copy the current token into apps/web/.env and restart the Curio dev server. " +
+          "Local token file: artifact-server/.artifact-server/local-api-token.",
+        artifactServerUrl
+      );
+    } catch (probeError: unknown) {
+      logger.warn(
+        "Artifact Server MCP auth probe failed",
+        artifactServerUrl,
+        probeError
+      );
+    }
+  })();
+}
+
 export const curioRuntime = createCurioRuntime({
   artifactPublisher,
   chatModelProvider,
   chatRunStore,
   chatStore,
   courseStore,
-  modelSettingsStore: createDrizzleModelSettingsStore(db),
+  modelSettingsStore: createDrizzleModelSettingsStore(db, apiKeyCipher),
 });
 
 /**
@@ -77,12 +173,27 @@ void (async () => {
     await curioRuntime.runPromise(
       Effect.gen(function* crashOrphanedRuns() {
         const chatRunStoreService = yield* ChatRunStore;
-        const crashedRunIds = yield* chatRunStoreService.crashStaleRuns(
+        const crashedRuns = yield* chatRunStoreService.crashStaleRuns(
           STALE_RUN_THRESHOLD_MS
         );
-        if (crashedRunIds.length > 0) {
+        for (const crashedRun of crashedRuns) {
+          yield* persistCommittedPartial(
+            crashedRun.id,
+            crashedRun.chatId,
+            crashedRun.userId
+          ).pipe(
+            Effect.catch((recoveryError) =>
+              Effect.logError(
+                "Failed to persist a crashed run's partial message",
+                crashedRun.id,
+                recoveryError
+              )
+            )
+          );
+        }
+        if (crashedRuns.length > 0) {
           yield* Effect.logInfo(
-            `Marked ${crashedRunIds.length} stale agent run(s) as crashed at boot`
+            `Marked ${crashedRuns.length} stale agent run(s) as crashed at boot`
           );
         }
       })
@@ -94,22 +205,14 @@ void (async () => {
   }
 })();
 
-export const runtimeScopedArtifactPublisher: ArtifactPublisherContract = {
+export const runtimeScopedArtifactPublisher: ArtifactPublisherFunction = {
   publish: (publicationInput) =>
-    Effect.tryPromise({
-      catch: (cause: unknown) =>
-        new ArtifactPublishFailed({
-          cause,
-          title: publicationInput.title,
-        }),
-      try: () =>
-        curioRuntime.runPromise(
-          Effect.gen(function* runtimePublish() {
-            const artifactPublisherService = yield* ArtifactPublisher;
-            return yield* artifactPublisherService.publish(publicationInput);
-          })
-        ),
-    }),
+    curioRuntime.runPromise(
+      Effect.gen(function* runtimePublish() {
+        const artifactPublisherService = yield* ArtifactPublisher;
+        return yield* artifactPublisherService.publish(publicationInput);
+      })
+    ),
 };
 
 export const curioFeatures = {
@@ -131,7 +234,7 @@ export async function createScopedCourseScaffold(
         description: planRequest.description ?? "",
         sections: planRequest.sections.map((section) => ({
           lessons: section.lessons.map((lesson) => ({
-            kind: normalizeLessonKind(lesson.kind),
+            kind: lesson.kind,
             title: lesson.title,
           })),
           title: section.title,

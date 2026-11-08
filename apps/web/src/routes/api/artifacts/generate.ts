@@ -1,6 +1,8 @@
 import { ArtifactGenerator } from "@curio/api/services/artifact-generator";
 import { ArtifactPublisher } from "@curio/api/services/artifact-publisher";
+import { ChatStore } from "@curio/api/services/chat-store";
 import { createFileRoute } from "@tanstack/react-router";
+import type { UIMessage } from "ai";
 import { Effect, Option } from "effect";
 import { z } from "zod";
 
@@ -14,6 +16,7 @@ import { checkRateLimit, rateLimitResponse } from "../../../utils/rate-limit";
 import { withSecurityHeaders } from "../../../utils/security-headers";
 
 const artifactGenerationRequestSchema = z.object({
+  chatId: z.string().min(1).max(64),
   prompt: z.string().min(1).max(20_000),
 });
 
@@ -30,10 +33,13 @@ export const Route = createFileRoute("/api/artifacts/generate")({
           return withSecurityHeaders(unauthorizedResponse());
         }
 
-        const rateLimit = checkRateLimit(`artifact:${sessionOption.value.user.id}`, {
-          limit: 10,
-          windowMs: 60_000,
-        });
+        const rateLimit = checkRateLimit(
+          `artifact:${sessionOption.value.user.id}`,
+          {
+            limit: 10,
+            windowMs: 60_000,
+          }
+        );
         if (!rateLimit.allowed) {
           return withSecurityHeaders(rateLimitResponse(rateLimit.headers));
         }
@@ -45,9 +51,18 @@ export const Route = createFileRoute("/api/artifacts/generate")({
           );
         }
 
-        const parsedRequestBody = artifactGenerationRequestSchema.safeParse(
-          await request.json()
-        );
+        let requestBody: unknown;
+        try {
+          requestBody = await request.json();
+        } catch {
+          return secureJson(
+            { error: "Invalid artifact generation request" },
+            { status: 400 }
+          );
+        }
+
+        const parsedRequestBody =
+          artifactGenerationRequestSchema.safeParse(requestBody);
 
         if (!parsedRequestBody.success) {
           return secureJson(
@@ -56,7 +71,8 @@ export const Route = createFileRoute("/api/artifacts/generate")({
           );
         }
 
-        const { prompt } = parsedRequestBody.data;
+        const { chatId, prompt } = parsedRequestBody.data;
+        const userId = sessionOption.value.user.id;
 
         try {
           const generationAndPublication = await curioRuntime.runPromise(
@@ -72,13 +88,38 @@ export const Route = createFileRoute("/api/artifacts/generate")({
                 mediaType: brief.mediaType,
                 title: brief.title,
               });
-              return { brief, publication };
+
+              // The inline card is part of the transcript, not a client-only
+              // decoration: persist it before answering so a reload keeps it.
+              const messageId = `msg-artifact-${crypto.randomUUID()}`;
+              const artifactMessage: UIMessage = {
+                id: messageId,
+                parts: [
+                  {
+                    data: {
+                      content: brief.content,
+                      mediaType: brief.mediaType,
+                      reviewUrl: publication.links.review,
+                      summary: brief.summary,
+                      title: brief.title,
+                    },
+                    type: "data-artifact",
+                  },
+                ],
+                role: "assistant",
+              };
+              const chatStore = yield* ChatStore;
+              yield* chatStore.ensureChatForUser(chatId, userId);
+              yield* chatStore.appendMessage(chatId, userId, artifactMessage);
+
+              return { brief, messageId, publication };
             })
           );
 
           return secureJson({
             brief: generationAndPublication.brief,
             links: generationAndPublication.publication.links,
+            messageId: generationAndPublication.messageId,
           });
         } catch (error: unknown) {
           logger.error("Artifact generation failed", error);

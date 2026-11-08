@@ -1,3 +1,4 @@
+import { guessMediaTypeFromFilename } from "@curio/api/domain/artifact";
 import { Option, Schema, SchemaTransformation } from "effect";
 
 import type { ArtifactUIData } from "./ui-messages";
@@ -13,7 +14,8 @@ import type { ArtifactUIData } from "./ui-messages";
 
 const ArtifactPayload = Schema.Struct({
   content: Schema.String,
-  mediaType: Schema.String,
+  filename: Schema.optional(Schema.String),
+  mediaType: Schema.optional(Schema.String),
   reviewUrl: Schema.optional(Schema.String),
   summary: Schema.optional(Schema.String),
   title: Schema.optional(Schema.String),
@@ -55,6 +57,8 @@ export interface GeneratedArtifactResponseView {
   readonly links: {
     readonly review: string;
   };
+  /** Id of the persisted chat message carrying the inline artifact card. */
+  readonly messageId: string;
 }
 
 const PendingQuestionsPayload = Schema.Struct({
@@ -97,6 +101,7 @@ const GeneratedArtifactResponsePayload = Schema.Struct({
   links: Schema.Struct({
     review: Schema.String,
   }),
+  messageId: Schema.String,
 });
 
 const GeneratedArtifactErrorPayload = Schema.Struct({
@@ -120,11 +125,18 @@ const toOptionalDecode = Schema.decodeUnknownOption;
 const decodeArtifactDataPayload = toOptionalDecode(ArtifactPayload);
 
 /** Inline artifact cards render from tool inputs, data parts, and provider
- * outputs; all three share one decoded shape. */
+ * outputs; all three share one decoded shape. A tool input may omit
+ * `mediaType` (the publisher infers it from the filename), so the renderer
+ * resolves the same fallback instead of dropping the card. */
 export function toArtifactData(input: unknown): Option.Option<ArtifactUIData> {
   return Option.map(decodeArtifactDataPayload(input), (decoded) => ({
     content: decoded.content,
-    mediaType: decoded.mediaType,
+    mediaType:
+      decoded.mediaType ??
+      (decoded.filename === undefined
+        ? undefined
+        : guessMediaTypeFromFilename(decoded.filename)) ??
+      "text/plain",
     reviewUrl: Option.fromNullishOr(decoded.reviewUrl),
     summary: Option.fromNullishOr(decoded.summary),
     title: Option.fromNullishOr(decoded.title),
@@ -259,6 +271,11 @@ const WebReadToolOutputPayload = Schema.Struct({
   url: Schema.optional(Schema.String),
 });
 
+const WebReadToolInputPayload = Schema.Struct({
+  selector: Schema.optional(Schema.String),
+  url: Schema.String,
+});
+
 export interface WebSearchResultView {
   readonly snippet: string;
   readonly title: string;
@@ -314,6 +331,15 @@ export function toWebReadToolOutput(
     ),
     url: Option.fromNullishOr(decoded.url),
   }));
+}
+
+const decodeWebReadToolInput = toOptionalDecode(WebReadToolInputPayload);
+
+/** The URL a web_read call asked for; used by the session link index. */
+export function toWebReadToolUrl(input: unknown): Option.Option<string> {
+  return Option.flatMap(decodeWebReadToolInput(input), (decoded) =>
+    decoded.url === "" ? Option.none<string>() : Option.some(decoded.url)
+  );
 }
 
 /* ------------------------------------------------------------------------

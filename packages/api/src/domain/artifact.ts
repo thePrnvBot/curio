@@ -17,6 +17,32 @@ export interface GeneratedArtifactBrief {
 
 /// -------------------- publication --------------------
 
+/** Entry-filename extensions the artifact server accepts, with their IANA
+ * media types. Shared by the publishing tool and the chat renderer. */
+export const MEDIA_TYPES_BY_EXTENSION = {
+  css: "text/css",
+  html: "text/html",
+  js: "text/javascript",
+  json: "application/json",
+  md: "text/markdown",
+  svg: "image/svg+xml",
+  txt: "text/plain",
+  xml: "application/xml",
+} as const;
+
+export type KnownArtifactExtension = keyof typeof MEDIA_TYPES_BY_EXTENSION;
+
+/** Derives the media type from a filename's extension. */
+export function guessMediaTypeFromFilename(
+  filename: string
+): string | undefined {
+  const extension = filename.split(".").at(-1)?.toLowerCase();
+  if (extension === undefined || !(extension in MEDIA_TYPES_BY_EXTENSION)) {
+    return undefined;
+  }
+  return MEDIA_TYPES_BY_EXTENSION[extension as KnownArtifactExtension];
+}
+
 export interface ArtifactPublicationInput {
   /** Human-facing artifact name. */
   readonly title: string;

@@ -28,6 +28,7 @@ export class ArtifactGenerationFailed extends Data.TaggedError(
 
 export const generateArtifact = Effect.fn("chat-artifact.generate")(
   function* publishArtifact(
+    chatId: string,
     promptText: string
   ): Effect.fn.Return<GeneratedArtifactResponseView, ArtifactGenerationFailed> {
     const generationResponse = yield* Effect.tryPromise({
@@ -39,7 +40,7 @@ export const generateArtifact = Effect.fn("chat-artifact.generate")(
       // The signal a caller passed to runPromise aborts the request with it.
       try: (requestAbortSignal) =>
         fetch(ARTIFACT_GENERATION_ENDPOINT, {
-          body: JSON.stringify({ prompt: promptText }),
+          body: JSON.stringify({ chatId, prompt: promptText }),
           credentials: "include",
           headers: { "Content-Type": "application/json" },
           method: "POST",

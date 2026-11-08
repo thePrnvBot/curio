@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { normalizeArtifactServerMcpUrl } from "@curio/api/infrastructure/mcp-artifact-publisher";
 import { z } from "zod";
 
 export const ENV = z
@@ -15,9 +16,16 @@ export const ENV = z
     AI_PROTOCOL: z
       .enum(["chat-completions", "responses"])
       .default("chat-completions"),
+    MODEL_SETTINGS_ENCRYPTION_KEY: z
+      .string()
+      .min(32)
+      .optional()
+      .transform((value) => value ?? undefined),
     ARTIFACT_SERVER_URL: z
       .union([z.string().url(), z.literal("")])
-      .transform((value) => (value === "" ? undefined : value)),
+      .transform((value) =>
+        value === "" ? undefined : normalizeArtifactServerMcpUrl(value)
+      ),
     ARTIFACT_SERVER_API_KEY: z
       .string()
       .min(1)

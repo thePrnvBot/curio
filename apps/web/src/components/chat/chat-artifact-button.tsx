@@ -9,8 +9,8 @@ import { toast } from "sonner";
 
 import type { GeneratedArtifactResponseView } from "@/utils/chat-schemas";
 
-import { generateArtifact } from "./chat-artifact-generate";
 import { artifactButtonReducer } from "./chat-artifact-button-state";
+import { generateArtifact } from "./chat-artifact-generate";
 
 /**
  * The "Artifact" toolbar action: sends the prompt text as a generation
@@ -18,16 +18,24 @@ import { artifactButtonReducer } from "./chat-artifact-button-state";
  * Failures arrive through the typed error channel and surface as toasts.
  */
 export function ArtifactActionButton({
+  chatId,
+  disabled = false,
   onPublished,
 }: {
+  chatId: string;
+  disabled?: boolean;
   onPublished: (publishedArtifact: GeneratedArtifactResponseView) => void;
 }) {
   const promptInput = usePromptInputController();
   const [state, dispatch] = useReducer(artifactButtonReducer, {
     kind: "idle",
   });
+  const isGenerating = state.kind === "generating";
 
   async function publishArtifactFromPrompt(): Promise<void> {
+    if (isGenerating) {
+      return;
+    }
     const promptText = promptInput.textInput.value.trim();
     if (promptText === "") {
       toast.error("Describe the artifact in the input first");
@@ -36,7 +44,7 @@ export function ArtifactActionButton({
 
     dispatch({ type: "start" });
     const publishOutcome = await Effect.runPromise(
-      Effect.result(generateArtifact(promptText))
+      Effect.result(generateArtifact(chatId, promptText))
     );
 
     Result.match(publishOutcome, {
@@ -55,13 +63,15 @@ export function ArtifactActionButton({
 
   return (
     <PromptInputButton
+      aria-busy={isGenerating}
+      disabled={disabled || isGenerating}
       onClick={() => {
         void publishArtifactFromPrompt();
       }}
-      variant={state.kind === "generating" ? "default" : "ghost"}
+      variant={isGenerating ? "default" : "ghost"}
     >
       <FilePlus2Icon className="size-4" />
-      <span>Artifact</span>
+      <span>{isGenerating ? "Publishing…" : "Artifact"}</span>
     </PromptInputButton>
   );
 }

@@ -10,6 +10,7 @@ import type {
   ArtifactPublicationResult,
 } from "../domain/artifact";
 import { ArtifactPublishFailed } from "../domain/artifact";
+import { describeCause } from "../domain/cause-description";
 import type { ArtifactPublisherContract } from "../services/artifact-publisher";
 
 export interface ArtifactServerMcpConfig {
@@ -19,6 +20,27 @@ export interface ArtifactServerMcpConfig {
   readonly apiKey?: string;
   /** Project the agent publishes into; created on demand. */
   readonly projectName: string;
+}
+
+/**
+ * Accepts the common ways people configure a local Artifact Server:
+ * - `http://localhost:8787` (origin only) -> `http://127.0.0.1:8787/mcp`
+ * - `http://localhost:8787/` -> `http://127.0.0.1:8787/mcp`
+ * - `http://127.0.0.1:8787/mcp/` -> `http://127.0.0.1:8787/mcp`
+ * Custom MCP paths (`https://host/custom/mcp`) are preserved. `localhost` is
+ * rewritten to `127.0.0.1` because the local server binds that exact loopback
+ * address and Node may otherwise try `::1` first.
+ */
+export function normalizeArtifactServerMcpUrl(value: string): string {
+  const url = new URL(value);
+  url.hash = "";
+  url.search = "";
+  const trimmedPath = url.pathname.replace(/\/+$/u, "");
+  url.pathname = trimmedPath === "" ? "/mcp" : trimmedPath;
+  if (url.hostname === "localhost") {
+    url.hostname = "127.0.0.1";
+  }
+  return url.toString();
 }
 
 /**
@@ -187,8 +209,22 @@ function requireValue<T>(
 function connectArtifactServerMcp(
   config: ArtifactServerMcpConfig
 ): Effect.Effect<Client, ArtifactPublishFailed> {
+  const keyFingerprint =
+    config.apiKey === undefined
+      ? "missing"
+      : createHash("sha256").update(config.apiKey).digest("hex").slice(0, 12);
   return Effect.tryPromise({
-    catch: toMcpError("MCP connect"),
+    catch: (cause: unknown) =>
+      new ArtifactPublishFailed({
+        cause: new Error(
+          `Could not connect to the Artifact Server MCP endpoint at ${config.mcpUrl} ` +
+            `(bearer key fingerprint: ${keyFingerprint}). ` +
+            "The URL must point at /mcp (for example http://127.0.0.1:8787/mcp), and " +
+            "ARTIFACT_SERVER_API_KEY must match the server's local-api-token or API token. " +
+            `Underlying error: ${describeCause(cause)}`
+        ),
+        title: "MCP connect",
+      }),
     try: async () => {
       const mcpClient = new Client({ name: "curio", version: "0.1.0" });
       await mcpClient.connect(
@@ -340,12 +376,8 @@ function commitArtifactUpload(
   client: Client,
   stagedUploadId: string,
   projectId: string,
-  input: ArtifactPublicationInput,
-  fingerprintSha256: string,
-  byteLength: number
+  input: ArtifactPublicationInput
 ): Effect.Effect<ArtifactPublicationResult, ArtifactPublishFailed> {
-  void fingerprintSha256;
-  void byteLength;
   return callArtifactTool(
     client,
     "artifact_commit_upload",
@@ -396,31 +428,34 @@ export function createMcpArtifactPublisher(
     publish: (input: ArtifactPublicationInput) =>
       Effect.gen(function* publishArtifact() {
         const mcpClient = yield* connectArtifactServerMcp(config);
-        const contentBytes = Buffer.from(input.content, "utf-8");
-        const fingerprintSha256 = createHash("sha256")
-          .update(contentBytes)
-          .digest("hex");
+        return yield* Effect.gen(function* publishOverMcp() {
+          const contentBytes = Buffer.from(input.content, "utf-8");
+          const fingerprintSha256 = createHash("sha256")
+            .update(contentBytes)
+            .digest("hex");
 
-        const projectId = yield* resolveProjectId(mcpClient, config);
-        const { stagedEntry, stagedUploadId } = yield* stageArtifactUpload(
-          mcpClient,
-          projectId,
-          input,
-          fingerprintSha256,
-          contentBytes.byteLength
+          const projectId = yield* resolveProjectId(mcpClient, config);
+          const { stagedEntry, stagedUploadId } = yield* stageArtifactUpload(
+            mcpClient,
+            projectId,
+            input,
+            fingerprintSha256,
+            contentBytes.byteLength
+          );
+          yield* uploadStagedEntryBytes(stagedEntry, config, input);
+          return yield* commitArtifactUpload(
+            mcpClient,
+            stagedUploadId,
+            projectId,
+            input
+          );
+        }).pipe(
+          // Close the transport on success *and* every failure path; a leaked
+          // MCP client would keep sockets open per publication attempt.
+          Effect.ensuring(
+            Effect.tryPromise(() => mcpClient.close()).pipe(Effect.ignore)
+          )
         );
-        yield* uploadStagedEntryBytes(stagedEntry, config, input);
-        const publicationResult = yield* commitArtifactUpload(
-          mcpClient,
-          stagedUploadId,
-          projectId,
-          input,
-          fingerprintSha256,
-          contentBytes.byteLength
-        );
-
-        yield* Effect.ignore(Effect.promise(() => mcpClient.close()));
-        return publicationResult;
       }),
   };
 }

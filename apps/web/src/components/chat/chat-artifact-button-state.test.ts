@@ -13,6 +13,7 @@ const dummyArtifact: GeneratedArtifactResponseView = {
     title: "Artifact",
   },
   links: { review: "https://example.com" },
+  messageId: "msg-artifact-test",
 };
 
 describe("artifactButtonReducer", () => {
@@ -25,7 +26,10 @@ describe("artifactButtonReducer", () => {
     const state: ArtifactButtonState = { kind: "idle" };
     expect(artifactButtonReducer(state, { type: "reset" })).toBe(state);
     expect(
-      artifactButtonReducer(state, { type: "published", artifact: dummyArtifact })
+      artifactButtonReducer(state, {
+        type: "published",
+        artifact: dummyArtifact,
+      })
     ).toBe(state);
     expect(
       artifactButtonReducer(state, { type: "error", message: "fail" })
@@ -76,13 +80,16 @@ describe("artifactButtonReducer", () => {
     };
     expect(artifactButtonReducer(published, { type: "start" })).toBe(published);
     expect(
-      artifactButtonReducer(published, { type: "published", artifact: dummyArtifact })
+      artifactButtonReducer(published, {
+        type: "published",
+        artifact: dummyArtifact,
+      })
     ).toBe(published);
 
     const error: ArtifactButtonState = { kind: "error", message: "fail" };
     expect(artifactButtonReducer(error, { type: "start" })).toBe(error);
-    expect(artifactButtonReducer(error, { type: "error", message: "other" })).toBe(
-      error
-    );
+    expect(
+      artifactButtonReducer(error, { type: "error", message: "other" })
+    ).toBe(error);
   });
 });

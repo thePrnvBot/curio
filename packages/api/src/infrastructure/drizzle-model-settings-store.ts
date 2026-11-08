@@ -9,6 +9,7 @@ import type {
   UserModelProvider,
   UserModelSettingsRecord,
 } from "../services/model-settings-store";
+import type { ApiKeyCipher } from "./api-key-cipher";
 
 interface UserModelSettingsRow {
   readonly apiKey: string | null;
@@ -21,9 +22,15 @@ function normalizeProvider(provider: string): UserModelProvider {
   return provider === "openai" ? "openai" : "openai-compatible";
 }
 
-function rowToRecord(row: UserModelSettingsRow): UserModelSettingsRecord {
+function rowToRecord(
+  row: UserModelSettingsRow,
+  cipher: ApiKeyCipher
+): UserModelSettingsRecord {
   return {
-    apiKey: row.apiKey,
+    apiKey:
+      row.apiKey === null || row.apiKey === ""
+        ? null
+        : cipher.decrypt(row.apiKey),
     baseUrl: row.baseUrl,
     model: row.model,
     provider: normalizeProvider(row.provider),
@@ -48,7 +55,8 @@ const settingsSelection = {
 } as const;
 
 export function createDrizzleModelSettingsStore(
-  database: Database
+  database: Database,
+  cipher: ApiKeyCipher
 ): ModelSettingsStoreContract {
   return {
     getUserModelSettings: (userId) =>
@@ -61,24 +69,22 @@ export function createDrizzleModelSettingsStore(
             .limit(1)
         )
       ).pipe(
-        Effect.flatMap((rows) =>
-          Option.fromNullishOr(rows.at(0)).pipe(
-            Option.match({
-              onNone: () => Effect.succeed(null),
-              onSome: (row) => Effect.succeed(rowToRecord(row)),
-            })
-          )
-        )
+        Effect.map((rows) =>
+          Option.getOrNull(Option.fromNullishOr(rows.at(0)))
+        ),
+        Effect.map((row) => (row === null ? null : rowToRecord(row, cipher)))
       ),
 
     setUserModelSettings: ({ apiKey, baseUrl, model, provider, userId }) =>
       withModelError("setUserModelSettings")(
         Effect.tryPromise(async () => {
+          const storedApiKey =
+            apiKey === null || apiKey === "" ? null : cipher.encrypt(apiKey);
           const insertedRows = await database
             .insert(userModelSettings)
-            .values({ apiKey, baseUrl, model, provider, userId })
+            .values({ apiKey: storedApiKey, baseUrl, model, provider, userId })
             .onConflictDoUpdate({
-              set: { apiKey, baseUrl, model, provider },
+              set: { apiKey: storedApiKey, baseUrl, model, provider },
               target: userModelSettings.userId,
             })
             .returning(settingsSelection);
@@ -86,7 +92,7 @@ export function createDrizzleModelSettingsStore(
           if (insertedRow === undefined) {
             throw new Error("Model settings upsert returned no rows");
           }
-          return rowToRecord(insertedRow);
+          return rowToRecord(insertedRow, cipher);
         })
       ),
 
