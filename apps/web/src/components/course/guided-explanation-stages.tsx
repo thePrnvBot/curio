@@ -53,12 +53,6 @@ interface GuidedTokens {
 }
 
 interface GuidedCursorLayout {
-  readonly spotlight: {
-    readonly height: number;
-    readonly left: number;
-    readonly top: number;
-    readonly width: number;
-  };
   readonly x: number;
   readonly y: number;
 }
@@ -305,21 +299,16 @@ function useGuidedCursorLayout(options: {
     const end = Math.max(start + 1, start + cursor.length);
     const textRect = measureTextRange(lineElement, start, end) ?? lineRect;
     const lineTop = offsetTopWithin(container, lineElement);
-    const spotlight = {
-      height: Math.max(2, textRect.height),
-      left: textRect.left - containerRect.left,
-      // Layout offsets exclude the entrance animation's translateY; adding
-      // the in-line text offset keeps the highlight anchored while the
-      // stagger is still moving the line.
-      top: lineTop + (textRect.top - lineRect.top),
-      width: Math.max(2, textRect.width),
-    };
+    const left = textRect.left - containerRect.left;
+    const height = Math.max(2, textRect.height);
+    // Layout offsets exclude the entrance animation's translateY; adding the
+    // in-line text offset keeps the pointer anchored while the stagger is
+    // still moving the line.
+    const top = lineTop + (textRect.top - lineRect.top);
     setLayout({
-      spotlight,
       // Place MousePointer2's tip at the token's centre, just below its text.
-      x: spotlight.left + spotlight.width / 2 - CURSOR_TIP_INSET,
-      y:
-        spotlight.top + spotlight.height + CURSOR_BELOW_LINE - CURSOR_TIP_INSET,
+      x: left + Math.max(2, textRect.width) / 2 - CURSOR_TIP_INSET,
+      y: top + height + CURSOR_BELOW_LINE - CURSOR_TIP_INSET,
     });
   }, [containerRef, cursor]);
 
@@ -363,20 +352,7 @@ function useGuidedCursorLayout(options: {
   return layout;
 }
 
-function isCursorToken(
-  lineNumber: number,
-  span: GuidedStageSpan,
-  cursor: GuidedCodeCursorTarget | null
-): boolean {
-  if (cursor === null || cursor.line !== lineNumber) {
-    return false;
-  }
-  const start = cursor.column - 1;
-  const end = start + Math.max(cursor.length, 1);
-  return span.end > start && span.start < end;
-}
-
-/** Code stage with shiki highlighting, line-level narration spotlight, and a
+/** Code stage with shiki highlighting, contrast-based line focus, and a
  * floating cursor that springs to the token being explained. */
 export function GuidedCodeStage(props: {
   focus?: GuidedExplanationFocus;
@@ -456,15 +432,6 @@ export function GuidedCodeStage(props: {
   const cursorTransition = prefersReducedMotion
     ? { duration: 0.01 }
     : { type: "spring" as const, visualDuration: 0.5, bounce: 0.35 };
-  const spotlightTransition = prefersReducedMotion
-    ? { duration: 0.01 }
-    : {
-        type: "spring" as const,
-        visualDuration: 0.4,
-        bounce: 0,
-        restDelta: 0.1,
-      };
-
   return (
     <div className="flex flex-1 items-center justify-center overflow-x-auto">
       <pre
@@ -476,25 +443,13 @@ export function GuidedCodeStage(props: {
             : { backgroundColor: highlighted.bg, color: highlighted.fg }
         }
       >
-        <AnimatePresence initial={false}>
-          {cursorLayout === null ? null : (
-            <motion.span
-              animate={{ ...cursorLayout.spotlight, opacity: 1 }}
-              aria-hidden="true"
-              className="bg-primary/25 pointer-events-none absolute z-0 rounded-[3px]"
-              exit={{ opacity: 0 }}
-              initial={{ ...cursorLayout.spotlight, opacity: 0 }}
-              key="guided-code-spotlight"
-              transition={spotlightTransition}
-            />
-          )}
-        </AnimatePresence>
         <code className="relative z-10 block">
           {lines.map((line, lineIndex) => {
             const lineNumber = lineIndex + 1;
-            const isFocused = focusedLines.has(lineNumber);
             const isDimmed =
-              resolvedFocus !== null && focusedLines.size > 0 && !isFocused;
+              resolvedFocus !== null &&
+              focusedLines.size > 0 &&
+              !focusedLines.has(lineNumber);
             return (
               <span
                 className="animate-guided-block-in block"
@@ -508,38 +463,20 @@ export function GuidedCodeStage(props: {
               >
                 <motion.span
                   animate={{ opacity: isDimmed ? DIM_OPACITY : 1 }}
-                  className={
-                    isFocused
-                      ? "bg-primary/[0.07] block rounded-sm transition-colors duration-300"
-                      : "block rounded-sm transition-colors duration-300"
-                  }
+                  className="block"
                   transition={enterTransition}
                 >
                   {line.spans.length === 0
                     ? "\u00A0"
-                    : line.spans.map((span, spanIndex) => {
-                        const isSpotlit = isCursorToken(
-                          lineNumber,
-                          span,
-                          cursor
-                        );
-                        return (
-                          <span
-                            className="dark:!bg-[var(--shiki-dark-bg)] dark:!text-[var(--shiki-dark)]"
-                            key={spanIndex}
-                            style={
-                              isSpotlit
-                                ? {
-                                    ...span.style,
-                                    textShadow: "0 0 10px currentColor",
-                                  }
-                                : span.style
-                            }
-                          >
-                            {span.content}
-                          </span>
-                        );
-                      })}
+                    : line.spans.map((span, spanIndex) => (
+                        <span
+                          className="dark:!bg-[var(--shiki-dark-bg)] dark:!text-[var(--shiki-dark)]"
+                          key={spanIndex}
+                          style={span.style}
+                        >
+                          {span.content}
+                        </span>
+                      ))}
                 </motion.span>
               </span>
             );
