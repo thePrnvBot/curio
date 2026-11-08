@@ -79,6 +79,51 @@ function isWebGpuAvailable(): boolean {
   }
 }
 
+/**
+ * onnxruntime-web requests its default GPU adapter with no options, so
+ * Chromium hands out the power-saving adapter - integrated graphics on
+ * laptops even while plugged in. Wrap the worker's requestAdapter once to
+ * inject high-performance (discrete when present) and log what was picked,
+ * while preserving any future explicit caller preference.
+ */
+function steerGpuAdapterToDiscrete(): void {
+  const gpu = typeof navigator === "undefined" ? undefined : navigator.gpu;
+  if (
+    gpu === undefined ||
+    typeof gpu.requestAdapter !== "function" ||
+    (gpu as { curioPowerSteered?: boolean }).curioPowerSteered === true
+  ) {
+    return;
+  }
+  const originalRequestAdapter = gpu.requestAdapter.bind(gpu);
+  gpu.requestAdapter = async (
+    options?: GPURequestAdapterOptions
+  ): Promise<GPUAdapter | null> => {
+    const adapter = (await originalRequestAdapter(
+      options?.powerPreference === undefined
+        ? { ...options, powerPreference: "high-performance" }
+        : options
+    )) as
+      | (GPUAdapter & {
+          info?: { vendor?: string; architecture?: string; device?: string };
+        })
+      | null;
+    if (adapter) {
+      const adapterInfo = adapter.info;
+      narrationLog(
+        "WebGPU adapter:",
+        adapterInfo?.vendor ?? "unknown vendor",
+        adapterInfo?.architecture ?? "",
+        adapterInfo?.device ?? ""
+      );
+    } else {
+      narrationLog("WebGPU requestAdapter returned no adapter");
+    }
+    return adapter;
+  };
+  (gpu as unknown as { curioPowerSteered: boolean }).curioPowerSteered = true;
+}
+
 function loadEnginePlan(plan: EnginePlan): Promise<KokoroTTS> {
   narrationLog(
     `loading Kokoro model (${plan.device} ${plan.dtype})`
@@ -115,6 +160,9 @@ async function loadFirstAvailableEngine(): Promise<LoadedEngine> {
       rejectedPlanIndexes.add(planIndex);
       narrationLog("WebGPU unavailable in this worker; skipping to WASM");
       continue;
+    }
+    if (plan.device === "webgpu") {
+      steerGpuAdapterToDiscrete();
     }
     try {
       // oxlint-disable-next-line no-await-in-loop -- plan attempts are inherently sequential (the fallback engine only downloads when needed)
