@@ -1,4 +1,5 @@
-import type { UIMessage } from "ai";
+import type { UIMessage, UIMessageChunk } from "ai";
+import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -8,6 +9,7 @@ import {
   serial,
   text,
   timestamp,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 import { user } from "./auth";
@@ -67,7 +69,14 @@ export const chatRun = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [index("chat_run_chatId_idx").on(table.chatId)]
+  (table) => [
+    index("chat_run_chatId_idx").on(table.chatId),
+    // Two submits racing for the same chat must not both start a run. The
+    // database is the arbiter: a second `running` row violates the index.
+    uniqueIndex("chat_run_one_running_per_chat_idx")
+      .on(table.chatId)
+      .where(sql`${table.status} = 'running'`),
+  ]
 );
 
 /**
@@ -83,7 +92,7 @@ export const chatRunChunk = pgTable(
       .notNull()
       .references(() => chatRun.id, { onDelete: "cascade" }),
     seq: integer("seq").notNull(),
-    chunk: jsonb("chunk").$type<Record<string, unknown>>().notNull(),
+    chunk: jsonb("chunk").$type<UIMessageChunk>().notNull(),
   },
   (table) => [index("chat_run_chunk_runId_seq_idx").on(table.runId, table.seq)]
 );

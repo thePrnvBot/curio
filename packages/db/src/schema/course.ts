@@ -5,6 +5,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 import { user } from "./auth";
@@ -109,7 +110,9 @@ export const course = pgTable(
     // "active" until the user finishes or discards it
     status: text("status").notNull().default("active"),
     lessonCount: integer("lesson_count").notNull().default(0),
-    completedLessonCount: integer("completed_lesson_count").notNull().default(0),
+    completedLessonCount: integer("completed_lesson_count")
+      .notNull()
+      .default(0),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -171,5 +174,12 @@ export const courseBadge = pgTable(
     label: text("label").notNull(),
     earnedAt: timestamp("earned_at").defaultNow().notNull(),
   },
-  (table) => [index("course_badge_userId_idx").on(table.userId)]
+  (table) => [
+    index("course_badge_userId_idx").on(table.userId),
+    // A course is earned once; repeated completion must not mint duplicates.
+    uniqueIndex("course_badge_user_course_idx").on(
+      table.userId,
+      table.courseId
+    ),
+  ]
 );
