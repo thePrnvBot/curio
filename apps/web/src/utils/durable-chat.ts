@@ -1,5 +1,6 @@
 import { toUIMessage } from "@curio/api/domain/chat";
 import type { ChatNotFound, ChatOperationFailed } from "@curio/api/domain/chat";
+import type { ChatRunInFlight } from "@curio/api/domain/chat-run-in-flight";
 import { ChatRunStore } from "@curio/api/services/chat-run-store";
 import type {
   ChatRunExitStatus,
@@ -11,6 +12,8 @@ import type { UIMessage, UIMessageChunk } from "ai";
 import { createUIMessageStreamResponse } from "ai";
 import { Data, Effect, Option, Stream } from "effect";
 import { z } from "zod";
+
+import { withSecurityHeaders } from "./security-headers";
 
 /* ---------------------------------- tuning --------------------------------- */
 
@@ -88,32 +91,15 @@ export function markRunAborted(runId: string): void {
  * instead of re-requesting the model.
  */
 export const createDurableRun = Effect.fnUntraced(function* admitDurableRun(
-  chatId: string
-): Effect.fn.Return<string, ChatOperationFailed, ChatRunStore> {
-  const chatRunStore = yield* ChatRunStore;
-  return yield* chatRunStore.createRun(chatId);
-});
-
-/** Whether the chat still has an in-flight agent run (ownership-checked). */
-export const chatRunInFlight = Effect.fnUntraced(function* findInFlightRun(
   chatId: string,
   userId: string
-): Effect.fn.Return<Option.Option<ChatRunRecord>, never, ChatRunStore> {
+): Effect.fn.Return<
+  string,
+  ChatOperationFailed | ChatRunInFlight | ChatNotFound,
+  ChatRunStore
+> {
   const chatRunStore = yield* ChatRunStore;
-  const outcome = yield* Effect.result(
-    chatRunStore.findRunningRun(chatId, userId)
-  );
-  if (outcome._tag === "Failure") {
-    // A lookup failure must not wedge the submit path; the run creation
-    // that follows surfaces storage problems anyway.
-    yield* Effect.logError(
-      "Failed to look up running chat run",
-      chatId,
-      outcome.failure
-    );
-    return Option.none();
-  }
-  return outcome.success;
+  return yield* chatRunStore.createRun(chatId, userId);
 });
 
 function isStaleRun(run: ChatRunRecord): boolean {
@@ -177,6 +163,45 @@ interface ChatRunRecordChunk {
 }
 
 /**
+ * Persists the text a dead/interrupted run managed to commit before its
+ * process stopped. Idempotent: an already-persisted message id is skipped.
+ */
+export const persistCommittedPartial = Effect.fnUntraced(
+  function* persistRunPartial(
+    runId: string,
+    chatId: string,
+    userId: string
+  ): Effect.fn.Return<
+    void,
+    ChatNotFound | ChatOperationFailed,
+    ChatStore | ChatRunStore
+  > {
+    const chatRunStore = yield* ChatRunStore;
+    const chunks = yield* chatRunStore.listChunks(runId);
+    const partialMessage = extractPartialAssistantMessage(chunks);
+    if (partialMessage === null) {
+      return;
+    }
+
+    const chatStore = yield* ChatStore;
+    const messageRecords = yield* chatStore.listMessageRecords(chatId, userId);
+    const alreadyPersisted = messageRecords.some(
+      (record) => record.id === partialMessage.id
+    );
+    if (alreadyPersisted) {
+      return;
+    }
+    yield* chatStore.replaceMessages(
+      {
+        chatId,
+        messages: [...messageRecords.map(toUIMessage), partialMessage],
+      },
+      userId
+    );
+  }
+);
+
+/**
  * Marks a stale run `crashed` (its process is gone) and persists the text it
  * produced so far, so the persisted transcript matches the replay.
  */
@@ -203,33 +228,45 @@ const recoverStaleRun = Effect.fnUntraced(function* markStaleRunCrashed(
   }
   yield* chatRunStore.finishRun(runId, "crashed");
 
-  const chunks = yield* chatRunStore.listChunks(runId);
-  const partialMessage = extractPartialAssistantMessage(chunks);
-  if (partialMessage === null) {
-    return;
-  }
+  yield* persistCommittedPartial(runId, staleRunChatId, userId);
+});
 
-  yield* Effect.gen(function* persistCrashedPartial() {
-    const chatStore = yield* ChatStore;
-    const messageRecords = yield* chatStore.listMessageRecords(
-      staleRunChatId,
-      userId
+/**
+ * Recovers a run orphaned by a dead process before a new submit tries to
+ * claim the chat. Without this, the partial unique index would answer 409 for
+ * up to the staleness window after a crash.
+ */
+export const recoverStaleChatRun = Effect.fnUntraced(
+  function* recoverStaleRunForChat(
+    chatId: string,
+    userId: string
+  ): Effect.fn.Return<void, never, ChatRunStore | ChatStore> {
+    const chatRunStore = yield* ChatRunStore;
+    const foundOutcome = yield* Effect.result(
+      chatRunStore.findRunningRun(chatId, userId)
     );
-    const alreadyPersisted = messageRecords.some(
-      (record) => record.id === partialMessage.id
-    );
-    if (alreadyPersisted) {
+    if (foundOutcome._tag === "Failure") {
+      yield* Effect.logError(
+        "Failed to look up running chat run",
+        chatId,
+        foundOutcome.failure
+      );
       return;
     }
-    yield* chatStore.replaceMessages(
-      {
-        chatId: staleRunChatId,
-        messages: [...messageRecords.map(toUIMessage), partialMessage],
-      },
-      userId
+    if (Option.isNone(foundOutcome.success)) {
+      return;
+    }
+    const run = foundOutcome.success.value;
+    if (!isStaleRun(run)) {
+      return;
+    }
+    yield* recoverStaleRun(run, userId).pipe(
+      Effect.catch((error) =>
+        Effect.logError("Failed to recover stale chat run", error)
+      )
     );
-  });
-});
+  }
+);
 
 /** Outcome of the chunk-commit writer: drives the terminal run status. */
 export type CommitOutcome =
@@ -277,10 +314,14 @@ export function resolveRunEndStatus(
 export const commitChatRunChunks = Effect.fn("durable-chat.commitChunks")(
   function* commitChunks({
     chunkStream,
+    hasPersistenceFailure,
     runId,
   }: {
     runId: string;
     chunkStream: ReadableStream<UIMessageChunk>;
+    /** The transcript persist hook runs in the stream's `onEnd`; a failure
+     * there must make the run terminal status `error`, not `done`. */
+    hasPersistenceFailure?: () => boolean;
   }): Effect.fn.Return<ChatRunExitStatus, never, ChatRunStore> {
     const chatRunStore = yield* ChatRunStore;
     let commitOutcome: CommitOutcome = { _tag: "ok" };
@@ -315,6 +356,10 @@ export const commitChatRunChunks = Effect.fn("durable-chat.commitChunks")(
         runId,
         streamOutcome.failure
       );
+    }
+
+    if (commitOutcome._tag === "ok" && hasPersistenceFailure?.() === true) {
+      commitOutcome = { _tag: "commit-failed" };
     }
 
     // The chat route's onAbort hook can land just after the stream settles;
@@ -415,7 +460,9 @@ export const resumeChatStreamResponse = Effect.fn("durable-chat.resume")(
     userId: string;
   }): Effect.fn.Return<Response, never, ChatStore | ChatRunStore> {
     if (!chatIdSchema.safeParse(chatId).success) {
-      return Response.json({ error: "Invalid chat id" }, { status: 400 });
+      return withSecurityHeaders(
+        Response.json({ error: "Invalid chat id" }, { status: 400 })
+      );
     }
 
     const chatRunStore = yield* ChatRunStore;
@@ -428,9 +475,11 @@ export const resumeChatStreamResponse = Effect.fn("durable-chat.resume")(
         chatId,
         foundRunOutcome.failure
       );
-      return Response.json(
-        { error: "Failed to look up the agent run" },
-        { status: 500 }
+      return withSecurityHeaders(
+        Response.json(
+          { error: "Failed to look up the agent run" },
+          { status: 500 }
+        )
       );
     }
     const foundRun = foundRunOutcome.success;
@@ -446,14 +495,16 @@ export const resumeChatStreamResponse = Effect.fn("durable-chat.resume")(
       chatRunStore.findRunningRun(chatId, userId)
     );
     if (activeRunOutcome._tag === "Failure") {
-      return Response.json(
-        { error: "Failed to look up the agent run" },
-        { status: 500 }
+      return withSecurityHeaders(
+        Response.json(
+          { error: "Failed to look up the agent run" },
+          { status: 500 }
+        )
       );
     }
     const activeRun = activeRunOutcome.success;
     if (Option.isNone(activeRun)) {
-      return new Response(null, { status: 204 });
+      return withSecurityHeaders(new Response(null, { status: 204 }));
     }
 
     const replayStream = buildReplayStream(
@@ -461,9 +512,11 @@ export const resumeChatStreamResponse = Effect.fn("durable-chat.resume")(
       activeRun.value.id,
       Date.now() + MAX_RESUME_TAIL_MS
     );
-    return createUIMessageStreamResponse({
-      stream: Stream.toReadableStream(replayStream),
-    });
+    return withSecurityHeaders(
+      createUIMessageStreamResponse({
+        stream: Stream.toReadableStream(replayStream),
+      })
+    );
   }
 );
 
@@ -508,7 +561,9 @@ export const abortChatRunResponse = Effect.fn("durable-chat.abort")(
     userId: string;
   }): Effect.fn.Return<Response, never, ChatRunStore> {
     if (!chatIdSchema.safeParse(chatId).success) {
-      return Response.json({ error: "Invalid chat id" }, { status: 400 });
+      return withSecurityHeaders(
+        Response.json({ error: "Invalid chat id" }, { status: 400 })
+      );
     }
 
     const chatRunStore = yield* ChatRunStore;
@@ -521,16 +576,20 @@ export const abortChatRunResponse = Effect.fn("durable-chat.abort")(
         chatId,
         runningRunOutcome.failure
       );
-      return Response.json(
-        { error: "Failed to look up the agent run" },
-        { status: 500 }
+      return withSecurityHeaders(
+        Response.json(
+          { error: "Failed to look up the agent run" },
+          { status: 500 }
+        )
       );
     }
     const runningRun = runningRunOutcome.success;
     if (Option.isNone(runningRun)) {
-      return Response.json(
-        { error: "No active agent run for this chat" },
-        { status: 404 }
+      return withSecurityHeaders(
+        Response.json(
+          { error: "No active agent run for this chat" },
+          { status: 404 }
+        )
       );
     }
     const runId = runningRun.value.id;
@@ -538,17 +597,21 @@ export const abortChatRunResponse = Effect.fn("durable-chat.abort")(
     if (abortController === undefined) {
       // The run predates this process or its process died; the resume
       // responder marks it crashed once stale, so there is nothing to abort.
-      return Response.json({
-        ok: true,
-        runId,
-        status: runningRun.value.status,
-      });
+      return withSecurityHeaders(
+        Response.json({
+          ok: true,
+          runId,
+          status: runningRun.value.status,
+        })
+      );
     }
 
     abortedRunIds.add(runId);
     abortController.abort();
 
     const settledStatus = yield* waitForRunEnd(chatRunStore, runId);
-    return Response.json({ ok: true, runId, status: settledStatus });
+    return withSecurityHeaders(
+      Response.json({ ok: true, runId, status: settledStatus })
+    );
   }
 );

@@ -2,7 +2,8 @@ import type { UIMessageChunk } from "ai";
 import type { Effect, Option } from "effect";
 import { Context } from "effect";
 
-import type { ChatOperationFailed } from "../domain/chat";
+import type { ChatNotFound, ChatOperationFailed } from "../domain/chat";
+import type { ChatRunInFlight } from "../domain/chat-run-in-flight";
 
 export type ChatRunStatus =
   | "running"
@@ -26,6 +27,13 @@ export interface ChatRunChunkRecord {
   readonly chunk: UIMessageChunk;
 }
 
+/** A stale run recovered at boot, with the owner needed for transcript writes. */
+export interface CrashedChatRun {
+  readonly chatId: string;
+  readonly id: string;
+  readonly userId: string;
+}
+
 /**
  * Storage for durable chat agent runs. Every stream chunk is committed here
  * before a viewer sees it, so a client that reconnects replays the same
@@ -33,10 +41,19 @@ export interface ChatRunChunkRecord {
  * database.
  */
 export interface ChatRunStoreContract {
-  /** Admits a new running run for a chat before generation starts. */
+  /**
+   * Atomically admits a new running run for a chat the user owns. Fails with
+   * `ChatRunInFlight` when another run is already running: the partial unique
+   * index in the database is the arbiter, so concurrent submits cannot both
+   * start generation.
+   */
   readonly createRun: (
-    chatId: string
-  ) => Effect.Effect<string, ChatOperationFailed>;
+    chatId: string,
+    userId: string
+  ) => Effect.Effect<
+    string,
+    ChatOperationFailed | ChatRunInFlight | ChatNotFound
+  >;
 
   /** Commits whole-chunk output for a run; also keeps the run fresh. */
   readonly appendChunks: (
@@ -56,7 +73,8 @@ export interface ChatRunStoreContract {
     userId: string
   ) => Effect.Effect<Option.Option<ChatRunRecord>, ChatOperationFailed>;
 
-  /** One run by id. */
+  /** One run by id. Internal callers only; routes must scope by user first
+   * through `findRunningRun`. */
   readonly getRun: (
     runId: string
   ) => Effect.Effect<Option.Option<ChatRunRecord>, ChatOperationFailed>;
@@ -69,12 +87,12 @@ export interface ChatRunStoreContract {
 
   /**
    * Runs whose process died mid-generation: running runs untouched for
-   * longer than the staleness window are marked `crashed` and their ids are
-   * returned for partial-message recovery.
+   * longer than the staleness window are marked `crashed` and returned so
+   * their committed partial text can be persisted.
    */
   readonly crashStaleRuns: (
     stalenessMs: number
-  ) => Effect.Effect<readonly string[], ChatOperationFailed>;
+  ) => Effect.Effect<readonly CrashedChatRun[], ChatOperationFailed>;
 }
 
 export class ChatRunStore extends Context.Service<

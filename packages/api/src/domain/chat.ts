@@ -5,6 +5,18 @@ export { ChatOperationFailed } from "./chat-operation-failed";
 
 export type ChatRole = UIMessage["role"];
 
+const CHAT_ROLES = [
+  "system",
+  "user",
+  "assistant",
+] as const satisfies readonly ChatRole[];
+
+/** Rows written by older versions may not match the union; keep them
+ * renderable instead of failing an entire conversation load. */
+export function normalizeChatRole(role: string): ChatRole {
+  return CHAT_ROLES.find((candidate) => candidate === role) ?? "assistant";
+}
+
 export interface ChatSummary {
   readonly id: string;
   readonly title: string;

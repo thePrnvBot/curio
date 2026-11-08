@@ -4,6 +4,7 @@ import { Option } from "effect";
 import { curioRuntime } from "../../services";
 import { requestSession, unauthorizedResponse } from "../../utils/api-session";
 import { resumeChatStreamResponse } from "../../utils/durable-chat";
+import { withSecurityHeaders } from "../../utils/security-headers";
 
 /**
  * Reconnect endpoint for the durable chat agent. The AI SDK transport calls
@@ -23,7 +24,7 @@ export const Route = createFileRoute("/api/chat/$chatId/stream")({
       }) => {
         const sessionOption = await requestSession(request);
         if (Option.isNone(sessionOption)) {
-          return unauthorizedResponse();
+          return withSecurityHeaders(unauthorizedResponse());
         }
         const session = sessionOption.value;
 

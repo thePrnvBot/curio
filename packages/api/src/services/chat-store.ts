@@ -1,3 +1,4 @@
+import type { UIMessage } from "ai";
 import type { Effect } from "effect";
 import { Context } from "effect";
 
@@ -35,7 +36,7 @@ export interface ChatStoreContract {
   readonly ensureChatForUser: (
     chatId: string,
     userId: string
-  ) => Effect.Effect<void, ChatOperationFailed>;
+  ) => Effect.Effect<void, ChatNotFound | ChatOperationFailed>;
   readonly setMessageTitle: (
     chatId: string,
     userId: string,
@@ -44,6 +45,12 @@ export interface ChatStoreContract {
   readonly replaceMessages: (
     messages: StoredConversationMessages,
     userId: string
+  ) => Effect.Effect<void, ChatNotFound | ChatOperationFailed>;
+  /** Appends one message without rewriting the transcript (artifacts). */
+  readonly appendMessage: (
+    chatId: string,
+    userId: string,
+    message: Pick<UIMessage, "id" | "role" | "parts">
   ) => Effect.Effect<void, ChatNotFound | ChatOperationFailed>;
   readonly listMessageRecords: (
     chatId: string,

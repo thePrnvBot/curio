@@ -9,6 +9,19 @@ import type { UIMessage } from "ai";
  */
 
 const instances = new Map<string, Chat<UIMessage>>();
+const stoppedChatIds = new Set<string>();
+const resumeAttempts = new Map<string, number>();
+const RESUME_DELAYS_MS = [1500, 4000, 8000] as const;
+
+/** Marks a deliberate stop so the error path does not auto-reconnect it. */
+export function markChatStopped(chatId: string): void {
+  stoppedChatIds.add(chatId);
+}
+
+/** Clears the stop marker when a new user turn starts. */
+export function clearChatStopped(chatId: string): void {
+  stoppedChatIds.delete(chatId);
+}
 
 /**
  * A durable chat replays the whole active run from storage on reconnect
@@ -33,6 +46,22 @@ function createTransport(): DefaultChatTransport<UIMessage> {
       },
     }),
   });
+}
+
+/* ------------------------------- new chat signal ----------------------------- */
+
+const NEW_CHAT_EVENT = "curio:new-chat";
+
+/** Starts a fresh conversation on the `/chat` route without a reload. */
+export function requestNewChat(): void {
+  window.dispatchEvent(new Event(NEW_CHAT_EVENT));
+}
+
+export function subscribeToNewChat(listener: () => void): () => void {
+  window.addEventListener(NEW_CHAT_EVENT, listener);
+  return () => {
+    window.removeEventListener(NEW_CHAT_EVENT, listener);
+  };
 }
 
 /* ------------------------------- finish events ------------------------------- */
@@ -101,12 +130,18 @@ export function getStreamingChatsSnapshot(): readonly ActiveChatActivity[] {
 
 export function markChatStreaming(chatId: string, title: string): void {
   const streaming = true;
-  const nextEntry: ActiveChatActivity = {
-    chatId,
-    streaming,
-    title: title === "" ? "Untitled chat" : title,
-  };
-  activity.set(chatId, nextEntry);
+  const nextTitle = title === "" ? "Untitled chat" : title;
+  const existing = activity.get(chatId);
+  if (
+    existing !== undefined &&
+    existing.streaming === streaming &&
+    existing.title === nextTitle
+  ) {
+    // Called once per token by a watching component; emitting every time
+    // would rebuild the sidebar snapshot and re-render it per token.
+    return;
+  }
+  activity.set(chatId, { chatId, streaming, title: nextTitle });
   emitActivityChange();
 }
 
@@ -117,8 +152,9 @@ export function markChatIdle(chatId: string): void {
   }
   activity.delete(chatId);
   emitActivityChange();
-  emitFinish(chatId);
 }
+
+const MAX_CACHED_CHAT_INSTANCES = 20;
 
 export function getChatInstance(
   chatId: string,
@@ -130,17 +166,58 @@ export function getChatInstance(
     // in-flight or recently finished stream); never re-seed it.
     return existing;
   }
+  if (instances.size >= MAX_CACHED_CHAT_INSTANCES) {
+    const evictable = [...instances.keys()].find(
+      (candidateChatId) => activity.get(candidateChatId)?.streaming !== true
+    );
+    if (evictable !== undefined) {
+      instances.delete(evictable);
+    }
+  }
   const created = new Chat({
     id: chatId,
     messages: seedMessages ? [...seedMessages] : [],
     transport: createTransport(),
     onFinish: () => {
+      stoppedChatIds.delete(chatId);
+      resumeAttempts.delete(chatId);
       markChatIdle(chatId);
       emitFinish(chatId);
     },
     onError: () => {
+      const wasStopped = stoppedChatIds.delete(chatId);
       markChatIdle(chatId);
       emitFinish(chatId);
+      if (wasStopped) {
+        return;
+      }
+      // The run is detached from the request: a dropped connection must
+      // reconnect to the committed replay instead of surfacing a dead chat.
+      // Bounded so a persistent 4xx/5xx cannot loop forever.
+      const attempt = (resumeAttempts.get(chatId) ?? 0) + 1;
+      if (attempt > RESUME_DELAYS_MS.length) {
+        return;
+      }
+      resumeAttempts.set(chatId, attempt);
+      const delayMs = RESUME_DELAYS_MS[attempt - 1] ?? 8000;
+      const instance = instances.get(chatId);
+      if (instance === undefined) {
+        return;
+      }
+      window.setTimeout(() => {
+        void (async () => {
+          if (stoppedChatIds.has(chatId)) {
+            return;
+          }
+          instance.clearError();
+          try {
+            await instance.resumeStream();
+          } catch {
+            // A failed resume keeps the local transcript; the next mount
+            // retries through `useChat({ resume: true })`.
+          }
+        })();
+      }, delayMs);
     },
   });
   instances.set(chatId, created);

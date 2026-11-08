@@ -1,15 +1,31 @@
 import type { Database } from "@curio/db";
 import { chat, chatRun, chatRunChunk } from "@curio/db/schema/chat";
-import type { UIMessageChunk } from "ai";
-import { and, asc, desc, eq, gt, lt } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, lt } from "drizzle-orm";
 import { Effect, Option } from "effect";
 
-import { ChatOperationFailed } from "../domain/chat";
+import { ChatOperationFailed, ChatNotFound } from "../domain/chat";
+import { ChatRunInFlight } from "../domain/chat-run-in-flight";
 import type {
   ChatRunChunkRecord,
   ChatRunRecord,
+  ChatRunStatus,
   ChatRunStoreContract,
+  CrashedChatRun,
 } from "../services/chat-run-store";
+
+const CHAT_RUN_STATUSES = [
+  "running",
+  "done",
+  "stopped",
+  "error",
+  "crashed",
+] as const satisfies readonly ChatRunStatus[];
+
+/** DB text is untrusted; an out-of-contract status degrades to `error`
+ * instead of leaking the raw string or crashing the run lookup. */
+function decodeRunStatus(status: string): ChatRunStatus {
+  return CHAT_RUN_STATUSES.find((candidate) => candidate === status) ?? "error";
+}
 
 function toStoreError(operation: string) {
   return (cause: unknown): ChatOperationFailed =>
@@ -34,7 +50,7 @@ function rowToRunRecord(row: {
     chatId: row.chatId,
     createdAt: row.createdAt.toISOString(),
     id: row.id,
-    status: row.status as ChatRunRecord["status"],
+    status: decodeRunStatus(row.status),
     updatedAt: row.updatedAt.toISOString(),
   };
 }
@@ -45,14 +61,33 @@ export function createDrizzleChatRunStore(
   database: Database
 ): ChatRunStoreContract {
   return {
-    createRun: (chatId) =>
+    createRun: (chatId, userId) =>
       withStoreError("createRun")(
-        Effect.tryPromise(async () => {
+        Effect.gen(function* admitRun() {
+          const ownedChatRows = yield* Effect.tryPromise(() =>
+            database
+              .select({ id: chat.id })
+              .from(chat)
+              .where(and(eq(chat.id, chatId), eq(chat.userId, userId)))
+              .limit(1)
+          );
+          if (ownedChatRows.at(0) === undefined) {
+            return yield* Effect.fail(new ChatNotFound({ chatId }));
+          }
+
           const runId = `${RUN_ID_PREFIX}-${crypto.randomUUID()}`;
-          await database
-            .insert(chatRun)
-            .values({ chatId, id: runId })
-            .onConflictDoNothing({ target: chatRun.id });
+          // The partial unique index on `(chatId) WHERE status = 'running'`
+          // rejects a concurrent second run; no check-then-act gap remains.
+          const insertedRows = yield* Effect.tryPromise(() =>
+            database
+              .insert(chatRun)
+              .values({ chatId, id: runId })
+              .onConflictDoNothing()
+              .returning({ id: chatRun.id })
+          );
+          if (insertedRows.at(0) === undefined) {
+            return yield* Effect.fail(new ChatRunInFlight({ chatId }));
+          }
           return runId;
         })
       ),
@@ -73,7 +108,7 @@ export function createDrizzleChatRunStore(
             const baseSeq = highestRows.at(0)?.seq ?? -1;
             await transactionDatabase.insert(chatRunChunk).values(
               chunks.map((chunk, offset) => ({
-                chunk: chunk as unknown as Record<string, unknown>,
+                chunk,
                 runId,
                 seq: baseSeq + offset + 1,
               }))
@@ -170,7 +205,7 @@ export function createDrizzleChatRunStore(
       ).pipe(
         Effect.map((rows): ChatRunChunkRecord[] =>
           rows.map((row) => ({
-            chunk: row.chunk as unknown as UIMessageChunk,
+            chunk: row.chunk,
             seq: row.seq,
           }))
         )
@@ -178,7 +213,7 @@ export function createDrizzleChatRunStore(
 
     crashStaleRuns: (stalenessMs) =>
       withStoreError("crashStaleRuns")(
-        Effect.tryPromise(async () => {
+        Effect.tryPromise(async (): Promise<CrashedChatRun[]> => {
           const staleCutoff = new Date(Date.now() - stalenessMs);
           const staleRuns = await database
             .update(chatRun)
@@ -189,8 +224,28 @@ export function createDrizzleChatRunStore(
                 lt(chatRun.updatedAt, staleCutoff)
               )
             )
-            .returning({ id: chatRun.id });
-          return staleRuns.map((row) => row.id);
+            .returning({ chatId: chatRun.chatId, id: chatRun.id });
+          if (staleRuns.length === 0) {
+            return [];
+          }
+          const owners = await database
+            .select({ chatId: chat.id, userId: chat.userId })
+            .from(chat)
+            .where(
+              inArray(
+                chat.id,
+                staleRuns.map((staleRun) => staleRun.chatId)
+              )
+            );
+          const ownerByChatId = new Map(
+            owners.map((owner) => [owner.chatId, owner.userId])
+          );
+          return staleRuns.flatMap((staleRun) => {
+            const userId = ownerByChatId.get(staleRun.chatId);
+            return userId === undefined
+              ? []
+              : [{ chatId: staleRun.chatId, id: staleRun.id, userId }];
+          });
         })
       ),
   };

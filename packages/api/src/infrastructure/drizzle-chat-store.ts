@@ -10,7 +10,11 @@ import type {
   ChatSummary,
   StoredConversationMessages,
 } from "../domain/chat";
-import { ChatNotFound, ChatOperationFailed } from "../domain/chat";
+import {
+  ChatNotFound,
+  ChatOperationFailed,
+  normalizeChatRole,
+} from "../domain/chat";
 import type { ChatStoreContract } from "../services/chat-store";
 
 interface ChatRow {
@@ -87,7 +91,7 @@ export function createDrizzleChatStore(database: Database): ChatStoreContract {
           createdAt: row.createdAt.toISOString(),
           id: row.id,
           parts: row.parts,
-          role: row.role as ChatMessageRecord["role"],
+          role: normalizeChatRole(row.role),
         }))
       )
     );
@@ -146,13 +150,18 @@ export function createDrizzleChatStore(database: Database): ChatStoreContract {
               updatedAt: chat.updatedAt,
             })
             .from(chat)
-            .where(eq(chat.id, chatId))
+            .where(and(eq(chat.id, chatId), eq(chat.userId, userId)))
             .limit(1);
           const existingRow = existingRows.at(0);
           if (existingRow) {
             return rowToChatSummary(existingRow);
           }
-          throw new Error(`Chat ${chatId} already exists for a different user`);
+          throw new ChatOperationFailed({
+            cause: new Error(
+              `Chat ${chatId} already exists for a different user`
+            ),
+            operation: "createChat",
+          });
         })
       ),
 
@@ -199,13 +208,32 @@ export function createDrizzleChatStore(database: Database): ChatStoreContract {
 
     ensureChatForUser: (chatId, userId) =>
       withStoreError("ensureChatForUser")(
-        Effect.tryPromise(() =>
-          database
-            .insert(chat)
-            .values({ id: chatId, userId })
-            .onConflictDoNothing({ target: chat.id })
-        )
-      ).pipe(Effect.asVoid),
+        Effect.gen(function* ensureChat() {
+          const insertedRows = yield* Effect.tryPromise(() =>
+            database
+              .insert(chat)
+              .values({ id: chatId, userId })
+              .onConflictDoNothing({ target: chat.id })
+              .returning({ id: chat.id })
+          );
+          if (insertedRows.at(0) !== undefined) {
+            return;
+          }
+          // The id already exists: it must belong to this user, otherwise a
+          // guessed id would silently attach work to someone else's chat.
+          const existingRows = yield* Effect.tryPromise(() =>
+            database
+              .select({ userId: chat.userId })
+              .from(chat)
+              .where(eq(chat.id, chatId))
+              .limit(1)
+          );
+          const existingRow = existingRows.at(0);
+          if (existingRow === undefined || existingRow.userId !== userId) {
+            return yield* Effect.fail(new ChatNotFound({ chatId }));
+          }
+        })
+      ),
 
     setMessageTitle: (chatId, userId, title) =>
       withStoreError("setMessageTitle")(
@@ -242,6 +270,32 @@ export function createDrizzleChatStore(database: Database): ChatStoreContract {
                     })
                   )
                 );
+              })
+            )
+          )
+        ),
+        Effect.asVoid
+      ),
+
+    appendMessage: (chatId, userId, message) =>
+      requireChatRow(chatId, userId).pipe(
+        Effect.flatMap(() =>
+          withStoreError("appendMessage")(
+            Effect.tryPromise(() =>
+              database.transaction(async (transactionDatabase) => {
+                await transactionDatabase
+                  .insert(chatMessage)
+                  .values({
+                    chatId,
+                    id: message.id,
+                    parts: message.parts,
+                    role: message.role,
+                  })
+                  .onConflictDoNothing({ target: chatMessage.id });
+                await transactionDatabase
+                  .update(chat)
+                  .set({ updatedAt: new Date() })
+                  .where(and(eq(chat.id, chatId), eq(chat.userId, userId)));
               })
             )
           )

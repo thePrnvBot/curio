@@ -4,6 +4,7 @@ import { Option } from "effect";
 import { curioRuntime } from "../../services";
 import { requestSession, unauthorizedResponse } from "../../utils/api-session";
 import { abortChatRunResponse } from "../../utils/durable-chat";
+import { withSecurityHeaders } from "../../utils/security-headers";
 
 /**
  * Stop button for a detached agent run. Aborting the POST /api/chat fetch
@@ -23,7 +24,7 @@ export const Route = createFileRoute("/api/chat/$chatId/abort")({
       }) => {
         const sessionOption = await requestSession(request);
         if (Option.isNone(sessionOption)) {
-          return unauthorizedResponse();
+          return withSecurityHeaders(unauthorizedResponse());
         }
         const session = sessionOption.value;
 
