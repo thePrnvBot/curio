@@ -53,8 +53,10 @@ export function PendingQuestionsPanel({
 }) {
   const { questions } = pendingQuestions;
   const [state, dispatch] = useReducer(
-    (wizardState: ReturnType<typeof wizardReducer>, action: Parameters<typeof wizardReducer>[1]) =>
-      wizardReducer(wizardState, action, questions.length),
+    (
+      wizardState: ReturnType<typeof wizardReducer>,
+      action: Parameters<typeof wizardReducer>[1]
+    ) => wizardReducer(wizardState, action, questions.length),
     { kind: "answering", currentStep: 0, picks: new Map() }
   );
   // Submission is sent exactly once per wizard run: onAnswered identities can
@@ -72,7 +74,8 @@ export function PendingQuestionsPanel({
     onAnswered(formatWizardAnswers(pendingQuestions, state.picks));
   }, [pendingQuestions, state, onAnswered]);
 
-  const currentStep = state.kind === "answering" ? state.currentStep : questions.length - 1;
+  const currentStep =
+    state.kind === "answering" ? state.currentStep : questions.length - 1;
   const currentQuestion = questions[currentStep];
   const { picks } = state;
   const pickedChoiceIndex = Option.fromNullishOr(picks.get(currentStep));
@@ -114,13 +117,13 @@ export function PendingQuestionsPanel({
             return (
               <button
                 aria-pressed={isPicked}
-                className={
+                className={`${
                   isPicked
-                    ? "bg-primary text-primary-foreground border-primary/60 w-full rounded-lg border px-4 py-3 text-left text-[15px] font-medium"
-                    : "hover:bg-accent hover:text-accent-foreground text-muted-foreground w-full rounded-lg border px-4 py-3 text-left text-[15px] transition-colors"
-                }
+                    ? "bg-primary text-primary-foreground border-primary/60"
+                    : "hover:bg-accent hover:text-accent-foreground text-muted-foreground transition-colors"
+                } focus-visible:ring-ring w-full rounded-lg border px-4 py-3 text-left text-[15px] font-medium focus-visible:ring-2 focus-visible:outline-none`}
                 disabled={busy}
-                key={option}
+                key={`${optionIndex}-${option}`}
                 onClick={() => {
                   pickOption(optionIndex);
                 }}
@@ -135,7 +138,7 @@ export function PendingQuestionsPanel({
 
       <div className="mt-4 flex items-center justify-between">
         <button
-          className="text-muted-foreground hover:text-foreground rounded-md px-2 py-1 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40"
+          className="text-muted-foreground hover:text-foreground focus-visible:ring-ring rounded-md px-2 py-1 text-sm font-medium focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40"
           disabled={currentStep === 0 || busy}
           onClick={() => {
             dispatch({ type: "back" });

@@ -7,12 +7,14 @@ import {
   PanelLeftOpenIcon,
   PlusIcon,
   TrashIcon,
+  XIcon,
 } from "lucide-react";
 import { useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 
 import {
   getStreamingChatsSnapshot,
+  requestNewChat,
   subscribeToChatActivity,
 } from "@/utils/chat-runtime";
 import { playInteractionCue } from "@/utils/sound";
@@ -42,6 +44,16 @@ export default function ChatSidebar() {
   const params = useParams({ strict: false });
   const activeChatId = params.chatId ?? null;
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+
+  function startNewChat(): void {
+    setIsMobileOpen(false);
+    if (window.location.pathname === "/chat") {
+      requestNewChat();
+      return;
+    }
+    void navigate({ to: "/chat" });
+  }
 
   // Live activity store: which conversations have a Director stream running
   // right now, even the ones nobody is watching.
@@ -63,7 +75,7 @@ export default function ChatSidebar() {
         await queryClient.invalidateQueries({
           queryKey: trpc.chats.list.queryKey(),
         });
-        if (variables.chatId === activeChatId) {
+        if (window.location.pathname === `/chat/${variables.chatId}`) {
           await navigate({ to: "/chat" });
         }
         toast.success("Chat deleted");
@@ -98,15 +110,13 @@ export default function ChatSidebar() {
 
   if (isCollapsed) {
     return (
-      <aside className="bg-sidebar flex h-full w-10 shrink-0 flex-col items-center border-r py-2">
+      <aside className="bg-sidebar hidden h-full w-10 shrink-0 flex-col items-center border-r py-2 md:flex">
         {collapseToggle}
         <Button
-          onClick={() => {
-            navigate({ to: "/chat" });
-          }}
+          className="mt-2"
+          onClick={startNewChat}
           size="icon-xs"
           variant="outline"
-          className="mt-2"
         >
           <PlusIcon />
           <span className="sr-only">New chat</span>
@@ -124,98 +134,153 @@ export default function ChatSidebar() {
   }
 
   return (
-    <aside className="bg-sidebar flex h-full w-64 shrink-0 flex-col border-r">
-      <div className="flex items-center justify-between px-3 py-3">
-        <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-          Chats
-        </span>
-        <div className="flex items-center gap-1">
+    <>
+      <Button
+        aria-label="Open chats"
+        className="fixed top-16 left-3 z-40 md:hidden"
+        onClick={() => {
+          setIsMobileOpen(true);
+        }}
+        size="icon-sm"
+        variant="outline"
+      >
+        <PanelLeftOpenIcon />
+      </Button>
+      {isMobileOpen && (
+        <button
+          aria-label="Close chats"
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          onClick={() => {
+            setIsMobileOpen(false);
+          }}
+          type="button"
+        />
+      )}
+      <aside
+        className={`bg-sidebar h-full w-64 shrink-0 flex-col border-r max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:w-72 max-md:shadow-xl ${isMobileOpen ? "max-md:flex" : "max-md:hidden"} md:flex`}
+      >
+        <div className="flex items-center justify-between px-3 py-3">
           <Button
+            aria-label="Close chats"
+            className="md:hidden"
             onClick={() => {
-              playInteractionCue("navigate", { emphasis: "subtle" });
-              navigate({ to: "/chat" });
+              setIsMobileOpen(false);
             }}
             size="icon-xs"
-            variant="outline"
+            variant="ghost"
           >
-            <PlusIcon />
-            <span className="sr-only">New chat</span>
+            <XIcon />
           </Button>
-          {collapseToggle}
-        </div>
-      </div>
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-2">
-        {chatsQuery.isLoading && (
-          <div aria-busy="true" className="space-y-0.5 p-2">
-            {[0, 1, 2, 3].map((chatRow) => (
-              <Skeleton
-                className="h-6 w-full rounded-md"
-                key={`chats-loading-${chatRow}`}
-              />
-            ))}
-          </div>
-        )}
-        {chatsQuery.data?.length === 0 && (
-          <div className="text-muted-foreground p-2 text-xs">
-            No chats yet. Start a conversation!
-          </div>
-        )}
-        {chatsQuery.data?.map((chat) => {
-          const isStreamingRow = streamingChatIds.has(chat.id);
-          return (
-            <div
-              className={
-                isStreamingRow
-                  ? "border-primary/20 bg-primary/5 group/link relative flex items-center overflow-hidden border-b"
-                  : "group/link flex items-center"
-              }
-              key={chat.id}
+          <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+            Chats
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              onClick={() => {
+                playInteractionCue("navigate", { emphasis: "subtle" });
+                startNewChat();
+              }}
+              size="icon-xs"
+              variant="outline"
             >
-              {isStreamingRow && (
-                <div className="bg-muted/50 absolute inset-x-0 bottom-0 h-0.5 overflow-hidden rounded-full">
-                  <div className="animate-chat-activity-sweep via-primary absolute inset-y-0 left-0 h-full w-1/3 bg-gradient-to-r from-transparent to-transparent" />
-                </div>
-              )}
-              <Link
-                className={chatRowClass({
-                  isActive: activeChatId === chat.id,
-                  isStreamingRow,
-                })}
-                data-cue="navigate"
-                to="/chat/$chatId"
-                params={{ chatId: chat.id }}
-              >
-                {chat.title}
-              </Link>
-              {isStreamingRow ? (
-                <span
-                  aria-hidden="true"
-                  className="text-muted-foreground mr-1 text-[10px]"
-                  title="Director is working…"
-                >
-                  ···
-                </span>
-              ) : (
-                <Button
-                  aria-label={`Delete chat ${chat.title}`}
-                  className={`opacity-0 transition-opacity group-hover/link:opacity-100 ${
-                    activeChatDeletion ? "invisible" : ""
-                  }`}
-                  disabled={deleteChatMutation.isPending}
-                  onClick={() => {
-                    deleteChatMutation.mutate({ chatId: chat.id });
-                  }}
-                  size="xs"
-                  variant="ghost"
-                >
-                  <TrashIcon />
-                  <span className="sr-only">Delete chat</span>
-                </Button>
-              )}
+              <PlusIcon />
+              <span className="sr-only">New chat</span>
+            </Button>
+            {collapseToggle}
+          </div>
+        </div>
+        <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-2">
+          {chatsQuery.isLoading && (
+            <div aria-busy="true" className="space-y-0.5 p-2">
+              {[0, 1, 2, 3].map((chatRow) => (
+                <Skeleton
+                  className="h-6 w-full rounded-md"
+                  key={`chats-loading-${chatRow}`}
+                />
+              ))}
             </div>
-          );
-        })}
-      </nav>
-    </aside>
+          )}
+          {chatsQuery.isError && (
+            <div className="text-muted-foreground space-y-2 p-2 text-xs">
+              <p>Could not load chats.</p>
+              <button
+                className="border-border hover:bg-accent focus-visible:ring-ring rounded-md border px-2 py-1 font-medium focus-visible:ring-2 focus-visible:outline-none"
+                onClick={() => {
+                  void chatsQuery.refetch();
+                }}
+                type="button"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+          {chatsQuery.data?.length === 0 && (
+            <div className="text-muted-foreground p-2 text-xs">
+              No chats yet. Start a conversation!
+            </div>
+          )}
+          {chatsQuery.data?.map((chat) => {
+            const isStreamingRow = streamingChatIds.has(chat.id);
+            return (
+              <div
+                className={
+                  isStreamingRow
+                    ? "border-primary/20 bg-primary/5 group/link relative flex items-center overflow-hidden border-b"
+                    : "group/link flex items-center"
+                }
+                key={chat.id}
+              >
+                {isStreamingRow && (
+                  <div className="bg-muted/50 absolute inset-x-0 bottom-0 h-0.5 overflow-hidden rounded-full">
+                    <div className="animate-chat-activity-sweep via-primary absolute inset-y-0 left-0 h-full w-1/3 bg-gradient-to-r from-transparent to-transparent" />
+                  </div>
+                )}
+                <Link
+                  className={chatRowClass({
+                    isActive: activeChatId === chat.id,
+                    isStreamingRow,
+                  })}
+                  data-cue="navigate"
+                  onClick={() => {
+                    setIsMobileOpen(false);
+                  }}
+                  params={{ chatId: chat.id }}
+                  to="/chat/$chatId"
+                >
+                  {chat.title}
+                </Link>
+                {isStreamingRow ? (
+                  <span
+                    aria-hidden="true"
+                    className="text-muted-foreground mr-1 text-[10px]"
+                    title="Director is working…"
+                  >
+                    ···
+                  </span>
+                ) : (
+                  <Button
+                    aria-label={`Delete chat ${chat.title}`}
+                    className={`opacity-0 transition-opacity group-hover/link:opacity-100 focus-visible:opacity-100 max-md:opacity-100 ${
+                      activeChatDeletion ? "invisible" : ""
+                    }`}
+                    disabled={
+                      deleteChatMutation.isPending || activeChatDeletion
+                    }
+                    onClick={() => {
+                      deleteChatMutation.mutate({ chatId: chat.id });
+                    }}
+                    size="xs"
+                    variant="ghost"
+                  >
+                    <TrashIcon />
+                    <span className="sr-only">Delete chat</span>
+                  </Button>
+                )}
+              </div>
+            );
+          })}
+        </nav>
+      </aside>
+    </>
   );
 }

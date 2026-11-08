@@ -1,4 +1,5 @@
 import { Skeleton } from "@curio/ui/components/skeleton";
+import { Link } from "@tanstack/react-router";
 import { BookOpenCheckIcon } from "lucide-react";
 import type { ReactElement } from "react";
 
@@ -22,12 +23,12 @@ export function CourseCreatedNote({
         </p>
         <p className="text-muted-foreground text-xs">
           {courseData.lessonCount} lessons streaming in -
-          <a
+          <Link
             className="text-primary ml-1 font-medium underline underline-offset-2"
-            href="/courses"
+            to="/courses"
           >
             open the Courses tab
-          </a>
+          </Link>
         </p>
       </div>
     </div>
@@ -53,7 +54,7 @@ export function LessonChunkNote({
       </p>
       <span
         aria-hidden="true"
-        className="text-success shrink-0 text-[10px] font-semibold"
+        className="text-primary shrink-0 text-[10px] font-semibold"
       >
         ✓
       </span>
@@ -97,10 +98,7 @@ export function ChatSkeleton() {
         </div>
         <div className="flex items-center justify-center gap-1 px-2 pb-2">
           {[0, 1, 2, 3, 4, 5].map((filterChip) => (
-            <Skeleton
-              className="size-7 border"
-              key={`filter-${filterChip}`}
-            />
+            <Skeleton className="size-7 border" key={`filter-${filterChip}`} />
           ))}
         </div>
         <div className="flex-1 space-y-4 overflow-hidden px-3">

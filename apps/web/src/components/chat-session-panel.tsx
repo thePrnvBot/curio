@@ -1,23 +1,25 @@
-import { useQueryClient } from "@tanstack/react-query";
 import type { UIMessage } from "ai";
 import { isToolUIPart } from "ai";
 import { Option } from "effect";
 import {
+  ExternalLinkIcon,
   FileIcon,
   FilmIcon,
   ImageIcon,
   LinkIcon,
   MusicIcon,
   PackageIcon,
+  XIcon,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 
-import { subscribeToChatFinish } from "@/utils/chat-runtime";
 import {
   toArtifactToolEntry,
   toInlineDataArtifact,
+  toWebReadToolOutput,
+  toWebReadToolUrl,
+  toWebSearchToolOutput,
 } from "@/utils/chat-schemas";
-import { useTRPC } from "@/utils/trpc";
 
 type SessionEntryKind =
   | "artifact"
@@ -27,6 +29,8 @@ type SessionEntryKind =
   | "file"
   | "link";
 
+type MessagePart = UIMessage["parts"][number];
+
 export interface ChatSessionEntry {
   readonly kind: SessionEntryKind;
   /** Stable id for row keys. */
@@ -34,6 +38,8 @@ export interface ChatSessionEntry {
   /** Message id — used to scroll the conversation to the source. */
   readonly messageId: string;
   readonly title: string;
+  /** External destination for link entries. */
+  readonly url?: string;
 }
 
 const ENTRY_KIND_ORDER: readonly SessionEntryKind[] = [
@@ -110,8 +116,124 @@ function pushInlineDataArtifactEntry(
   });
 }
 
+const HTTP_URL_PATTERN = /\bhttps?:\/\/[^\s<>"'`]+/giu;
+
+/** Trims sentence punctuation and unmatched closing parentheses off a match. */
+function trimUrlPunctuation(candidate: string): string {
+  let url = candidate.replace(/[.,;:!?]+$/u, "");
+  while (url.endsWith(")")) {
+    const opens = url.match(/\(/gu)?.length ?? 0;
+    const closes = url.match(/\)/gu)?.length ?? 0;
+    if (closes <= opens) {
+      break;
+    }
+    url = url.slice(0, -1);
+  }
+  return url;
+}
+
+/** Every http(s) URL in a message part, including markdown links. */
+function extractUrls(text: string): readonly string[] {
+  const matches = text.match(HTTP_URL_PATTERN) ?? [];
+  return matches.map(trimUrlPunctuation).filter((url) => {
+    try {
+      return new URL(url).hostname.includes(".");
+    } catch {
+      return false;
+    }
+  });
+}
+
+function pushLinkEntry(
+  entries: ChatSessionEntry[],
+  seenUrls: Set<string>,
+  {
+    key,
+    messageId,
+    title,
+    url,
+  }: {
+    key: string;
+    messageId: string;
+    title: string;
+    url: string;
+  }
+): void {
+  const normalizedUrl = url.trim();
+  if (!/^https?:\/\//iu.test(normalizedUrl) || seenUrls.has(normalizedUrl)) {
+    return;
+  }
+  seenUrls.add(normalizedUrl);
+  entries.push({
+    key: `link-${key}`,
+    kind: "link",
+    messageId,
+    title: title.trim() === "" ? normalizedUrl : title,
+    url: normalizedUrl,
+  });
+}
+
+function pushTextLinks(
+  entries: ChatSessionEntry[],
+  seenUrls: Set<string>,
+  text: string,
+  messageId: string,
+  partIndex: number
+): void {
+  for (const url of extractUrls(text)) {
+    pushLinkEntry(entries, seenUrls, {
+      key: `${messageId}-${partIndex}-${url}`,
+      messageId,
+      title: url,
+      url,
+    });
+  }
+}
+
+function pushWebToolLinks(
+  entries: ChatSessionEntry[],
+  seenUrls: Set<string>,
+  part: MessagePart,
+  messageId: string
+): void {
+  if (part.type === "tool-web_search") {
+    Option.map(toWebSearchToolOutput(part.output), (output) => {
+      for (const [resultIndex, result] of output.results.entries()) {
+        pushLinkEntry(entries, seenUrls, {
+          key: `${part.toolCallId}-${resultIndex}`,
+          messageId,
+          title: result.title,
+          url: result.url,
+        });
+      }
+    });
+    return;
+  }
+
+  if (part.type === "tool-web_read") {
+    const outputUrl = Option.flatMap(
+      toWebReadToolOutput(part.output),
+      (output) => output.url
+    );
+    const requestedUrl = toWebReadToolUrl(part.input);
+    const resolvedUrl = Option.getOrElse(outputUrl, () =>
+      Option.getOrNull(requestedUrl)
+    );
+    if (resolvedUrl === null) {
+      return;
+    }
+    pushLinkEntry(entries, seenUrls, {
+      key: part.toolCallId,
+      messageId,
+      title: resolvedUrl,
+      url: resolvedUrl,
+    });
+  }
+}
+
 function pushSourceUrlEntry(
   entries: ChatSessionEntry[],
+  seenUrls: Set<string>,
   part: Extract<UIMessage["parts"][number], { type: "source-url" }>,
   messageId: string,
   partIndex: number
@@ -123,15 +245,15 @@ function pushSourceUrlEntry(
   if (Option.isNone(sourceUrl)) {
     return;
   }
-  entries.push({
-    kind: "link",
-    key: `link-${messageId}-${partIndex}`,
+  pushLinkEntry(entries, seenUrls, {
+    key: `${messageId}-${partIndex}`,
     messageId,
     title: Option.match(Option.fromNullishOr(part.title), {
       onNone: () => sourceUrl.value,
       onSome: (sourceTitle) =>
         sourceTitle === "" ? sourceUrl.value : sourceTitle,
     }),
+    url: sourceUrl.value,
   });
 }
 
@@ -156,15 +278,19 @@ function pushFilePartEntry(
   });
 }
 
-function collectSessionEntries(
+export function collectSessionEntries(
   messages: readonly UIMessage[]
 ): readonly ChatSessionEntry[] {
   const entries: ChatSessionEntry[] = [];
+  const seenUrls = new Set<string>();
 
   for (const message of messages) {
     for (const [partIndex, part] of message.parts.entries()) {
       if (isToolUIPart(part)) {
-        if (part.type === "tool-create_artifact") {
+        if (
+          part.type === "tool-create_artifact" &&
+          part.state === "output-available"
+        ) {
           pushCreateArtifactEntry(
             entries,
             part.input,
@@ -172,6 +298,7 @@ function collectSessionEntries(
             part.toolCallId
           );
         }
+        pushWebToolLinks(entries, seenUrls, part, message.id);
         continue;
       }
 
@@ -181,12 +308,17 @@ function collectSessionEntries(
       }
 
       if (part.type === "source-url") {
-        pushSourceUrlEntry(entries, part, message.id, partIndex);
+        pushSourceUrlEntry(entries, seenUrls, part, message.id, partIndex);
         continue;
       }
 
       if (part.type === "file") {
         pushFilePartEntry(entries, part, message.id, partIndex);
+        continue;
+      }
+
+      if (part.type === "text") {
+        pushTextLinks(entries, seenUrls, part.text, message.id, partIndex);
       }
     }
   }
@@ -214,9 +346,40 @@ function SessionEntryIcon({ entry }: { entry: ChatSessionEntry }) {
 }
 
 function SessionEntryRow({ entry }: { entry: ChatSessionEntry }) {
+  const rowContent = (
+    <>
+      <span className="bg-muted flex size-6 shrink-0 items-center justify-center">
+        <SessionEntryIcon entry={entry} />
+      </span>
+      <span className="min-w-0 flex-1 truncate">{entry.title}</span>
+      {entry.url !== undefined && (
+        <ExternalLinkIcon
+          aria-hidden="true"
+          className="text-muted-foreground size-3 shrink-0"
+        />
+      )}
+    </>
+  );
+  const rowClassName =
+    "hover:bg-muted focus-visible:ring-ring flex w-full items-center gap-2 rounded-none px-2 py-1.5 text-left text-xs focus-visible:ring-2 focus-visible:outline-none";
+
+  if (entry.url !== undefined) {
+    return (
+      <a
+        className={rowClassName}
+        href={entry.url}
+        rel="noreferrer noopener"
+        target="_blank"
+        title={entry.url}
+      >
+        {rowContent}
+      </a>
+    );
+  }
+
   return (
     <button
-      className="hover:bg-muted flex w-full items-center gap-2 rounded-none px-2 py-1.5 text-left text-xs"
+      className={rowClassName}
       onClick={() => {
         document
           .querySelector(`[data-message-id="${entry.messageId}"]`)
@@ -228,10 +391,7 @@ function SessionEntryRow({ entry }: { entry: ChatSessionEntry }) {
       title={entry.title}
       type="button"
     >
-      <span className="bg-muted flex size-6 shrink-0 items-center justify-center">
-        <SessionEntryIcon entry={entry} />
-      </span>
-      <span className="min-w-0 flex-1 truncate">{entry.title}</span>
+      {rowContent}
     </button>
   );
 }
@@ -271,14 +431,12 @@ function SessionKindFilterBar({
         }
         return (
           <button
-            aria-disabled={isDisabled}
+            aria-label={`${ENTRY_KIND_LABELS[entryKind]} (${kindCount})`}
             aria-pressed={isActive}
-            className={`border-border text-muted-foreground flex size-7 items-center justify-center border ${stateClass}`}
+            className={`border-border text-muted-foreground focus-visible:ring-ring flex size-7 items-center justify-center border focus-visible:ring-2 focus-visible:outline-none ${stateClass}`}
+            disabled={isDisabled}
             key={entryKind}
             onClick={() => {
-              if (isDisabled) {
-                return;
-              }
               onSelectKind(isActive ? null : entryKind);
             }}
             title={`${ENTRY_KIND_LABELS[entryKind]} (${kindCount})`}
@@ -296,77 +454,91 @@ function SessionKindFilterBar({
 
 export default function ChatSessionPanel({
   messages,
+  mobileOpen = false,
+  onCloseMobile,
 }: {
   messages: readonly UIMessage[];
+  mobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }) {
   const [selectedKind, setSelectedKind] = useState<SessionEntryKind | null>(
     null
   );
-  const trpc = useTRPC();
-  const queryClient = useQueryClient();
 
-  useEffect(
-    () =>
-      // A background chat finishing (finish, abort or error) invalidates data
-      // for the whole app, even if nobody is watching that conversation.
-      subscribeToChatFinish((finishedChatId) => {
-        void queryClient.invalidateQueries({
-          queryKey: trpc.chats.list.queryKey(),
-        });
-        void queryClient.invalidateQueries({
-          queryKey: trpc.courses.pathKey(),
-        });
-        void finishedChatId;
-      }),
-    [queryClient, trpc]
+  const sessionEntries = useMemo(
+    () => collectSessionEntries(messages),
+    [messages]
   );
-
-  const sessionEntries = collectSessionEntries(messages);
-  const visibleEntries =
-    selectedKind === null
-      ? sessionEntries
-      : sessionEntries.filter((entry) => entry.kind === selectedKind);
+  const visibleEntries = useMemo(
+    () =>
+      selectedKind === null
+        ? sessionEntries
+        : sessionEntries.filter((entry) => entry.kind === selectedKind),
+    [selectedKind, sessionEntries]
+  );
   const visibleKindOrder: readonly SessionEntryKind[] =
     selectedKind === null ? ENTRY_KIND_ORDER : [selectedKind];
 
   return (
-    <aside className="bg-sidebar hidden w-64 shrink-0 flex-col border-l lg:flex">
-      <div className="text-muted-foreground flex items-center justify-between px-3 pt-3 pb-2 text-xs font-medium tracking-wide uppercase">
-        <span>Session Files</span>
-      </div>
-      <SessionKindFilterBar
-        entries={sessionEntries}
-        onSelectKind={setSelectedKind}
-        selectedKind={selectedKind}
-      />
-      <div className="flex-1 space-y-3 overflow-y-auto px-2 pb-2">
-        {visibleKindOrder.map((entryKind) => {
-          const kindEntries = visibleEntries.filter(
-            (entry) => entry.kind === entryKind
-          );
-          if (kindEntries.length === 0) {
-            return null;
-          }
-          return (
-            <section key={entryKind}>
-              <div className="text-muted-foreground px-2 pb-1 text-[10px] tracking-wide uppercase">
-                {ENTRY_KIND_LABELS[entryKind]} · {kindEntries.length}
-              </div>
-              <div className="space-y-0.5">
-                {kindEntries.map((entry) => (
-                  <SessionEntryRow entry={entry} key={entry.key} />
-                ))}
-              </div>
-            </section>
-          );
-        })}
-        {visibleEntries.length === 0 && (
-          <div className="text-muted-foreground p-2 text-xs">
-            Artifacts, files, audio, video, and links from this session appear
-            here.
-          </div>
-        )}
-      </div>
-    </aside>
+    <>
+      {mobileOpen && (
+        <button
+          aria-label="Close session files"
+          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+          onClick={onCloseMobile}
+          type="button"
+        />
+      )}
+      <aside
+        className={`bg-sidebar w-64 shrink-0 flex-col border-l max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-50 max-lg:shadow-xl ${
+          mobileOpen ? "max-lg:flex" : "hidden lg:flex"
+        }`}
+      >
+        <div className="text-muted-foreground flex items-center justify-between px-3 pt-3 pb-2 text-xs font-medium tracking-wide uppercase">
+          <span>Session Files</span>
+          <button
+            aria-label="Close session files"
+            className="hover:bg-accent hover:text-foreground focus-visible:ring-ring rounded-md p-1 focus-visible:ring-2 focus-visible:outline-none lg:hidden"
+            onClick={onCloseMobile}
+            type="button"
+          >
+            <XIcon className="size-3.5" />
+          </button>
+        </div>
+        <SessionKindFilterBar
+          entries={sessionEntries}
+          onSelectKind={setSelectedKind}
+          selectedKind={selectedKind}
+        />
+        <div className="flex-1 space-y-3 overflow-y-auto px-2 pb-2">
+          {visibleKindOrder.map((entryKind) => {
+            const kindEntries = visibleEntries.filter(
+              (entry) => entry.kind === entryKind
+            );
+            if (kindEntries.length === 0) {
+              return null;
+            }
+            return (
+              <section key={entryKind}>
+                <div className="text-muted-foreground px-2 pb-1 text-[10px] tracking-wide uppercase">
+                  {ENTRY_KIND_LABELS[entryKind]} · {kindEntries.length}
+                </div>
+                <div className="space-y-0.5">
+                  {kindEntries.map((entry) => (
+                    <SessionEntryRow entry={entry} key={entry.key} />
+                  ))}
+                </div>
+              </section>
+            );
+          })}
+          {visibleEntries.length === 0 && (
+            <div className="text-muted-foreground p-2 text-xs">
+              Artifacts, files, audio, video, and links from this session appear
+              here.
+            </div>
+          )}
+        </div>
+      </aside>
+    </>
   );
 }
