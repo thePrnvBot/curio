@@ -1,9 +1,17 @@
 import { useEffect, useState } from "react";
 
+function prefersReducedMotion(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
 /**
  * Course progress bar that always animates from zero to its value on mount
  * (instead of painting the destination width immediately or sliding down
  * from full when a remount lands), and keeps gliding on later updates.
+ * Respects `prefers-reduced-motion`.
  */
 export function ProgressFromZero({
   percent,
@@ -14,9 +22,12 @@ export function ProgressFromZero({
   /** Track classes; include height/rounding/background. */
   className: string;
 }): React.ReactElement {
-  const [hasMounted, setHasMounted] = useState(false);
+  const [hasMounted, setHasMounted] = useState(prefersReducedMotion());
 
   useEffect(() => {
+    if (prefersReducedMotion()) {
+      return;
+    }
     // One frame after hydration so the zero-width paint lands first and the
     // transition actually animates the fill upward.
     const frame = requestAnimationFrame(() => setHasMounted(true));
@@ -27,11 +38,10 @@ export function ProgressFromZero({
   const renderedPercent = hasMounted ? Math.max(clampedPercent, 2) : 0;
 
   return (
-    <div className={`overflow-hidden ${className}`}>
-      <div
-        className="bg-primary h-full rounded-full transition-[width] duration-700 ease-out"
-        style={{ width: `${renderedPercent}%` }}
-      />
-    </div>
+    <progress
+      className={`overflow-hidden rounded-full bg-muted [&::-moz-progress-bar]:rounded-full [&::-moz-progress-bar]:bg-primary [&::-webkit-progress-bar]:rounded-full [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:rounded-full [&::-webkit-progress-value]:bg-primary [&::-webkit-progress-value]:transition-[width] [&::-webkit-progress-value]:duration-700 [&::-webkit-progress-value]:ease-out ${className}`}
+      max={100}
+      value={renderedPercent}
+    />
   );
 }

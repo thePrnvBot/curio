@@ -4,15 +4,14 @@ import {
   Sparkles,
   TrendingUp,
   Trophy,
-  type LucideIcon,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { MeshGradient, Shader } from "shaders/react";
 
-import AnimatedContent from "@/components/AnimatedContent";
-import Aurora from "@/components/Aurora";
-import CountUp from "@/components/CountUp";
+import AnimatedContent from "@/components/animated-content";
+import CountUp from "@/components/count-up";
 import {
   DotField,
   DoodleAtom,
@@ -23,14 +22,16 @@ import {
   Sparkle,
   Squiggle,
 } from "@/components/doodles";
-import SplitText from "@/components/SplitText";
-import StarBorder from "@/components/StarBorder";
+import SplitText from "@/components/split-text";
+import StarBorder from "@/components/star-border";
 
-const FEATURES: Array<{
+const Aurora = lazy(() => import("@/components/aurora"));
+
+const FEATURES: {
   icon: LucideIcon;
   title: string;
   description: string;
-}> = [
+}[] = [
   {
     icon: Sparkles,
     title: "Courses on anything",
@@ -57,7 +58,7 @@ const FEATURES: Array<{
   },
 ];
 
-const STATS: Array<{ value: number; suffix: string; label: string }> = [
+const STATS: { value: number; suffix: string; label: string }[] = [
   { value: 1, suffix: "", label: "prompt builds a whole course" },
   { value: 24, suffix: "/7", label: "recaps waiting when you return" },
   { value: 100, suffix: "%", label: "taught at your own pace" },
@@ -79,6 +80,8 @@ const SHADER_STOPS = {
     { color: "#34d399", position: 1 },
   ],
 };
+
+const CURRENT_YEAR = new Date().getFullYear();
 
 /**
  * Only runs expensive work (the WebGPU canvas) while its section is near the
@@ -118,30 +121,34 @@ function useSmoothMount(mounted: boolean) {
 
   useEffect(() => {
     if (!mounted) {
-      setIsShown(false);
       return;
     }
     const frame = requestAnimationFrame(() => setIsShown(true));
     return () => cancelAnimationFrame(frame);
   }, [mounted]);
 
+  // When unmounted we want the shader hidden immediately; deriving this
+  // during render avoids a synchronous setState inside the effect.
+  if (!mounted) {
+    return false;
+  }
   return isShown;
 }
 
 function HomeComponent() {
   const { resolvedTheme } = useTheme();
   const isLight = resolvedTheme === "light";
-  const hero = useSectionVisible();
-  const heroFadedIn = useSmoothMount(hero.isVisible);
+  const { ref: heroRef, isVisible: heroIsVisible } = useSectionVisible();
+  const heroFadedIn = useSmoothMount(heroIsVisible);
 
   return (
     <div className="bg-background text-foreground">
       {/* Hero */}
       <section
-        ref={hero.ref}
+        ref={heroRef}
         className="relative flex min-h-[calc(100svh-4rem)] flex-col items-center justify-center overflow-hidden px-6"
       >
-        {hero.isVisible && (
+        {heroIsVisible && (
           <div
             className="pointer-events-none absolute inset-0"
             style={{
@@ -310,16 +317,18 @@ function HomeComponent() {
 
       {/* Final CTA */}
       <section className="relative overflow-hidden px-6 py-32">
-        <Aurora
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-64"
-          colorStops={["#0f766e", "#34d399", "#0f766e"]}
-          amplitude={0.8}
-          height={0.6}
-          glow={0.4}
-          opacity={0.4}
-          lightMode={isLight}
-          mouseInteraction={false}
-        />
+        <Suspense fallback={null}>
+          <Aurora
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-64"
+            colorStops={["#0f766e", "#34d399", "#0f766e"]}
+            amplitude={0.8}
+            height={0.6}
+            glow={0.4}
+            opacity={0.4}
+            lightMode={isLight}
+            mouseInteraction={false}
+          />
+        </Suspense>
         <div className="pointer-events-none absolute inset-0 text-teal-600/30 dark:text-teal-200/25">
           <DoodleBook className="absolute top-[26%] left-[9%] hidden size-12 -rotate-8 lg:block" />
           <DoodleAtom className="absolute right-[7%] bottom-[16%] hidden size-12 motion-safe:animate-[spin_30s_linear_infinite] lg:block" />
@@ -354,7 +363,7 @@ function HomeComponent() {
             </Link>
           </div>
           <p className="text-muted-foreground mt-16 text-xs">
-            © {new Date().getFullYear()} Curio · Built with TanStack Start,
+            © {CURRENT_YEAR} Curio · Built with TanStack Start,
             Vercel AI SDK and React Bits
           </p>
         </AnimatedContent>
