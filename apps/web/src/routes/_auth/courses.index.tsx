@@ -46,9 +46,10 @@ function CoursesRoute() {
   }
 
   const courses: CourseSummaryView[] = coursesQuery.data ?? [];
-  const badges: CourseBadgeView[] = (badgesQuery.data ?? []).map((badge) => {
-    return { id: badge.id, label: badge.label };
-  });
+  const badges: CourseBadgeView[] = (badgesQuery.data ?? []).map((badge) => ({
+    id: badge.id,
+    label: badge.label,
+  }));
 
   // The server orders by most recently updated first; the first active
   // course is the one being learned right now.

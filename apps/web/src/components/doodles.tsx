@@ -29,7 +29,12 @@ export function Sparkle(props: DoodleProps) {
 /** Wavy marker underline. */
 export function Squiggle(props: DoodleProps) {
   return (
-    <svg viewBox="0 0 98 16" preserveAspectRatio="none" aria-hidden="true" {...props}>
+    <svg
+      viewBox="0 0 98 16"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+      {...props}
+    >
       <path
         d="M2 9 Q 14 3 26 9 T 50 9 T 74 9 T 96 9"
         {...stroke}
@@ -112,7 +117,7 @@ export function PlusMark(props: DoodleProps) {
  * when several DotFields render on the same page.
  */
 export function DotField({ className }: { className?: string }) {
-  const patternId = `dot-grid-${useId().replace(/:/g, "")}`;
+  const patternId = `dot-grid-${useId().replaceAll(":", "")}`;
   return (
     <svg className={className} width="100%" height="100%" aria-hidden="true">
       <defs>

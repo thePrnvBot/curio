@@ -863,7 +863,11 @@ export const PromptInputButton = ({
   ...props
 }: PromptInputButtonProps) => {
   const newSize =
-    size ?? (Children.count(props.children) > 1 ? "sm" : "icon-sm");
+    size ??
+    // Vendored AI Elements component: Children.count is used to size the
+    // action button based on how many children the consumer passed in.
+    // eslint-disable-next-line react/no-react-children
+    (Children.count(props.children) > 1 ? "sm" : "icon-sm");
 
   const button = (
     <InputGroupButton

@@ -9,12 +9,46 @@ import {
   DropdownMenuTrigger,
 } from "@curio/ui/components/dropdown-menu";
 import { Skeleton } from "@curio/ui/components/skeleton";
-import { LogInIcon } from "lucide-react";
 import { Link, useNavigate } from "@tanstack/react-router";
+import { LogInIcon } from "lucide-react";
 import type { ReactElement } from "react";
 
 import { authClient } from "@/lib/auth-client";
 import { playInteractionCue } from "@/utils/sound";
+
+function AccountMenuContent({
+  session,
+}: {
+  session: { user: { email: string } };
+}): ReactElement {
+  const navigate = useNavigate();
+  return (
+    <DropdownMenuContent className="bg-card">
+      <DropdownMenuGroup>
+        <DropdownMenuLabel>My Account</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem>{session.user.email}</DropdownMenuItem>
+        <DropdownMenuItem
+          variant="destructive"
+          onClick={() => {
+            playInteractionCue("close", { emphasis: "subtle" });
+            authClient.signOut({
+              fetchOptions: {
+                onSuccess: () => {
+                  navigate({
+                    to: "/",
+                  });
+                },
+              },
+            });
+          }}
+        >
+          Sign Out
+        </DropdownMenuItem>
+      </DropdownMenuGroup>
+    </DropdownMenuContent>
+  );
+}
 
 export default function UserMenu({
   compact = false,
@@ -88,7 +122,7 @@ export default function UserMenu({
       <DropdownMenuTrigger
         render={
           <Button
-            className="hover:-translate-y-0.5 min-w-32 max-w-40 truncate rounded-full hover:shadow-sm"
+            className="max-w-40 min-w-32 truncate rounded-full hover:-translate-y-0.5 hover:shadow-sm"
             variant="outline"
           />
         }
@@ -97,39 +131,5 @@ export default function UserMenu({
       </DropdownMenuTrigger>
       <AccountMenuContent session={session} />
     </DropdownMenu>
-  );
-}
-
-function AccountMenuContent({
-  session,
-}: {
-  session: { user: { email: string } };
-}): ReactElement {
-  const navigate = useNavigate();
-  return (
-    <DropdownMenuContent className="bg-card">
-      <DropdownMenuGroup>
-        <DropdownMenuLabel>My Account</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem>{session.user.email}</DropdownMenuItem>
-        <DropdownMenuItem
-          variant="destructive"
-          onClick={() => {
-            playInteractionCue("close", { emphasis: "subtle" });
-            authClient.signOut({
-              fetchOptions: {
-                onSuccess: () => {
-                  navigate({
-                    to: "/",
-                  });
-                },
-              },
-            });
-          }}
-        >
-          Sign Out
-        </DropdownMenuItem>
-      </DropdownMenuGroup>
-    </DropdownMenuContent>
   );
 }

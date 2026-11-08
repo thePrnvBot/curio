@@ -38,6 +38,8 @@ import {
 } from "@curio/ui/components/ai-elements/suggestion";
 import { useQueryClient } from "@tanstack/react-query";
 import { isToolUIPart } from "ai";
+
+import { logger } from "@/utils/logger";
 import type { UIMessage } from "ai";
 import { Option } from "effect";
 import { CopyIcon, RefreshCwIcon, SparklesIcon } from "lucide-react";
@@ -58,11 +60,8 @@ import {
   extractPendingQuestions,
   PendingQuestionsPanel,
 } from "@/components/chat/chat-questions";
-import { WebToolView } from "@/components/chat/chat-web-tools";
-import { useTRPC } from "@/utils/trpc";
-
-export { ChatSkeleton };
 import ChatSessionPanel from "@/components/chat-session-panel";
+import { WebToolView } from "@/components/chat/chat-web-tools";
 import {
   getChatInstance,
   markChatIdle,
@@ -75,19 +74,21 @@ import {
   toLessonChunkData,
 } from "@/utils/chat-schemas";
 import { playInteractionCue } from "@/utils/sound";
+import { useTRPC } from "@/utils/trpc";
 import type { ArtifactUIData } from "@/utils/ui-messages";
 import { restoreUIMessages } from "@/utils/ui-messages";
+import {
+  CREATE_COURSE_TOOL_NAME,
+  CREATE_LESSON_TOOL_NAME,
+} from "@curio/api/infrastructure/course-create-tool";
+
+export { ChatSkeleton } from "@/components/chat/chat-notes";
 
 export interface PersistedChatMessageRecord {
   readonly id: string;
   readonly role: string;
   readonly parts: unknown;
 }
-
-import {
-  CREATE_COURSE_TOOL_NAME,
-  CREATE_LESSON_TOOL_NAME,
-} from "@curio/api/infrastructure/course-create-tool";
 
 const TOOL_WEB_SEARCH = "tool-web_search";
 const TOOL_WEB_READ = "tool-web_read";
@@ -128,7 +129,7 @@ function useRestoredMessages(
           setState({ status: "ready", messages });
         }
       } catch (error: unknown) {
-        console.error("Failed to restore chat messages", error);
+        logger.error("Failed to restore chat messages", error);
         if (!cancelled) {
           toast.error("Couldn't load chat history");
           setState({ status: "ready", messages: [] });
@@ -185,18 +186,19 @@ function ChatConversation({
   // works instead of waiting for the whole stream to end.
   const courseChunkInvalidationRef = useRef(0);
   useEffect(() => {
-    const chunkCount = messages.reduce((count, message) => {
-      return (
-        count +
-        message.parts.filter(
-          (part) =>
-            isToolUIPart(part) &&
-            (part.type === "tool-create_course" ||
-              part.type === "tool-create_lesson") &&
-            part.state === "output-available"
-        ).length
-      );
-    }, 0);
+    let chunkCount = 0;
+    for (const message of messages) {
+      for (const part of message.parts) {
+        if (
+          isToolUIPart(part) &&
+          (part.type === "tool-create_course" ||
+            part.type === "tool-create_lesson") &&
+          part.state === "output-available"
+        ) {
+          chunkCount += 1;
+        }
+      }
+    }
     if (chunkCount > courseChunkInvalidationRef.current) {
       courseChunkInvalidationRef.current = chunkCount;
       void queryClient.invalidateQueries({
@@ -247,6 +249,10 @@ function ChatConversation({
     }
   }, [error]);
 
+  function sendPendingQuestionAnswers(answersText: string): void {
+    void sendMessage({ text: answersText });
+  }
+
   function handleMessageSubmit(message: PromptInputMessage) {
     if (Option.isSome(pendingQuestions)) {
       // The question panel owns the input while questions are unanswered
@@ -268,10 +274,6 @@ function ChatConversation({
       text: hasText ? message.text : "Sent with attachments",
     });
     playInteractionCue("tap");
-  }
-
-  function sendPendingQuestionAnswers(answersText: string): void {
-    void sendMessage({ text: answersText });
   }
 
   function handleMessageStop(): void {
@@ -310,7 +312,7 @@ function ChatConversation({
           queryKey: trpc.chats.list.queryKey(),
         });
       } catch (stopError: unknown) {
-        console.error("Failed to stop the server agent run", stopError);
+        logger.error("Failed to stop the server agent run", stopError);
       }
     })();
   }
@@ -549,8 +551,8 @@ function ChatConversation({
               <PromptInput
                 globalDrop
                 multiple
-                onError={(error) => {
-                  toast.error(error.message);
+                onError={(submitError) => {
+                  toast.error(submitError.message);
                 }}
                 onSubmit={handleMessageSubmit}
               >

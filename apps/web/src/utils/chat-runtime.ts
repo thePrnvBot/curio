@@ -1,5 +1,6 @@
 import { Chat } from "@ai-sdk/react";
-import { DefaultChatTransport, type UIMessage } from "ai";
+import { DefaultChatTransport } from "ai";
+import type { UIMessage } from "ai";
 
 /**
  * Chat instances live OUTSIDE the React tree so streams keep running when
@@ -34,30 +35,25 @@ function createTransport(): DefaultChatTransport<UIMessage> {
   });
 }
 
-export function getChatInstance(
-  chatId: string,
-  seedMessages?: readonly UIMessage[]
-): Chat<UIMessage> {  const existing = instances.get(chatId);
-  if (existing !== undefined) {
-    // The instance carries newer state than any server snapshot (an
-    // in-flight or recently finished stream); never re-seed it.
-    return existing;
+/* ------------------------------- finish events ------------------------------- */
+
+const finishListeners = new Set<(chatId: string) => void>();
+
+/** Fired when any instance's stream finishes (finish, abort or error) - even
+ * while no chat component is subscribed to that instance. */
+export function subscribeToChatFinish(
+  listener: (chatId: string) => void
+): () => void {
+  finishListeners.add(listener);
+  return () => {
+    finishListeners.delete(listener);
+  };
+}
+
+function emitFinish(chatId: string): void {
+  for (const listener of finishListeners) {
+    listener(chatId);
   }
-  const created = new Chat({
-    id: chatId,
-    messages: seedMessages ? [...seedMessages] : [],
-    transport: createTransport(),
-    onFinish: () => {
-      markChatIdle(chatId);
-      emitFinish(chatId);
-    },
-    onError: () => {
-      markChatIdle(chatId);
-      emitFinish(chatId);
-    },
-  });
-  instances.set(chatId, created);
-  return created;
 }
 
 /* ---------------------------------- activity --------------------------------- */
@@ -96,7 +92,7 @@ export function subscribeToChatActivity(listener: () => void): () => void {
 export function getStreamingChatsSnapshot(): readonly ActiveChatActivity[] {
   if (streamingSnapshotDirty) {
     streamingSnapshot = [...activity.values()].filter(
-      (entry) => entry.streaming,
+      (entry) => entry.streaming
     );
     streamingSnapshotDirty = false;
   }
@@ -124,25 +120,31 @@ export function markChatIdle(chatId: string): void {
   emitFinish(chatId);
 }
 
-/* ------------------------------- finish events ------------------------------- */
-
-const finishListeners = new Set<(chatId: string) => void>();
-
-/** Fired when any instance's stream finishes (finish, abort or error) - even
- * while no chat component is subscribed to that instance. */
-export function subscribeToChatFinish(
-  listener: (chatId: string) => void
-): () => void {
-  finishListeners.add(listener);
-  return () => {
-    finishListeners.delete(listener);
-  };
-}
-
-function emitFinish(chatId: string): void {
-  for (const listener of finishListeners) {
-    listener(chatId);
+export function getChatInstance(
+  chatId: string,
+  seedMessages?: readonly UIMessage[]
+): Chat<UIMessage> {
+  const existing = instances.get(chatId);
+  if (existing !== undefined) {
+    // The instance carries newer state than any server snapshot (an
+    // in-flight or recently finished stream); never re-seed it.
+    return existing;
   }
+  const created = new Chat({
+    id: chatId,
+    messages: seedMessages ? [...seedMessages] : [],
+    transport: createTransport(),
+    onFinish: () => {
+      markChatIdle(chatId);
+      emitFinish(chatId);
+    },
+    onError: () => {
+      markChatIdle(chatId);
+      emitFinish(chatId);
+    },
+  });
+  instances.set(chatId, created);
+  return created;
 }
 
 /* ---------------------------- instance event wiring --------------------------- */

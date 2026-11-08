@@ -305,19 +305,21 @@ export default function ChatSessionPanel({
   const trpc = useTRPC();
   const queryClient = useQueryClient();
 
-  useEffect(() => {
-    // A background chat finishing (finish, abort or error) invalidates data
-    // for the whole app, even if nobody is watching that conversation.
-    return subscribeToChatFinish((finishedChatId) => {
-      void queryClient.invalidateQueries({
-        queryKey: trpc.chats.list.queryKey(),
-      });
-      void queryClient.invalidateQueries({
-        queryKey: trpc.courses.pathKey(),
-      });
-      void finishedChatId;
-    });
-  }, [queryClient, trpc]);
+  useEffect(
+    () =>
+      // A background chat finishing (finish, abort or error) invalidates data
+      // for the whole app, even if nobody is watching that conversation.
+      subscribeToChatFinish((finishedChatId) => {
+        void queryClient.invalidateQueries({
+          queryKey: trpc.chats.list.queryKey(),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: trpc.courses.pathKey(),
+        });
+        void finishedChatId;
+      }),
+    [queryClient, trpc]
+  );
 
   const sessionEntries = collectSessionEntries(messages);
   const visibleEntries =

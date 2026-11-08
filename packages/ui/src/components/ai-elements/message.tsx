@@ -202,7 +202,11 @@ export const MessageBranchContent = ({
   // Children.toArray flattens list children; isValidElement keeps only real
   // elements, which is what the branch context tracks (keys and indices).
   const childrenArray = useMemo(
-    () => Children.toArray(children).filter(isValidElement),
+    () =>
+      // Vendored AI Elements component: Children.toArray is required here to
+      // flatten/inspect the composite branch children used by MessageBranch.
+      // eslint-disable-next-line react/no-react-children
+      Children.toArray(children).filter(isValidElement),
     [children]
   );
 

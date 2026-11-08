@@ -72,23 +72,27 @@ export const curioRuntime = createCurioRuntime({
  * staleness window the reconnect path uses are honest crash victims).
  */
 const STALE_RUN_THRESHOLD_MS = 300_000;
-void curioRuntime.runPromise(
-  Effect.gen(function* crashOrphanedRuns() {
-    const chatRunStoreService = yield* ChatRunStore;
-    const crashedRunIds = yield* chatRunStoreService.crashStaleRuns(
-      STALE_RUN_THRESHOLD_MS
+void (async () => {
+  try {
+    await curioRuntime.runPromise(
+      Effect.gen(function* crashOrphanedRuns() {
+        const chatRunStoreService = yield* ChatRunStore;
+        const crashedRunIds = yield* chatRunStoreService.crashStaleRuns(
+          STALE_RUN_THRESHOLD_MS
+        );
+        if (crashedRunIds.length > 0) {
+          yield* Effect.logInfo(
+            `Marked ${crashedRunIds.length} stale agent run(s) as crashed at boot`
+          );
+        }
+      })
     );
-    if (crashedRunIds.length > 0) {
-      yield* Effect.logInfo(
-        `Marked ${crashedRunIds.length} stale agent run(s) as crashed at boot`
-      );
-    }
-  }).pipe(
-    Effect.catch((error) =>
+  } catch (error) {
+    await Effect.runPromise(
       Effect.logError("Boot-time stale run sweep failed", error)
-    )
-  )
-);
+    );
+  }
+})();
 
 export const runtimeScopedArtifactPublisher: ArtifactPublisherContract = {
   publish: (publicationInput) =>

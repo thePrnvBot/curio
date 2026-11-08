@@ -18,6 +18,23 @@ import {
 import { playInteractionCue } from "@/utils/sound";
 import { useTRPC } from "@/utils/trpc";
 
+function chatRowClass({
+  isActive,
+  isStreamingRow,
+}: {
+  isActive: boolean;
+  isStreamingRow: boolean;
+}): string {
+  const base = "hover:bg-muted min-w-0 flex-1 truncate px-2 py-1.5 text-xs";
+  if (isActive) {
+    return `${base} bg-muted font-medium`;
+  }
+  if (isStreamingRow) {
+    return `${base} text-foreground`;
+  }
+  return `${base} text-muted-foreground`;
+}
+
 export default function ChatSidebar() {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
@@ -99,7 +116,7 @@ export default function ChatSidebar() {
             className="bg-muted relative mx-auto mt-auto h-1 w-6 overflow-hidden rounded-full"
             title={`${streamingChats.length} chat${streamingChats.length === 1 ? "" : "s"} working`}
           >
-            <div className="animate-chat-activity-sweep from-transparent via-primary to-transparent absolute inset-y-0 left-0 h-full w-1/3 rounded-full bg-gradient-to-r" />
+            <div className="animate-chat-activity-sweep via-primary absolute inset-y-0 left-0 h-full w-1/3 rounded-full bg-gradient-to-r from-transparent to-transparent" />
           </div>
         )}
       </aside>
@@ -156,17 +173,14 @@ export default function ChatSidebar() {
             >
               {isStreamingRow && (
                 <div className="bg-muted/50 absolute inset-x-0 bottom-0 h-0.5 overflow-hidden rounded-full">
-                  <div className="animate-chat-activity-sweep from-transparent via-primary to-transparent absolute inset-y-0 left-0 h-full w-1/3 bg-gradient-to-r" />
+                  <div className="animate-chat-activity-sweep via-primary absolute inset-y-0 left-0 h-full w-1/3 bg-gradient-to-r from-transparent to-transparent" />
                 </div>
               )}
               <Link
-                className={`hover:bg-muted min-w-0 flex-1 truncate px-2 py-1.5 text-xs ${
-                  activeChatId === chat.id
-                    ? "bg-muted font-medium"
-                    : isStreamingRow
-                      ? "text-foreground"
-                      : "text-muted-foreground"
-                }`}
+                className={chatRowClass({
+                  isActive: activeChatId === chat.id,
+                  isStreamingRow,
+                })}
                 data-cue="navigate"
                 to="/chat/$chatId"
                 params={{ chatId: chat.id }}

@@ -11,6 +11,7 @@ import { MenuIcon } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 
 import { playInteractionCue } from "@/utils/sound";
+
 import { ThemeToggle } from "./theme-toggle";
 import UserMenu from "./user-menu";
 
@@ -38,27 +39,11 @@ const NAV_LINKS = [
 
 /** Rect of one nav option inside the mobile dropdown, used to position its
  * gliding pills (vertical counterpart of the desktop dock's pill rects). */
-type MenuPill = {
+interface MenuPill {
   readonly height: number;
   readonly left: number;
   readonly top: number;
   readonly width: number;
-};
-
-/**
- * Floating nav dock: a glassy pill fixed to the top of the viewport. On
- * sm+ screens the highlighted "button" is one absolutely-positioned pill
- * that glides to whichever link the current route selects. Below sm the
- * dock collapses to a hamburger menu so four labels + controls stop
- * fighting for a ~320px viewport.
- */
-export default function Header() {
-  return (
-    <header className="pointer-events-none fixed inset-x-0 top-2.5 z-50 flex justify-center px-3">
-      <DesktopDock />
-      <MobileDock />
-    </header>
-  );
 }
 
 /** Full labelled dock, sm (640px) and up. */
@@ -260,9 +245,7 @@ function MobileDock() {
   const showHoverPill = hoveredIndex !== null && hoveredIndex !== activeIndex;
 
   return (
-    <nav
-      className="border-border/70 bg-card/80 pointer-events-auto flex w-[6.25rem] items-center gap-1 rounded-full border p-1 shadow-lg backdrop-blur-md sm:hidden"
-    >
+    <nav className="border-border/70 bg-card/80 pointer-events-auto flex w-[6.25rem] items-center gap-1 rounded-full border p-1 shadow-lg backdrop-blur-md sm:hidden">
       <DropdownMenu
         onOpenChange={(open) => {
           setNavMenuOpen(open);
@@ -323,19 +306,18 @@ function MobileDock() {
           <DropdownMenuGroup>
             {NAV_LINKS.map((navLink, navLinkIndex) => {
               const isActive = navLinkIndex === activeIndex;
+              // The pill layers live in this menu, so the item's own hover
+              // background is suppressed and the active option sits in
+              // primary fg on its pill.
+              const itemClassName = isActive
+                ? "text-primary-foreground! relative z-10 data-[highlighted]:bg-transparent!"
+                : "text-muted-foreground data-[highlighted]:text-foreground relative z-10 data-[highlighted]:bg-transparent!";
               return (
                 <DropdownMenuItem
                   key={navLink.to}
                   render={
                     <Link
-                      className={
-                        isActive
-                          // The pill layers live in this menu, so the item's
-                          // own hover background is suppressed and the
-                          // active option sits in primary fg on its pill.
-                          ? "relative z-10 text-primary-foreground! data-[highlighted]:bg-transparent!"
-                          : "relative z-10 text-muted-foreground data-[highlighted]:bg-transparent! data-[highlighted]:text-foreground"
-                      }
+                      className={itemClassName}
                       data-cue="navigate"
                       onMouseEnter={() => {
                         setHoveredIndex(navLinkIndex);
@@ -359,5 +341,21 @@ function MobileDock() {
         <UserMenu compact />
       </div>
     </nav>
+  );
+}
+
+/**
+ * Floating nav dock: a glassy pill fixed to the top of the viewport. On
+ * sm+ screens the highlighted "button" is one absolutely-positioned pill
+ * that glides to whichever link the current route selects. Below sm the
+ * dock collapses to a hamburger menu so four labels + controls stop
+ * fighting for a ~320px viewport.
+ */
+export default function Header() {
+  return (
+    <header className="pointer-events-none fixed inset-x-0 top-2.5 z-50 flex justify-center px-3">
+      <DesktopDock />
+      <MobileDock />
+    </header>
   );
 }

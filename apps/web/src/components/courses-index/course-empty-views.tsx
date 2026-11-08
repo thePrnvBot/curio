@@ -5,6 +5,7 @@ import {
   SparklesIcon,
   TrophyIcon,
 } from "lucide-react";
+
 const EMPTY_BADGE_SLOTS = [0, 1, 2];
 
 

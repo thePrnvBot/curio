@@ -34,8 +34,7 @@ async function main() {
 
   const lessonOne = {
     kind: "cards",
-    body:
-      "A prompt is the structured instruction set you hand to a model. Curio courses use the same idea: the system role holds the standing rules, the user role carries the turn-by-turn request.",
+    body: "A prompt is the structured instruction set you hand to a model. Curio courses use the same idea: the system role holds the standing rules, the user role carries the turn-by-turn request.",
     cards: [
       {
         title: "System role",
@@ -55,15 +54,21 @@ async function main() {
     kind: "recap",
     questions: [
       {
-        prompt: "Which role holds standing instructions for the whole conversation?",
+        prompt:
+          "Which role holds standing instructions for the whole conversation?",
         options: ["System", "User", "Assistant"],
         answerIndex: 0,
         explanation:
           "The system prompt carries persistent instructions; user messages are turn-level.",
       },
       {
-        prompt: "What does the tool-call stream give you that plain text cannot?",
-        options: ["Faster tokens", "Visible structured actions", "Smaller bills"],
+        prompt:
+          "What does the tool-call stream give you that plain text cannot?",
+        options: [
+          "Faster tokens",
+          "Visible structured actions",
+          "Smaller bills",
+        ],
         answerIndex: 1,
         explanation:
           "Tool calls arrive as structured events, so the UI can show the agent working.",
@@ -85,7 +90,11 @@ async function main() {
   await client.end();
 }
 
-main().catch((error) => {
-  console.error(error.message);
-  process.exit(1);
-});
+(async () => {
+  try {
+    await main();
+  } catch (error) {
+    console.error(error.message);
+    process.exit(1);
+  }
+})();

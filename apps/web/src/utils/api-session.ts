@@ -8,10 +8,12 @@ import { auth } from "../services";
  * session of the incoming request as an Option, so no route re-duplicates
  * the 401 dance. Handlers fold `none` into {@link unauthorizedResponse}.
  */
-export const requestSession = (
+export const requestSession = async (
   request: Request
-): Promise<Option.Option<Session>> =>
-  auth.api.getSession({ headers: request.headers }).then(Option.fromNullishOr);
+): Promise<Option.Option<Session>> => {
+  const session = await auth.api.getSession({ headers: request.headers });
+  return Option.fromNullishOr(session);
+};
 
 /** The one 401 answer used whenever a route finds no session. */
 export const unauthorizedResponse = (): Response =>

@@ -15,6 +15,10 @@ import { ThemeProvider } from "next-themes";
 import { useEffect } from "react";
 
 import Header from "../components/header";
+import {
+  RouteErrorComponent,
+  RouteNotFoundComponent,
+} from "../components/route-fallbacks";
 import { bindInteractionSounds } from "@/utils/sound";
 
 import appCss from "../index.css?url";
@@ -47,6 +51,8 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
   }),
 
   component: RootDocument,
+  errorComponent: RouteErrorComponent,
+  notFoundComponent: RouteNotFoundComponent,
 });
 
 const themeProviderProps: ThemeProviderProps = {
@@ -57,11 +63,9 @@ const themeProviderProps: ThemeProviderProps = {
 };
 
 function RootDocument() {
-  useEffect(() => {
-    // Once for the document: delegated data-cuelume-* bindings + the saved
-    // sound preference. Returns the unbind cleanup.
-    return bindInteractionSounds();
-  }, []);
+  // Once for the document: delegated data-cuelume-* bindings + the saved
+  // sound preference. bindInteractionSounds returns the unbind cleanup.
+  useEffect(() => bindInteractionSounds(), []);
 
   return (
     <html lang="en" suppressHydrationWarning>
