@@ -34,8 +34,11 @@ import {
   curioRuntime,
   runtimeScopedArtifactPublisher,
 } from "../../services";
+import { logger } from "../../utils/logger";
 import { requestSession, unauthorizedResponse } from "../../utils/api-session";
 import { toCourseCreatedData } from "../../utils/chat-schemas";
+import { checkRateLimit, rateLimitResponse } from "../../utils/rate-limit";
+import { withSecurityHeaders } from "../../utils/security-headers";
 import {
   chatRunInFlight,
   commitChatRunChunks,
@@ -189,6 +192,10 @@ const generateAssistantMessageId = createIdGenerator({
   size: 16,
 });
 
+function secureJson(body: unknown, init?: ResponseInit): Response {
+  return withSecurityHeaders(Response.json(body, init));
+}
+
 const chatRequestSchema = z.object({
   id: z.string().min(1).max(64),
   message: z.custom<UIMessage>().optional(),
@@ -276,7 +283,7 @@ async function persistGeneratedMessages({
   try {
     await curioRuntime.runPromise(persistEffect);
   } catch (error: unknown) {
-    console.error("Failed to persist chat messages", error);
+    logger.error("Failed to persist chat messages", error);
   }
 }
 
@@ -374,7 +381,7 @@ async function composeAndPersistChatTitle({
       })
     );
   } catch (titleError: unknown) {
-    console.error("Failed to compose chat title", titleError);
+    logger.error("Failed to compose chat title", titleError);
   }
 }
 
@@ -477,20 +484,28 @@ export const Route = createFileRoute("/api/chat")({
       POST: async ({ request }: { request: Request }) => {
         const sessionOption = await requestSession(request);
         if (Option.isNone(sessionOption)) {
-          return unauthorizedResponse();
+          return withSecurityHeaders(unauthorizedResponse());
         }
         const session = sessionOption.value;
+
+        const rateLimit = checkRateLimit(`chat:${session.user.id}`, {
+          limit: 30,
+          windowMs: 60_000,
+        });
+        if (!rateLimit.allowed) {
+          return withSecurityHeaders(rateLimitResponse(rateLimit.headers));
+        }
 
         const parsedRequestBody = chatRequestSchema.safeParse(
           await request.json()
         );
 
         if (!parsedRequestBody.success) {
-          console.error(
+          logger.error(
             "Chat request body rejected",
-            parsedRequestBody.error.issues
+            parsedRequestBody.error
           );
-          return Response.json(
+          return secureJson(
             {
               error: "Invalid chat request body",
               issues: parsedRequestBody.error.issues,
@@ -525,7 +540,7 @@ export const Route = createFileRoute("/api/chat")({
             : buildSubmitConversation(history, message);
 
         if (conversation.length === 0) {
-          return Response.json(
+          return secureJson(
             { error: "Chat request produced an empty conversation" },
             { status: 400 }
           );
@@ -553,7 +568,7 @@ export const Route = createFileRoute("/api/chat")({
           chatRunInFlight(chatId, userId)
         );
         if (Option.isSome(runningRun)) {
-          return Response.json(
+          return secureJson(
             { error: "The agent is still working on this chat" },
             { status: 409 }
           );

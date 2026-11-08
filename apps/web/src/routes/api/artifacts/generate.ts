@@ -9,10 +9,17 @@ import {
   requestSession,
   unauthorizedResponse,
 } from "../../../utils/api-session";
+import { logger } from "../../../utils/logger";
+import { checkRateLimit, rateLimitResponse } from "../../../utils/rate-limit";
+import { withSecurityHeaders } from "../../../utils/security-headers";
 
 const artifactGenerationRequestSchema = z.object({
   prompt: z.string().min(1).max(20_000),
 });
+
+function secureJson(body: unknown, init?: ResponseInit): Response {
+  return withSecurityHeaders(Response.json(body, init));
+}
 
 export const Route = createFileRoute("/api/artifacts/generate")({
   server: {
@@ -20,11 +27,19 @@ export const Route = createFileRoute("/api/artifacts/generate")({
       POST: async ({ request }: { request: Request }) => {
         const sessionOption = await requestSession(request);
         if (Option.isNone(sessionOption)) {
-          return unauthorizedResponse();
+          return withSecurityHeaders(unauthorizedResponse());
+        }
+
+        const rateLimit = checkRateLimit(`artifact:${sessionOption.value.user.id}`, {
+          limit: 10,
+          windowMs: 60_000,
+        });
+        if (!rateLimit.allowed) {
+          return withSecurityHeaders(rateLimitResponse(rateLimit.headers));
         }
 
         if (!curioFeatures.artifactPublishingEnabled) {
-          return Response.json(
+          return secureJson(
             { error: "Artifact publishing is not configured" },
             { status: 501 }
           );
@@ -35,7 +50,7 @@ export const Route = createFileRoute("/api/artifacts/generate")({
         );
 
         if (!parsedRequestBody.success) {
-          return Response.json(
+          return secureJson(
             { error: "Invalid artifact generation request" },
             { status: 400 }
           );
@@ -61,13 +76,13 @@ export const Route = createFileRoute("/api/artifacts/generate")({
             })
           );
 
-          return Response.json({
+          return secureJson({
             brief: generationAndPublication.brief,
             links: generationAndPublication.publication.links,
           });
         } catch (error: unknown) {
-          console.error("Artifact generation failed", error);
-          return Response.json(
+          logger.error("Artifact generation failed", error);
+          return secureJson(
             { error: "Failed to generate or publish the artifact" },
             { status: 502 }
           );
