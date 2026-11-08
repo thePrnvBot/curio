@@ -1,30 +1,5 @@
-import { Data } from "effect";
-
-import { describeCause } from "./cause-description";
-
-export class ArtifactGenerationFailed extends Data.TaggedError(
-  "ArtifactGenerationFailed"
-)<{
-  readonly prompt: string;
-  readonly cause: unknown;
-}> {
-  override get message(): string {
-    return `Failed to generate artifact content — ${describeCause(this.cause)}`;
-  }
-}
-
-export class ArtifactPublishFailed extends Data.TaggedError(
-  "ArtifactPublishFailed"
-)<{
-  readonly title: string;
-  readonly cause: unknown;
-}> {
-  override get message(): string {
-    return `Failed to publish artifact "${this.title}" — ${describeCause(
-      this.cause
-    )}`;
-  }
-}
+export { ArtifactGenerationFailed } from "./artifact-generation-failed";
+export { ArtifactPublishFailed } from "./artifact-publish-failed";
 
 /// -------------------- generation --------------------
 export interface GeneratedArtifactBrief {

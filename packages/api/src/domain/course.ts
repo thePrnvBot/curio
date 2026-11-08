@@ -1,8 +1,16 @@
 import type { LessonContent } from "@curio/db/schema/course";
-import { Data, Predicate } from "effect";
+import { Predicate } from "effect";
 import { z } from "zod";
 
-import { describeCause } from "./cause-description";
+import type { BadgeNotFound } from "./badge-not-found";
+import type { CourseNotFound } from "./course-not-found";
+import type { CourseOperationFailed } from "./course-operation-failed";
+import type { LessonNotFound } from "./lesson-not-found";
+
+export { BadgeNotFound } from "./badge-not-found";
+export { CourseNotFound } from "./course-not-found";
+export { CourseOperationFailed } from "./course-operation-failed";
+export { LessonNotFound } from "./lesson-not-found";
 
 export const COURSE_LESSON_KINDS = [
   "video",
@@ -24,43 +32,6 @@ export type CourseLessonKind = z.infer<typeof lessonKindSchema>;
 export function normalizeLessonKind(kind: unknown): CourseLessonKind {
   const parsed = lessonKindSchema.safeParse(kind);
   return parsed.success ? parsed.data : "cards";
-}
-
-export class CourseOperationFailed extends Data.TaggedError(
-  "CourseOperationFailed"
-)<{
-  readonly operation: string;
-  readonly cause: unknown;
-}> {
-  override get message(): string {
-    return `Course operation "${this.operation}" failed: ${describeCause(
-      this.cause
-    )}`;
-  }
-}
-export class CourseNotFound extends Data.TaggedError("CourseNotFound")<{
-  readonly courseId: string;
-}> {
-  override get message(): string {
-    return `Course ${this.courseId} was not found`;
-  }
-}
-
-export class LessonNotFound extends Data.TaggedError("LessonNotFound")<{
-  readonly courseId: string;
-  readonly lessonId: string;
-}> {
-  override get message(): string {
-    return `Lesson ${this.lessonId} does not belong to course ${this.courseId}`;
-  }
-}
-
-export class BadgeNotFound extends Data.TaggedError("BadgeNotFound")<{
-  readonly badgeId: string;
-}> {
-  override get message(): string {
-    return `Badge ${this.badgeId} was not found`;
-  }
 }
 
 /** Lookup failures callers may legitimately need to tell apart from storage
