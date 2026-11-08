@@ -9,6 +9,7 @@
 import { Effect } from "effect";
 
 import { logger } from "../logger";
+import { toSpokenNarration } from "./narration-text";
 import type { VoicePreferences } from "./voice-cache";
 import {
   readCachedUtterance,
@@ -285,8 +286,12 @@ export async function hasCachedUtterance(
   if (!preferences.enabled) {
     return false;
   }
+  const spokenText = toSpokenNarration(text);
+  if (spokenText === "") {
+    return false;
+  }
   try {
-    const key = await utteranceCacheKey(activeProvider.providerId, text, {
+    const key = await utteranceCacheKey(activeProvider.providerId, spokenText, {
       speed: preferences.speed,
       voiceId: preferences.voiceId,
     });
@@ -432,8 +437,15 @@ export function getOrSynthesizeUtterance(
   if (!preferences.enabled) {
     return Promise.resolve(null);
   }
+  // Markdown/operators are normalized BEFORE hashing: the cache key must
+  // describe the text actually synthesized, and every caller (playback,
+  // prefetch, cache probes) has to land on the same key.
+  const spokenText = toSpokenNarration(text);
+  if (spokenText === "") {
+    return Promise.resolve(null);
+  }
   const request = (async () => {
-    const key = await utteranceCacheKey(activeProvider.providerId, text, {
+    const key = await utteranceCacheKey(activeProvider.providerId, spokenText, {
       speed: preferences.speed,
       voiceId: preferences.voiceId,
     });
@@ -443,7 +455,7 @@ export function getOrSynthesizeUtterance(
     }
     const synthesis = (async () => {
       try {
-        return await synthesizeUncached(key, text, preferences);
+        return await synthesizeUncached(key, spokenText, preferences);
       } finally {
         inFlightUtterances.delete(key);
       }
