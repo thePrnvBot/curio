@@ -139,6 +139,18 @@ All other categories remain at 8.5/10.
 
 **Current Overall: ~8.55/10**
 
+## Iteration 6 — CI Removal
+
+### Changes Made
+
+- Deleted `.github/workflows/ci.yml`; quality gates are the local trio
+  (`pnpm lint`, `pnpm check-types`, `pnpm test`) run before commits. This
+  supersedes the "CI gates added" rationale in Iterations 2-3.
+- Dependabot config remains for automated dependency updates.
+
+**Current Overall: ~8.5/10** (DevEx/Security slightly softened without the
+server-side gate; local gates unchanged.)
+
 ## Verification
 
 Last run:

@@ -22,7 +22,7 @@ used in `packages/api`.
   `Context.Tag`s, domain failures as `Data.TaggedError`s, composition in
   `composition/runtime.ts`).
 
-## Testing & CI
+## Testing
 
 - Tests run with Vitest through a workspace config (`vitest.config.ts` at the
   root, project configs under `packages/api/vitest.config.ts` and
@@ -30,8 +30,8 @@ used in `packages/api`.
 - Run the full suite with `pnpm test` and coverage with `pnpm test:coverage`.
 - `apps/web` tests use `jsdom` and `@testing-library/jest-dom` (setup in
   `apps/web/src/test/setup.ts`).
-- CI is defined in `.github/workflows/ci.yml` and runs `pnpm lint`,
-  `pnpm check-types`, and `pnpm test` on every push/PR to `main`.
+- The three local gates are `pnpm lint`, `pnpm check-types`, and `pnpm test`;
+  run all three before committing.
 - When adding new pure helpers (e.g. parsers, validators, URL filters), export
   them and add unit tests in the same directory using the existing `.test.ts`
   convention.
