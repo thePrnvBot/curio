@@ -78,24 +78,29 @@ function CoursesRoute() {
     courses.find((course) => course.status === "active") ?? null;
 
   return (
-    <div className="mx-auto w-full max-w-5xl shrink-0 px-6 pt-8 pb-20">
-      <div className="mb-8">
-        <header>
-          <h1 className="text-2xl font-semibold tracking-tight">Courses</h1>
-        </header>
-      </div>
+    <div className="min-h-0 flex-1 [scrollbar-width:none] overflow-y-auto overscroll-contain [&::-webkit-scrollbar]:hidden">
+      <div className="mx-auto w-full max-w-5xl px-6 pt-8 pb-20">
+        <div className="mb-8">
+          <header>
+            <h1 className="text-2xl font-semibold tracking-tight">Courses</h1>
+          </header>
+        </div>
 
-      <div className="space-y-10">
-        <CurrentCourseSection
-          activeCourse={activeCourse}
-          empty={<EmptyActiveCourseCard />}
-        />
-        <CourseListSection
-          activeCourseId={activeCourse?.id ?? null}
-          courses={courses}
-          empty={<EmptyCourseGrid />}
-        />
-        <BadgeShowcaseSection badges={badges} empty={<EmptyBadgeShowcase />} />
+        <div className="space-y-10">
+          <CurrentCourseSection
+            activeCourse={activeCourse}
+            empty={<EmptyActiveCourseCard />}
+          />
+          <CourseListSection
+            activeCourseId={activeCourse?.id ?? null}
+            courses={courses}
+            empty={<EmptyCourseGrid />}
+          />
+          <BadgeShowcaseSection
+            badges={badges}
+            empty={<EmptyBadgeShowcase />}
+          />
+        </div>
       </div>
     </div>
   );

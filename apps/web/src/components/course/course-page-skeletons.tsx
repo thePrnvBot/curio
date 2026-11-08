@@ -20,7 +20,7 @@ export function LessonContentSkeleton(): ReactElement {
 
 export function CoursePageSkeleton(): ReactElement {
   return (
-    <div className="grid min-h-0 flex-1 md:grid-cols-[300px_1fr]">
+    <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] md:grid-cols-[300px_1fr]">
       <div className="space-y-6 border-r px-5 py-6">
         <Skeleton className="h-4 w-24" />
         <div className="space-y-2">
@@ -35,7 +35,7 @@ export function CoursePageSkeleton(): ReactElement {
         </div>
       </div>
       <div>
-        <div className="mx-auto max-w-2xl px-6 py-10">
+        <div className="mx-auto max-w-5xl px-6 py-10">
           <LessonContentSkeleton />
         </div>
       </div>
@@ -64,4 +64,3 @@ export function MissingCourseNotice(props: {
     </div>
   );
 }
-

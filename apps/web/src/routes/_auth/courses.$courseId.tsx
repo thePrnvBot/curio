@@ -157,7 +157,7 @@ function CourseSidebar({
   selectedLessonId: string | null;
 }) {
   return (
-    <aside className="border-border/70 bg-sidebar md:h-full md:overflow-y-auto md:border-r">
+    <aside className="border-border/70 bg-sidebar [scrollbar-width:none] overscroll-contain md:h-full md:overflow-y-auto md:border-r [&::-webkit-scrollbar]:hidden">
       <div className="space-y-6 px-5 py-6">
         <Link
           className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs font-medium"
@@ -265,7 +265,7 @@ function LessonMainContent({
 
   if (lessonIsPending || lessonData === undefined) {
     return (
-      <div className="mx-auto w-full max-w-2xl flex-1 px-6 py-10">
+      <div className="mx-auto w-full max-w-5xl flex-1 px-6 py-10">
         <LessonContentSkeleton />
       </div>
     );
@@ -292,7 +292,7 @@ function LessonMainContent({
 
   return (
     <div
-      className="mx-auto w-full max-w-2xl flex-1 px-6 py-10"
+      className="mx-auto w-full max-w-5xl flex-1 px-6 py-10"
       key={lessonData.id}
     >
       <article>
@@ -479,8 +479,8 @@ function CoursePageRoute() {
         );
 
   return (
-    <div className="bg-background text-foreground flex min-h-0 flex-1 flex-col">
-      <div className="grid min-h-0 flex-1 md:grid-cols-[300px_1fr]">
+    <div className="bg-background text-foreground flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] overflow-hidden md:grid-cols-[300px_1fr]">
         {/* Sidebar: course, headings (sections), subheadings (lessons) */}
         <div className="hidden min-h-0 md:block">
           <CourseSidebar
@@ -494,7 +494,7 @@ function CoursePageRoute() {
         </div>
 
         {/* Center: lesson content — scrolls internally, never the page */}
-        <main className="flex min-h-0 flex-1 flex-col md:overflow-y-auto">
+        <main className="flex min-h-0 flex-1 [scrollbar-width:none] flex-col overflow-y-auto overscroll-contain [&::-webkit-scrollbar]:hidden">
           <details className="border-border/70 bg-sidebar mx-4 mt-4 rounded-lg border px-4 py-3 md:hidden">
             <summary className="cursor-pointer text-sm font-medium">
               Course lessons · {course.completedLessonCount}/

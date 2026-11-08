@@ -548,10 +548,10 @@ export function GuidedExplanationPlayer(props: {
   }, [activeModuleIndex]);
 
   const transcript = (
-    <aside className="border-border/70 w-full shrink-0 border-b lg:h-full lg:w-[360px] lg:border-r lg:border-b-0">
+    <aside className="border-border/70 w-full shrink-0 border-b lg:h-full lg:min-h-0 lg:w-[360px] lg:overflow-hidden lg:border-r lg:border-b-0">
       <div className="flex h-full flex-col">
         <div
-          className="min-h-0 flex-1 overflow-y-auto px-6 pt-5 pb-6"
+          className="min-h-0 flex-1 [scrollbar-width:none] overflow-y-auto overscroll-contain px-6 pt-5 pb-6 [&::-webkit-scrollbar]:hidden"
           ref={transcriptRef}
         >
           {/* Only the active sub-lesson module is on the page; the rest are
@@ -630,13 +630,20 @@ export function GuidedExplanationPlayer(props: {
     </aside>
   );
 
+  // Code walkthroughs use the full pane width: long excerpts keep their
+  // natural line length instead of being squeezed into the prose column.
+  const stageContentClass =
+    currentStep.visual.kind === "code"
+      ? "flex w-full flex-1 flex-col"
+      : "mx-auto flex w-full max-w-5xl flex-1 flex-col";
+
   const stageAndControls = (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex flex-1 flex-col overflow-y-auto p-6">
-        <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col lg:overflow-hidden">
+      <div className="flex min-h-0 flex-1 [scrollbar-width:none] flex-col overflow-y-auto overscroll-contain p-6 [&::-webkit-scrollbar]:hidden">
+        <div className={stageContentClass}>
           {props.content.intro !== undefined && stepIndex === 0 && (
             <div
-              className="text-muted-foreground mt-2 mb-4 text-sm leading-relaxed"
+              className="text-muted-foreground mx-auto mt-2 mb-4 w-full max-w-5xl text-sm leading-relaxed"
               style={
                 {
                   animationDelay: "60ms",
@@ -690,13 +697,13 @@ export function GuidedExplanationPlayer(props: {
       </div>
 
       <div className="border-border/70 border-t px-6 pt-4 pb-2">
-        <div className="bg-muted mx-auto mb-3 h-1 w-full max-w-3xl overflow-hidden rounded-full">
+        <div className="bg-muted mx-auto mb-3 h-1 w-full max-w-5xl overflow-hidden rounded-full">
           <div
             className="bg-primary h-full rounded-full transition-[width] duration-150 ease-linear"
             style={{ width: `${Math.min(stepProgress, 100)}%` }}
           />
         </div>
-        <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3">
+        <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Button
               aria-label={isPlaying ? "Pause explanation" : "Play explanation"}
@@ -762,7 +769,7 @@ export function GuidedExplanationPlayer(props: {
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-3xl px-6 pb-6">
+      <div className="mx-auto w-full max-w-5xl px-6 pb-6">
         <LessonCompletionControls
           className="mt-2"
           completed={props.completed}
@@ -778,7 +785,7 @@ export function GuidedExplanationPlayer(props: {
 
   return (
     <div
-      className="grid h-full min-h-0 flex-1 lg:grid-cols-[minmax(300px,380px)_1fr]"
+      className="grid h-full min-h-0 flex-1 lg:grid-cols-[minmax(300px,380px)_1fr] lg:grid-rows-[minmax(0,1fr)] lg:overflow-hidden"
       ref={playerRef}
     >
       {transcript}
