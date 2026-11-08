@@ -1,4 +1,5 @@
-import { tool, type ToolSet } from "ai";
+import { tool } from "ai";
+import type { ToolSet } from "ai";
 import { Effect } from "effect";
 import { z } from "zod";
 

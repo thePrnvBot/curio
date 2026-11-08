@@ -4,8 +4,8 @@ import {
   courseBadge,
   courseLesson,
   courseSection,
-  type LessonContent,
 } from "@curio/db/schema/course";
+import type { LessonContent } from "@curio/db/schema/course";
 import { asc, desc, eq, and } from "drizzle-orm";
 import { Effect } from "effect";
 
@@ -23,6 +23,7 @@ import type {
   CourseLessonWrittenResult,
   CourseDetail,
   CourseLessonDetail,
+  CourseSectionInput,
   CourseStoreFailure,
   CourseScaffoldResult,
   CourseSummary,
@@ -210,17 +211,12 @@ export function createDrizzleCourseStore(
                 })
                 .returning(courseSelection);
 
-              for (
-                let sectionIndex = 0;
-                sectionIndex < sections.length;
-                sectionIndex++
-              ) {
-                const sectionInput = sections.at(sectionIndex);
-                if (sectionInput === undefined) {
-                  throw new Error("Course section vanished mid-transaction");
-                }
+              const writeSection = async (
+                sectionInput: CourseSectionInput,
+                sectionIndex: number
+              ): Promise<void> => {
                 if (sectionInput.lessons.length === 0) {
-                  continue;
+                  return;
                 }
                 const sectionId = generateId("section");
                 await transactionDatabase.insert(courseSection).values({
@@ -240,7 +236,21 @@ export function createDrizzleCourseStore(
                     title: lesson.title,
                   }))
                 );
+              };
+
+              const sectionPromises: Promise<unknown>[] = [];
+              for (
+                let sectionIndex = 0;
+                sectionIndex < sections.length;
+                sectionIndex += 1
+              ) {
+                const sectionInput = sections.at(sectionIndex);
+                if (sectionInput === undefined) {
+                  throw new Error("Course section vanished mid-transaction");
+                }
+                sectionPromises.push(writeSection(sectionInput, sectionIndex));
               }
+              await Promise.all(sectionPromises);
 
               return createdCourseRows;
             }
@@ -260,13 +270,13 @@ export function createDrizzleCourseStore(
           const courseId = generateId("course");
           const lessonInputs = sections.flatMap((section) => section.lessons);
           const now = new Date();
-          const scaffoldLessons: Array<{
+          const scaffoldLessons: {
             id: string;
             kind: string;
             position: number;
             sectionTitle: string;
             title: string;
-          }> = [];
+          }[] = [];
 
           await database.transaction(async (transactionDatabase) => {
             const createdCourseRows = await transactionDatabase
@@ -287,19 +297,20 @@ export function createDrizzleCourseStore(
               throw new Error("Course scaffold insert returned no rows");
             }
 
-            for (
-              let sectionIndex = 0;
-              sectionIndex < sections.length;
-              sectionIndex++
-            ) {
-              const sectionInput = sections.at(sectionIndex);
-              if (sectionInput === undefined) {
-                throw new Error(
-                  "Course section vanished mid-scaffold-transaction"
-                );
-              }
+            const writeSection = async (
+              sectionInput: CourseSectionInput,
+              sectionIndex: number
+            ): Promise<{
+              insertedLessonRows: {
+                id: string;
+                kind: string;
+                position: number;
+                title: string;
+              }[];
+              sectionTitle: string;
+            }> => {
               if (sectionInput.lessons.length === 0) {
-                continue;
+                return { insertedLessonRows: [], sectionTitle: sectionInput.title };
               }
               const sectionId = generateId("section");
               await transactionDatabase.insert(courseSection).values({
@@ -327,12 +338,31 @@ export function createDrizzleCourseStore(
                   position: courseLesson.position,
                   title: courseLesson.title,
                 });
-              for (const insertedLesson of insertedLessonRows) {
+              return { insertedLessonRows, sectionTitle: sectionInput.title };
+            };
+
+            const sectionPromises: ReturnType<typeof writeSection>[] = [];
+            for (
+              let sectionIndex = 0;
+              sectionIndex < sections.length;
+              sectionIndex += 1
+            ) {
+              const sectionInput = sections.at(sectionIndex);
+              if (sectionInput === undefined) {
+                throw new Error(
+                  "Course section vanished mid-scaffold-transaction"
+                );
+              }
+              sectionPromises.push(writeSection(sectionInput, sectionIndex));
+            }
+            const sectionResults = await Promise.all(sectionPromises);
+            for (const sectionResult of sectionResults) {
+              for (const insertedLesson of sectionResult.insertedLessonRows) {
                 scaffoldLessons.push({
                   id: insertedLesson.id,
                   kind: insertedLesson.kind,
                   position: insertedLesson.position,
-                  sectionTitle: sectionInput.title,
+                  sectionTitle: sectionResult.sectionTitle,
                   title: insertedLesson.title,
                 });
               }
@@ -456,21 +486,17 @@ export function createDrizzleCourseStore(
             position: normalizeLessonPosition(lessonRow.position),
             title: lessonRow.title,
           });
-          const byPosition = (left: CourseLessonRow, right: CourseLessonRow) =>
-            left.position - right.position;
-
           const unclaimed = new Set(lessonRows.map((row) => row.id));
 
           // Mutable while grouping; the readonly CourseSectionDetail shape is
           // satisfied structurally on return.
-          const sections: Array<{
+          const sections: {
             id: string | null;
             lessons: CourseLessonSummary[];
             title: string;
-          }> = sectionRows.map((sectionRow) => {
+          }[] = sectionRows.map((sectionRow) => {
             const members = lessonRows
               .filter((row) => row.sectionId === sectionRow.id)
-              .sort(byPosition)
               .map(toSummary);
             for (const memberRow of members) {
               unclaimed.delete(memberRow.id);
@@ -484,19 +510,19 @@ export function createDrizzleCourseStore(
 
           // Lessons that predate the sections table (sectionId = null) fold
           // into the first section when one exists.
-          const unsectioned = lessonRows
-            .filter((row) => row.sectionId === null && unclaimed.has(row.id))
-            .sort(byPosition);
+          const unsectioned = lessonRows.filter(
+            (row) => row.sectionId === null && unclaimed.has(row.id)
+          );
           if (unsectioned.length > 0) {
             const firstSection = sections.at(0);
-            if (firstSection !== undefined) {
-              firstSection.lessons.push(...unsectioned.map(toSummary));
-            } else {
+            if (firstSection === undefined) {
               sections.push({
                 id: null,
                 lessons: unsectioned.map(toSummary),
                 title: courseRow.title,
               });
+            } else {
+              firstSection.lessons.push(...unsectioned.map(toSummary));
             }
           }
 
@@ -598,7 +624,7 @@ export function createDrizzleCourseStore(
 
           const updatedCourseRows = yield* Effect.tryPromise(async () => {
             const now = new Date();
-            const lessonCount = courseRow.lessonCount;
+            const { lessonCount } = courseRow;
             const completedLessonCount = Math.min(
               courseRow.completedLessonCount + 1,
               lessonCount

@@ -1,27 +1,14 @@
-import { Data, Effect } from "effect";
+import { Effect } from "effect";
 
-import { describeCause } from "../domain/cause-description";
+import { DdgBlocked } from "./ddg-blocked";
+import { WebSearchFailed } from "./web-search-failed";
+
+export { DdgBlocked } from "./ddg-blocked";
+export { WebSearchFailed } from "./web-search-failed";
 
 export const WEB_SEARCH_TOOL_NAME = "web_search";
 
 export type SearchFreshness = "any" | "day" | "week" | "month" | "year";
-
-export class DdgBlocked extends Data.TaggedError("DdgBlocked")<{
-  readonly query: string;
-}> {
-  override get message(): string {
-    return `DuckDuckGo served an anti-bot page for "${this.query}"`;
-  }
-}
-
-export class WebSearchFailed extends Data.TaggedError("WebSearchFailed")<{
-  readonly operation: string;
-  readonly cause: unknown;
-}> {
-  override get message(): string {
-    return `Web search failed while ${this.operation}: ${describeCause(this.cause)}`;
-  }
-}
 
 export interface WebSearchResult {
   readonly snippet: string;
@@ -62,7 +49,7 @@ const pickUserAgent = (): string =>
   USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)] ??
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
-function decodeHtmlEntities(text: string): string {
+export function decodeHtmlEntities(text: string): string {
   return text
     .replaceAll("&#x27;", "'")
     .replaceAll("&#39;", "'")
@@ -73,13 +60,13 @@ function decodeHtmlEntities(text: string): string {
     .replaceAll("&amp;", "&");
 }
 
-function htmlToText(html: string): string {
-  return decodeHtmlEntities(html.replace(/<[^>]*>/g, "")).trim();
+export function htmlToText(html: string): string {
+  return decodeHtmlEntities(html.replaceAll(/<[^>]*>/gu, "")).trim();
 }
 
 /** DDG wraps results in its own redirect; recover the destination URL. */
-function ddgHrefToUrl(href: string): string | null {
-  let candidate = decodeHtmlEntities(href.trim()).replace(/^\/\//, "https://");
+export function ddgHrefToUrl(href: string): string | null {
+  let candidate = decodeHtmlEntities(href.trim()).replace(/^\/\//u, "https://");
   if (candidate.startsWith("/l/?")) {
     candidate = `https://duckduckgo.com${candidate}`;
   }
@@ -93,7 +80,7 @@ function ddgHrefToUrl(href: string): string | null {
       // Malformed redirect link: fall through to the direct-url test.
     }
   }
-  return /^https?:\/\//i.test(candidate) ? candidate : null;
+  return /^https?:\/\//iu.test(candidate) ? candidate : null;
 }
 
 /**
@@ -101,8 +88,8 @@ function ddgHrefToUrl(href: string): string | null {
  * its own title and snippet, so splitting on that anchor keeps title/snippet
  * pairs together even where plain index-zipping would drift.
  */
-function parseDdgResults(html: string): readonly WebSearchResult[] {
-  const resultChunks = html.split(/<a[^>]*class="result__a"/g).slice(1);
+export function parseDdgResults(html: string): readonly WebSearchResult[] {
+  const resultChunks = html.split(/<a[^>]*class="result__a"/gu).slice(1);
   const results: WebSearchResult[] = [];
   const seenUrls = new Set<string>();
 
@@ -113,9 +100,10 @@ function parseDdgResults(html: string): readonly WebSearchResult[] {
     if (attributesEnd === -1) {
       continue;
     }
-    const url = ddgHrefToUrl(
-      /href="([^"]*)"/.exec(chunk.slice(0, attributesEnd))?.[1] ?? ""
+    const hrefMatch = /href="(?<href>[^"]*)"/u.exec(
+      chunk.slice(0, attributesEnd)
     );
+    const url = ddgHrefToUrl(hrefMatch?.groups?.href ?? "");
     if (url === null || seenUrls.has(url)) {
       continue;
     }
@@ -129,7 +117,8 @@ function parseDdgResults(html: string): readonly WebSearchResult[] {
     }
     seenUrls.add(url);
     const snippet = htmlToText(
-      /class="result__snippet"[^>]*>([\s\S]*?)<\/a>/.exec(chunk)?.[1] ?? ""
+      /class="result__snippet"[^>]*>(?<snippet>[\s\S]*?)<\/a>/u.exec(chunk)
+        ?.groups?.snippet ?? ""
     );
     results.push({ snippet, title, url });
   }
@@ -137,18 +126,18 @@ function parseDdgResults(html: string): readonly WebSearchResult[] {
 }
 
 /** Collect the "Next" form fields so pagination can be replayed as a POST. */
-function parseDdgNextPage(html: string): URLSearchParams | null {
+export function parseDdgNextPage(html: string): URLSearchParams | null {
   const formPattern =
-    /<form[^>]*action="\/html\/"[^>]*method="POST"[^>]*>([\s\S]*?)<\/form>/g;
+    /<form[^>]*action="\/html\/"[^>]*method="POST"[^>]*>(?<formData>[\s\S]*?)<\/form>/gu;
   for (const formMatch of html.matchAll(formPattern)) {
-    const formData = formMatch[1] ?? "";
+    const formData = formMatch.groups?.formData ?? "";
     if (!formData.includes("btn--alt")) {
       continue;
     }
     const nextPageParams = new URLSearchParams();
-    for (const input of formData.matchAll(/<input[^>]*>/g)) {
-      const name = /name="([^"]*)"/.exec(input[0])?.[1];
-      const value = /value="([^"]*)"/.exec(input[0])?.[1];
+    for (const input of formData.matchAll(/<input[^>]*>/gu)) {
+      const name = /name="(?<name>[^"]*)"/u.exec(input[0])?.groups?.name;
+      const value = /value="(?<value>[^"]*)"/u.exec(input[0])?.groups?.value;
       if (name !== undefined && name !== "" && value !== undefined) {
         nextPageParams.set(name, value);
       }
@@ -188,52 +177,54 @@ const requestDdgPage = (
 
 /** Search the public web: first page GETs up to `limit`, later pages POST the
  * replayed form one page at a time. Blocks surface as `DdgBlocked`. */
-export const duckDuckGoSearchEffect = Effect.fnUntraced(function* (
-  query: string,
-  limit: number,
-  freshness: SearchFreshness
-): Effect.fn.Return<DuckDuckGoSearchOutcome, DdgBlocked | WebSearchFailed> {
-  const dateFilter = freshness === "any" ? null : freshness.slice(0, 1);
-  let nextPageParams: URLSearchParams | null = new URLSearchParams({
-    kp: "1",
-    q: query,
-    ...(dateFilter === null ? {} : { df: dateFilter }),
-  });
-  let usePost = false;
+export const duckDuckGoSearchEffect = Effect.fnUntraced(
+  function* duckDuckGoSearchEffect(
+    query: string,
+    limit: number,
+    freshness: SearchFreshness
+  ): Effect.fn.Return<DuckDuckGoSearchOutcome, DdgBlocked | WebSearchFailed> {
+    const dateFilter = freshness === "any" ? null : freshness.slice(0, 1);
+    let nextPageParams: URLSearchParams | null = new URLSearchParams({
+      kp: "1",
+      q: query,
+      ...(dateFilter === null ? {} : { df: dateFilter }),
+    });
+    let usePost = false;
 
-  const results: WebSearchResult[] = [];
-  const seenUrls = new Set<string>();
+    const results: WebSearchResult[] = [];
+    const seenUrls = new Set<string>();
 
-  for (let pageFetched = 0; pageFetched < DDG_MAX_PAGES; pageFetched += 1) {
-    if (results.length >= limit || nextPageParams === null) {
-      break;
-    }
-    if (pageFetched > 0) {
-      usePost = true;
-      yield* Effect.sleep(DDG_PAGE_DELAY);
-    }
-    const html = yield* requestDdgPage(nextPageParams, usePost);
-    if (html.includes(ANOMALY_MARK)) {
-      return yield* Effect.fail(new DdgBlocked({ query }));
-    }
-    for (const result of parseDdgResults(html)) {
-      if (seenUrls.has(result.url)) {
-        continue;
+    for (let pageFetched = 0; pageFetched < DDG_MAX_PAGES; pageFetched += 1) {
+      if (results.length >= limit || nextPageParams === null) {
+        break;
       }
-      seenUrls.add(result.url);
-      results.push(result);
+      if (pageFetched > 0) {
+        usePost = true;
+        yield* Effect.sleep(DDG_PAGE_DELAY);
+      }
+      const html = yield* requestDdgPage(nextPageParams, usePost);
+      if (html.includes(ANOMALY_MARK)) {
+        return yield* Effect.fail(new DdgBlocked({ query }));
+      }
+      for (const result of parseDdgResults(html)) {
+        if (seenUrls.has(result.url)) {
+          continue;
+        }
+        seenUrls.add(result.url);
+        results.push(result);
+      }
+      nextPageParams = parseDdgNextPage(html);
     }
-    nextPageParams = parseDdgNextPage(html);
-  }
 
-  return {
-    blocked: false,
-    results: results.slice(0, limit).map((result) => {
-      const { snippet, title, url } = result;
-      return { snippet, title, url };
-    }),
-  };
-});
+    return {
+      blocked: false,
+      results: results.slice(0, limit).map((result) => {
+        const { snippet, title, url } = result;
+        return { snippet, title, url };
+      }),
+    };
+  }
+);
 
 /** Promise-facing search helper for tools and tests: an anti-bot block is
  * surfaced in the outcome instead of failing the promise. */

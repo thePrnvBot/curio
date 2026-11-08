@@ -80,7 +80,7 @@ const commitResultSchema = z.object({
   version: z.object({ id: z.string().min(1).optional() }).optional(),
 });
 
-function toMcpError(
+export function toMcpError(
   operationTitle: string
 ): (cause: unknown) => ArtifactPublishFailed {
   return (cause: unknown) =>
@@ -91,7 +91,7 @@ function toMcpError(
  * protocol error becomes a typed publish failure, and a text-serialized JSON
  * body (a common MCP fallback) is parsed before the underlying record is
  * returned for schema validation. */
-function unwrapToolResultRecord(
+export function unwrapToolResultRecord(
   rawToolOutput: unknown,
   toolName: string
 ): Record<string, unknown> {
@@ -112,9 +112,9 @@ function unwrapToolResultRecord(
   if (parsedEnvelope.data.structuredContent !== undefined) {
     return parsedEnvelope.data.structuredContent;
   }
-  const firstTextBlock = parsedEnvelope.data.content
-    ?.filter((block) => block.type === "text" && block.text !== undefined)
-    .at(0);
+  const firstTextBlock = parsedEnvelope.data.content?.find(
+    (block) => block.type === "text" && block.text !== undefined
+  );
   if (firstTextBlock?.text !== undefined) {
     try {
       const parsedText: unknown = JSON.parse(firstTextBlock.text);

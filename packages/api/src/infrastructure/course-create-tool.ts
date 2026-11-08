@@ -83,7 +83,7 @@ export function createCourseTool(chunks: {
         "afterwards call create_lesson once per lesson id IN ORDER, passing " +
         "the finished content for that lesson each time, until every lesson " +
         "is filled; then tell the user the course is ready in the Courses tab.",
-      execute: async (input) => chunks.createScopedCourseScaffold(input),
+      execute: (input) => chunks.createScopedCourseScaffold(input),
       inputSchema: z.object({
         description: z
           .string()
@@ -143,7 +143,7 @@ export function createCourseTool(chunks: {
         "For a guided-explanation that walks one code excerpt, set content.code " +
         "once and omit visual.source from each step; steps then only need " +
         "narration and visual.focus, which keeps the tool call small.",
-      execute: async (input) => chunks.createScopedCourseLesson(input),
+      execute: (input) => chunks.createScopedCourseLesson(input),
       inputSchema: z.object({
         content: lessonContentSchema,
         courseId: z.string().min(1).max(64),

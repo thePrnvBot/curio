@@ -2,21 +2,15 @@ import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { isIP } from "node:net";
 
-import { Data, Effect } from "effect";
+import { Effect } from "effect";
+
+import { ObscuraUnavailable } from "./obscura-unavailable";
+import { WebReadFailed } from "./web-read-failed";
+
+export { ObscuraUnavailable } from "./obscura-unavailable";
+export { WebReadFailed } from "./web-read-failed";
 
 export const WEB_READ_TOOL_NAME = "web_read";
-
-export class ObscuraUnavailable extends Data.TaggedError("ObscuraUnavailable")<{
-  readonly message: string;
-}> {}
-
-export class WebReadFailed extends Data.TaggedError("WebReadFailed")<{
-  readonly readFailureMessage: string;
-}> {
-  override get message(): string {
-    return this.readFailureMessage;
-  }
-}
 
 export interface WebPageReadResult {
   readonly markdown: string;
@@ -43,7 +37,7 @@ const MAX_SPAWN_OUTPUT_CHARS = 1_000_000;
  * network, private, loopback, carrier-grade NAT, link-local (including cloud
  * metadata at 169.254.169.254), benchmarking, multicast and reserved space.
  */
-function isBlockedIpv4(hostname: string): boolean {
+export function isBlockedIpv4(hostname: string): boolean {
   const octets = hostname.split(".").map(Number);
   if (
     octets.length !== 4 ||
@@ -70,7 +64,7 @@ function isBlockedIpv4(hostname: string): boolean {
  * unique-local, link-local, and IPv4-mapped addresses (which could smuggle a
  * private IPv4 through `::ffff:`).
  */
-function isBlockedIpv6(hostname: string): boolean {
+export function isBlockedIpv6(hostname: string): boolean {
   const address = hostname.replaceAll(/^\[|\]$/gu, "").toLowerCase();
   if (address === "::" || address === "::1") {
     return true;
@@ -81,7 +75,11 @@ function isBlockedIpv6(hostname: string): boolean {
   }
   // Link-local fe80::/10.
   const firstGroup = Number.parseInt(address.split(":")[0] ?? "", 16);
-  if (Number.isInteger(firstGroup) && firstGroup >= 65_152 && firstGroup <= 65_215) {
+  if (
+    Number.isInteger(firstGroup) &&
+    firstGroup >= 65_152 &&
+    firstGroup <= 65_215
+  ) {
     return true;
   }
   if (address.startsWith("::ffff:")) {
@@ -109,7 +107,7 @@ function isBlockedIpv6(hostname: string): boolean {
   return false;
 }
 
-function isPublicHttpUrl(candidate: string): boolean {
+export function isPublicHttpUrl(candidate: string): boolean {
   let parsed: URL;
   try {
     parsed = new URL(candidate);
@@ -179,6 +177,7 @@ const spawnObscuraEffect = (
     });
     let stdout = "";
     let settled = false;
+    const timerState: { killTimer?: ReturnType<typeof setTimeout> } = {};
     const settle = (
       outcome: Effect.Effect<string, ObscuraSpawnFailed>
     ): void => {
@@ -186,10 +185,10 @@ const spawnObscuraEffect = (
         return;
       }
       settled = true;
-      clearTimeout(killTimer);
+      clearTimeout(timerState.killTimer);
       resume(outcome);
     };
-    const killTimer = setTimeout(() => {
+    timerState.killTimer = setTimeout(() => {
       settle(
         Effect.fail({
           message: `Obscura fetch timed out after ${timeoutMs}ms`,
@@ -199,7 +198,7 @@ const spawnObscuraEffect = (
     }, timeoutMs);
     child.stdout?.on("data", (chunk: Buffer) => {
       if (stdout.length < MAX_SPAWN_OUTPUT_CHARS) {
-        stdout += chunk.toString("utf8");
+        stdout += chunk.toString("utf-8");
       }
     });
     child.on("error", (error: NodeJS.ErrnoException) => {
@@ -228,14 +227,14 @@ const spawnObscuraEffect = (
 
     // Finalizer: interruption (or runtime shutdown) tears the child down.
     return Effect.sync(() => {
-      clearTimeout(killTimer);
+      clearTimeout(timerState.killTimer);
       if (!child.killed) {
         child.kill();
       }
     });
   });
 
-const obscuraFetchEffect = Effect.fnUntraced(function* (
+const obscuraFetchEffect = Effect.fnUntraced(function* obscuraFetchEffect(
   args: readonly string[]
 ): Effect.fn.Return<string, ObscuraUnavailable | WebReadFailed> {
   let lastFailure: ObscuraSpawnFailed | undefined;
@@ -265,7 +264,7 @@ const obscuraFetchEffect = Effect.fnUntraced(function* (
 /** Render a public URL with Obscura and return truncation-aware markdown.
  * `selector` optionally narrows extraction to a CSS region (main, article)
  * per the Obscura RAG guidance for skipping nav, sidebars and footers. */
-export const webPageReadEffect = Effect.fnUntraced(function* (
+export const webPageReadEffect = Effect.fnUntraced(function* webPageReadEffect(
   url: string,
   selector?: string
 ): Effect.fn.Return<WebPageReadResult, ObscuraUnavailable | WebReadFailed> {
@@ -293,7 +292,7 @@ export const webPageReadEffect = Effect.fnUntraced(function* (
   const truncated = trimmed.length > WEB_READ_MAX_CHARS;
   return {
     markdown: truncated
-      ? `${trimmed.slice(0, WEB_READ_MAX_CHARS).trimEnd()}` + "\n\n…"
+      ? `${trimmed.slice(0, WEB_READ_MAX_CHARS).trimEnd()}\n\n…`
       : trimmed,
     note: truncated
       ? "Page text was truncated; read again with a narrower source if key details are missing."
