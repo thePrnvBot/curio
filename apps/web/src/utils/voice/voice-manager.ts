@@ -8,6 +8,7 @@
 
 import { Effect } from "effect";
 
+import { logger } from "../logger";
 import type { VoicePreferences } from "./voice-cache";
 import {
   readCachedUtterance,
@@ -15,7 +16,6 @@ import {
   writeCachedUtterance,
 } from "./voice-cache";
 import { KOKORO_VOICE_CATALOG } from "./voice-catalog";
-import { logger } from "../logger";
 import { narrationLog } from "./voice-playback";
 import type {
   VoiceCatalogEntry,
@@ -180,29 +180,28 @@ function postSynthesizeRequest(
                 ? error
                 : new VoiceSynthesisFailedError({
                     message:
-                      error instanceof Error
-                        ? error.message
-                        : "speech failed",
+                      error instanceof Error ? error.message : "speech failed",
                   })
             )
           ),
         resolve: (response) => resume(Effect.succeed(response)),
       });
-    try {
-      // oxlint-disable-next-line unicorn/require-post-message-target-origin
-      worker.postMessage(request);
-    } catch (error: unknown) {
-      pendingRequests.delete(request.id);
-      resume(
-        Effect.fail(
-          new VoiceSynthesisFailedError({
-            message:
-              error instanceof Error ? error.message : "worker post failed",
-          })
-        )
-      );
+      try {
+        // oxlint-disable-next-line unicorn/require-post-message-target-origin
+        worker.postMessage(request);
+      } catch (error: unknown) {
+        pendingRequests.delete(request.id);
+        resume(
+          Effect.fail(
+            new VoiceSynthesisFailedError({
+              message:
+                error instanceof Error ? error.message : "worker post failed",
+            })
+          )
+        );
+      }
     }
-  });
+  );
 }
 
 /* -------------------------------- provider --------------------------------- */
@@ -323,9 +322,7 @@ function bumpCacheWriteVersion(): void {
 
 /** Fires on every fresh utterance persisted (player, background sweep, etc.),
  * so UI can show how many voice lines exist. */
-export function subscribeToVoiceCacheWrites(
-  listener: () => void
-): () => void {
+export function subscribeToVoiceCacheWrites(listener: () => void): () => void {
   cacheWriteListeners.add(listener);
   return () => {
     cacheWriteListeners.delete(listener);
@@ -409,7 +406,7 @@ async function synthesizeUncached(
         );
         bumpCacheWriteVersion();
       } catch (cacheWriteError: unknown) {
-        console.warn(
+        logger.warn(
           "Voice cache write failed",
           cacheWriteError instanceof Error
             ? cacheWriteError.message

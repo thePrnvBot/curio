@@ -19,8 +19,14 @@ interface BucketEntry {
 }
 
 const buckets = new Map<string, BucketEntry>();
+let nextPruneAt = 0;
+const PRUNE_INTERVAL_MS = 60_000;
 
 function pruneExpired(now: number): void {
+  if (now < nextPruneAt) {
+    return;
+  }
+  nextPruneAt = now + PRUNE_INTERVAL_MS;
   for (const [key, entry] of buckets) {
     if (entry.resetAt <= now) {
       buckets.delete(key);
@@ -65,11 +71,20 @@ export function checkRateLimit(
   };
 }
 
-export function rateLimitResponse(
-  headers: Record<string, string>
-): Response {
+export function rateLimitResponse(headers: Record<string, string>): Response {
+  const reset = headers["RateLimit-Reset"];
+  const resetSeconds = reset === undefined ? Number.NaN : Number(reset);
+  const retryAfter = Number.isFinite(resetSeconds)
+    ? String(Math.max(1, resetSeconds - Math.floor(Date.now() / 1000)))
+    : undefined;
   return Response.json(
     { error: "Rate limit exceeded. Please slow down." },
-    { headers, status: 429 }
+    {
+      headers: {
+        ...headers,
+        ...(retryAfter === undefined ? {} : { "Retry-After": retryAfter }),
+      },
+      status: 429,
+    }
   );
 }

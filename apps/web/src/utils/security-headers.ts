@@ -13,8 +13,13 @@ export const SECURITY_HEADERS: Record<string, string> = {
     "img-src 'self' data: blob:; " +
     "font-src 'self'; " +
     "connect-src 'self'; " +
+    "media-src 'self' blob: data:; " +
+    "worker-src 'self' blob:; " +
     "frame-ancestors 'none'; " +
     "base-uri 'self';",
+  "Cross-Origin-Opener-Policy": "same-origin",
+  "Cross-Origin-Resource-Policy": "same-origin",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
