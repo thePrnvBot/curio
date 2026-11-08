@@ -8,16 +8,15 @@
 
 import { Effect } from "effect";
 
-import type {
-  VoicePreferences,
-} from "./voice-cache";
+import type { VoicePreferences } from "./voice-cache";
 import {
   readCachedUtterance,
   utteranceCacheKey,
   writeCachedUtterance,
 } from "./voice-cache";
-import { narrationLog } from "./voice-playback";
 import { KOKORO_VOICE_CATALOG } from "./voice-catalog";
+import { logger } from "../logger";
+import { narrationLog } from "./voice-playback";
 import type {
   VoiceCatalogEntry,
   VoiceWorkerRequest,
@@ -27,12 +26,12 @@ import type {
 export type { VoicePreferences } from "./voice-cache";
 export type { VoiceCatalogEntry } from "./voice-worker-protocol";
 
-export class VoiceSynthesisFailed extends Error {
-  readonly _tag = "VoiceSynthesisFailed";
+export class VoiceSynthesisFailedError extends Error {
+  readonly _tag = "VoiceSynthesisFailedError";
 
   constructor(params: { message: string }) {
     super(params.message);
-    this.name = "VoiceSynthesisFailed";
+    this.name = "VoiceSynthesisFailedError";
   }
 }
 
@@ -53,165 +52,13 @@ export type SynthesizedUtterance = Omit<VoiceUtterance, "cacheKey">;
 export interface VoiceProvider {
   readonly providerId: string;
   /** Lazily initialized; may download model weights on first call. */
-  synthesize(
+  readonly synthesize: (
     text: string,
     preferences: { readonly speed: number; readonly voiceId: string }
-  ): Effect.Effect<SynthesizedUtterance, VoiceSynthesisFailed>;
+  ) => Effect.Effect<SynthesizedUtterance, VoiceSynthesisFailedError>;
   /** Voice list; must not require model weights. */
-  listVoices(): Promise<readonly VoiceCatalogEntry[]>;
+  readonly listVoices: () => Promise<readonly VoiceCatalogEntry[]>;
 }
-
-/* ------------------------------ worker plumbing ------------------------------ */
-
-let workerInstance: Worker | null = null;
-let nextRequestId = 1;
-
-const progressListeners = new Set<(percent: number) => void>();
-const pendingRequests = new Map<
-  number,
-  {
-    reject: (error: Error) => void;
-    resolve: (receiver: VoiceWorkerResponse) => void;
-  }
->();
-
-function ensureWorker(): Worker {
-  if (workerInstance !== null) {
-    return workerInstance;
-  }
-  const worker = new Worker(
-    new URL("./kokoro-voice.worker.ts", import.meta.url),
-    { type: "module" }
-  );
-  worker.onmessage = (event: MessageEvent<VoiceWorkerResponse>) => {
-    const response = event.data;
-    if (response.type === "model-progress") {
-      for (const listener of progressListeners) {
-        listener(response.percent);
-      }
-      return;
-    }
-    if (response.type === "synthesis") {
-      const pendingRequest = pendingRequests.get(response.id);
-      if (pendingRequest === undefined) {
-        return;
-      }
-      pendingRequests.delete(response.id);
-      if (response.ok) {
-        pendingRequest.resolve(response);
-      } else {
-        pendingRequest.reject(
-          new VoiceSynthesisFailed({
-            message: response.message ?? "Kokoro speech failed",
-          })
-        );
-      }
-    }
-  };
-  worker.onerror = (errorEvent: ErrorEvent) => {
-    const failure = new VoiceSynthesisFailed({
-      message: errorEvent.message || "voice worker crashed",
-    });
-    // The worker is dead — drop it so the next synthesis spins up a fresh
-    // worker instead of posting into a void (which would hang forever).
-    try {
-      worker.terminate();
-    } catch {
-      worker.postMessage === undefined; // noop guard
-    }
-    workerInstance = null;
-    setStatus({ kind: "voice-failed", message: failure.message });
-    for (const pending of pendingRequests.values()) {
-      pending.reject(failure);
-    }
-    pendingRequests.clear();
-  };
-  workerInstance = worker;
-  return worker;
-}
-
-function postVoiceRequest(
-  request: VoiceWorkerRequest
-): Promise<VoiceWorkerResponse> {
-  const worker = ensureWorker();
-  return new Promise((resolve, reject) => {
-    if (request.type === "synthesize") {
-      pendingRequests.set(request.id, { reject, resolve });
-    }
-    try {
-      worker.postMessage(request);
-    } catch (error: unknown) {
-      if (request.type === "synthesize") {
-        pendingRequests.delete(request.id);
-      }
-      reject(
-        new VoiceSynthesisFailed({
-          message: error instanceof Error ? error.message : "worker post failed",
-        })
-      );
-    }
-  });
-}
-
-/* -------------------------------- provider --------------------------------- */
-
-// The v2 suffix orphans every cached utterance synthesized by the old
-// WebGPU engine, whose waveforms were garbled noise.
-export const KOKORO_WEB_PROVIDER_ID = "kokoro-web-v2";
-
-export const kokoroWebVoiceProvider: VoiceProvider = {
-  async listVoices(): Promise<readonly VoiceCatalogEntry[]> {
-    // The catalog is static published metadata - no worker round-trip
-    // needed, so the picker renders instantly without waking the engine.
-    return KOKORO_VOICE_CATALOG;
-  },
-
-  providerId: KOKORO_WEB_PROVIDER_ID,
-
-  synthesize: (text, preferences) =>
-    Effect.callback((resume) => {
-      void postVoiceRequest({
-        id: nextRequestId++,
-        speed: preferences.speed,
-        text,
-        type: "synthesize",
-        voiceId: preferences.voiceId,
-      })
-        .then((response) => {
-          if (response.type !== "synthesis" || response.ok === false) {
-            resume(
-              Effect.fail(
-                new VoiceSynthesisFailed({
-                  message:
-                    response.type === "synthesis"
-                      ? response.message
-                      : "synthesis returned no audio",
-                })
-              )
-            );
-            return;
-          }
-          resume(
-            Effect.succeed({
-              providerId: KOKORO_WEB_PROVIDER_ID,
-              wav: response.wav,
-              durationMs: response.durationMs,
-              sampleRate: response.sampleRate,
-            })
-          );
-        })
-        .catch((error: unknown) => {
-          resume(
-            Effect.fail(
-              new VoiceSynthesisFailed({
-                message:
-                  error instanceof Error ? error.message : "speech failed",
-              })
-            )
-          );
-        });
-    }),
-};
 
 /* --------------------------------- manager --------------------------------- */
 
@@ -237,6 +84,172 @@ function setStatus(nextStatus: VoiceManagerStatus): void {
   }
 }
 
+export function subscribeToVoiceStatus(
+  listener: (status: VoiceManagerStatus) => void
+): () => void {
+  statusListeners.add(listener);
+  listener(currentStatus);
+  return () => {
+    statusListeners.delete(listener);
+  };
+}
+
+/* ------------------------------ worker plumbing ------------------------------ */
+
+let workerInstance: Worker | null = null;
+let nextRequestId = 1;
+
+const progressListeners = new Set<(percent: number) => void>();
+const pendingRequests = new Map<
+  number,
+  {
+    reject: (error: Error) => void;
+    resolve: (receiver: VoiceWorkerResponse) => void;
+  }
+>();
+
+function ensureWorker(): Worker {
+  if (workerInstance !== null) {
+    return workerInstance;
+  }
+  const worker = new Worker(
+    new URL("kokoro-voice.worker.ts", import.meta.url),
+    { type: "module" }
+  );
+  worker.addEventListener(
+    "message",
+    (event: MessageEvent<VoiceWorkerResponse>) => {
+      const response = event.data;
+      if (response.type === "model-progress") {
+        for (const listener of progressListeners) {
+          listener(response.percent);
+        }
+        return;
+      }
+      if (response.type === "synthesis") {
+        const pendingRequest = pendingRequests.get(response.id);
+        if (pendingRequest === undefined) {
+          return;
+        }
+        pendingRequests.delete(response.id);
+        if (response.ok) {
+          pendingRequest.resolve(response);
+        } else {
+          pendingRequest.reject(
+            new VoiceSynthesisFailedError({
+              message: response.message ?? "Kokoro speech failed",
+            })
+          );
+        }
+      }
+    }
+  );
+  worker.addEventListener("error", (errorEvent: ErrorEvent) => {
+    const failure = new VoiceSynthesisFailedError({
+      message: errorEvent.message || "voice worker crashed",
+    });
+    // The worker is dead — drop it so the next synthesis spins up a fresh
+    // worker instead of posting into a void (which would hang forever).
+    try {
+      worker.terminate();
+    } catch {
+      // noop guard
+    }
+    workerInstance = null;
+    setStatus({ kind: "voice-failed", message: failure.message });
+    for (const pending of pendingRequests.values()) {
+      pending.reject(failure);
+    }
+    pendingRequests.clear();
+  });
+  workerInstance = worker;
+  return worker;
+}
+
+function postSynthesizeRequest(
+  request: VoiceWorkerRequest & { type: "synthesize" }
+): Effect.Effect<VoiceWorkerResponse, VoiceSynthesisFailedError> {
+  return Effect.callback<VoiceWorkerResponse, VoiceSynthesisFailedError>(
+    (resume) => {
+      const worker = ensureWorker();
+      pendingRequests.set(request.id, {
+        reject: (error) =>
+          resume(
+            Effect.fail(
+              error instanceof VoiceSynthesisFailedError
+                ? error
+                : new VoiceSynthesisFailedError({
+                    message:
+                      error instanceof Error
+                        ? error.message
+                        : "speech failed",
+                  })
+            )
+          ),
+        resolve: (response) => resume(Effect.succeed(response)),
+      });
+    try {
+      // oxlint-disable-next-line unicorn/require-post-message-target-origin
+      worker.postMessage(request);
+    } catch (error: unknown) {
+      pendingRequests.delete(request.id);
+      resume(
+        Effect.fail(
+          new VoiceSynthesisFailedError({
+            message:
+              error instanceof Error ? error.message : "worker post failed",
+          })
+        )
+      );
+    }
+  });
+}
+
+/* -------------------------------- provider --------------------------------- */
+
+// The v2 suffix orphans every cached utterance synthesized by the old
+// WebGPU engine, whose waveforms were garbled noise.
+export const KOKORO_WEB_PROVIDER_ID = "kokoro-web-v2";
+
+export const kokoroWebVoiceProvider: VoiceProvider = {
+  listVoices(): Promise<readonly VoiceCatalogEntry[]> {
+    // The catalog is static published metadata - no worker round-trip
+    // needed, so the picker renders instantly without waking the engine.
+    return Promise.resolve(KOKORO_VOICE_CATALOG);
+  },
+
+  providerId: KOKORO_WEB_PROVIDER_ID,
+
+  synthesize: (text, preferences) =>
+    Effect.gen(function* synthesizeVoice() {
+      const requestId = nextRequestId;
+      nextRequestId += 1;
+      const response = yield* postSynthesizeRequest({
+        id: requestId,
+        speed: preferences.speed,
+        text,
+        type: "synthesize",
+        voiceId: preferences.voiceId,
+      });
+      if (response.type !== "synthesis" || response.ok === false) {
+        return yield* Effect.fail(
+          new VoiceSynthesisFailedError({
+            message:
+              response.type === "synthesis"
+                ? response.message
+                : "synthesis returned no audio",
+          })
+        );
+      }
+      return {
+        providerId: KOKORO_WEB_PROVIDER_ID,
+        wav: response.wav,
+        durationMs: response.durationMs,
+        sampleRate: response.sampleRate,
+      };
+    }),
+};
+
 /** Renames model download events into the shared status stream so the UI
  * reads a "narration model 63%" state instead of a silent pause. */
 function wireModelProgress(): void {
@@ -249,19 +262,9 @@ function wireModelProgress(): void {
 }
 wireModelProgress();
 
-export function subscribeToVoiceStatus(
-  listener: (status: VoiceManagerStatus) => void
-): () => void {
-  statusListeners.add(listener);
-  listener(currentStatus);
-  return () => {
-    statusListeners.delete(listener);
-  };
-}
-
 const activeProvider = kokoroWebVoiceProvider;
 
-export async function getVoiceCatalog(): Promise<readonly VoiceCatalogEntry[]> {
+export function getVoiceCatalog(): Promise<readonly VoiceCatalogEntry[]> {
   return activeProvider.listVoices();
 }
 
@@ -289,6 +292,7 @@ export async function hasCachedUtterance(
       voiceId: preferences.voiceId,
     });
     const cached = await Effect.runPromise(
+      // oxlint-disable-next-line promise/valid-params
       Effect.catch(readCachedUtterance(key), () => Effect.succeed(null))
     );
     return cached !== null;
@@ -328,49 +332,17 @@ export function subscribeToVoiceCacheWrites(
   };
 }
 
-export function countCachedUtterances(
+export async function countCachedUtterances(
   texts: readonly string[],
   preferences: VoicePreferences
 ): Promise<number> {
   if (!preferences.enabled) {
-    return Promise.resolve(0);
+    return 0;
   }
-  return (async () => {
-    let cachedCount = 0;
-    for (const text of texts) {
-      if (await hasCachedUtterance(text, preferences)) {
-        cachedCount += 1;
-      }
-    }
-    return cachedCount;
-  })();
-}
-
-export function getOrSynthesizeUtterance(
-  text: string,
-  preferences: VoicePreferences
-): Promise<VoiceUtterance | null> {
-  if (!preferences.enabled) {
-    return Promise.resolve(null);
-  }
-  const request = (async () => {
-    const key = await utteranceCacheKey(activeProvider.providerId, text, {
-      speed: preferences.speed,
-      voiceId: preferences.voiceId,
-    });
-    const pending = inFlightUtterances.get(key);
-    if (pending !== undefined) {
-      return pending;
-    }
-    const synthesis = synthesizeUncached(key, text, preferences).finally(
-      () => {
-        inFlightUtterances.delete(key);
-      }
-    );
-    inFlightUtterances.set(key, synthesis);
-    return synthesis;
-  })();
-  return request;
+  const results = await Promise.all(
+    texts.map((text) => hasCachedUtterance(text, preferences))
+  );
+  return results.filter(Boolean).length;
 }
 
 async function synthesizeUncached(
@@ -379,9 +351,10 @@ async function synthesizeUncached(
   preferences: VoicePreferences
 ): Promise<VoiceUtterance | null> {
   const cached = await Effect.runPromise(
+    // oxlint-disable-next-line promise/valid-params
     Effect.catch(readCachedUtterance(key), (cacheError) =>
-      Effect.gen(function* () {
-        console.warn("Voice cache unavailable", cacheError.message);
+      Effect.sync(() => {
+        logger.warn("Voice cache unavailable", cacheError.message);
         return null;
       })
     )
@@ -422,32 +395,64 @@ async function synthesizeUncached(
       `sampleRate=${utterance.sampleRate}`
     );
     const textHash = key.split(":").at(-1) ?? "";
-    void Effect.runPromise(
-      writeCachedUtterance({
-        createdAt: Date.now(),
-        durationMs: utterance.durationMs,
-        key,
-        sampleRate: utterance.sampleRate,
-        textHash,
-        wav: utterance.wav,
-      })
-    )
-      .then(() => {
+    void (async () => {
+      try {
+        await Effect.runPromise(
+          writeCachedUtterance({
+            createdAt: Date.now(),
+            durationMs: utterance.durationMs,
+            key,
+            sampleRate: utterance.sampleRate,
+            textHash,
+            wav: utterance.wav,
+          })
+        );
         bumpCacheWriteVersion();
-      })
-      .catch((cacheWriteError: unknown) => {
+      } catch (cacheWriteError: unknown) {
         console.warn(
           "Voice cache write failed",
-          cacheWriteError instanceof Error ? cacheWriteError.message : cacheWriteError
+          cacheWriteError instanceof Error
+            ? cacheWriteError.message
+            : cacheWriteError
         );
-      });
+      }
+    })();
     setStatus({ kind: "idle" });
     return { ...utterance, cacheKey: key };
   } catch (error: unknown) {
     const message =
       error instanceof Error ? error.message : "speech synthesis failed";
     setStatus({ kind: "voice-failed", message });
-    console.warn("Voice synthesis failed:", message);
+    logger.warn("Voice synthesis failed:", message);
     return null;
   }
+}
+
+export function getOrSynthesizeUtterance(
+  text: string,
+  preferences: VoicePreferences
+): Promise<VoiceUtterance | null> {
+  if (!preferences.enabled) {
+    return Promise.resolve(null);
+  }
+  const request = (async () => {
+    const key = await utteranceCacheKey(activeProvider.providerId, text, {
+      speed: preferences.speed,
+      voiceId: preferences.voiceId,
+    });
+    const pending = inFlightUtterances.get(key);
+    if (pending !== undefined) {
+      return pending;
+    }
+    const synthesis = (async () => {
+      try {
+        return await synthesizeUncached(key, text, preferences);
+      } finally {
+        inFlightUtterances.delete(key);
+      }
+    })();
+    inFlightUtterances.set(key, synthesis);
+    return synthesis;
+  })();
+  return request;
 }

@@ -12,13 +12,15 @@
  * page at all.
  */
 
+import { logger } from "../logger";
+
 let playbackContext: AudioContext | null = null;
 let unlockBound = false;
 
 /** Diagnostic logging for the narration chain (button -> utterance -> audio).
- * Temporary scaffolding while tracking down silent playback. */
+ * Uses the shared logger so it can be disabled in production. */
 export function narrationLog(...parts: readonly unknown[]): void {
-  console.info("[narration]", ...parts);
+  logger.info("[narration]", ...parts);
 }
 
 function getPlaybackContext(): AudioContext | null {

@@ -54,6 +54,8 @@ export function readVoicePreferences(): VoicePreferences {
   }
 }
 
+const preferenceListeners = new Set<() => void>();
+
 export function saveVoicePreferences(preferences: VoicePreferences): void {
   window.localStorage.setItem(
     VOICE_PREFERENCES_KEY,
@@ -63,8 +65,6 @@ export function saveVoicePreferences(preferences: VoicePreferences): void {
     listener();
   }
 }
-
-const preferenceListeners = new Set<() => void>();
 
 export function subscribeToVoicePreferences(
   listener: () => void
@@ -87,12 +87,12 @@ export interface CachedUtterance {
   readonly wav: ArrayBuffer;
 }
 
-export class VoiceCacheFailed extends Error {
-  readonly _tag = "VoiceCacheFailed";
+export class VoiceCacheFailedError extends Error {
+  readonly _tag = "VoiceCacheFailedError";
 
   constructor(params: { message: string }) {
     super(params.message);
-    this.name = "VoiceCacheFailed";
+    this.name = "VoiceCacheFailedError";
   }
 }
 
@@ -100,67 +100,100 @@ const CACHE_DB_NAME = "curio-voice";
 const CACHE_STORE_NAME = "utterances";
 const CACHE_MAX_ENTRIES = 500;
 
-function openVoiceCache(): Effect.Effect<IDBDatabase, VoiceCacheFailed> {
-  return Effect.callback((resume) => {
+function openVoiceCache(): Effect.Effect<IDBDatabase, VoiceCacheFailedError> {
+  return Effect.callback<IDBDatabase, VoiceCacheFailedError>((resume) => {
     const request = indexedDB.open(CACHE_DB_NAME, 1);
-    request.onupgradeneeded = () => {
+    request.addEventListener("upgradeneeded", () => {
       const database = request.result;
       if (!database.objectStoreNames.contains(CACHE_STORE_NAME)) {
         database.createObjectStore(CACHE_STORE_NAME, { keyPath: "key" });
       }
-    };
-    request.onerror = () => {
+    });
+    request.addEventListener("error", () => {
       resume(
         Effect.fail(
-          new VoiceCacheFailed({
+          new VoiceCacheFailedError({
             message: request.error?.message ?? "failed to open cache",
           })
         )
       );
-    };
-    request.onsuccess = () => {
+    });
+    request.addEventListener("success", () => {
       resume(Effect.succeed(request.result));
-    };
+    });
   });
 }
 
 /** IndexedDB requests are wrapped so failures surface as typed cache errors
  * while successes keep the original request-inferred value types. */
 function cacheRequest<T>(request: IDBRequest): Promise<T> {
-  return new Promise((resolve, reject) => {
-    request.onerror = () => {
-      reject(
-        new VoiceCacheFailed({
-          message: request.error?.message ?? "cache request failed",
-        })
+  return Effect.runPromise(
+    Effect.callback<T, VoiceCacheFailedError>((resume) => {
+      request.addEventListener(
+        "error",
+        () => {
+          resume(
+            Effect.fail(
+              new VoiceCacheFailedError({
+                message: request.error?.message ?? "cache request failed",
+              })
+            )
+          );
+        },
+        { once: true }
       );
-    };
-    request.onsuccess = () => {
-      resolve(request.result as T);
-    };
-  });
+      request.addEventListener(
+        "success",
+        () => {
+          resume(Effect.succeed(request.result as T));
+        },
+        { once: true }
+      );
+    })
+  );
 }
 
 function cacheTransaction(transaction: IDBTransaction): Promise<void> {
-  return new Promise((resolve, reject) => {
-    transaction.onabort = () => {
-      reject(
-        new VoiceCacheFailed({
-          message: transaction.error?.message ?? "cache operation aborted",
-        })
+  return Effect.runPromise(
+    // oxlint-disable-next-line typescript/no-invalid-void-type
+    Effect.callback<void, VoiceCacheFailedError>((resume) => {
+      transaction.addEventListener(
+        "abort",
+        () => {
+          resume(
+            Effect.fail(
+              new VoiceCacheFailedError({
+                message:
+                  transaction.error?.message ?? "cache operation aborted",
+              })
+            )
+          );
+        },
+        { once: true }
       );
-    };
-    transaction.onerror = () => {
-      reject(
-        new VoiceCacheFailed({
-          message: transaction.error?.message ?? "cache operation failed",
-        })
+      transaction.addEventListener(
+        "error",
+        () => {
+          resume(
+            Effect.fail(
+              new VoiceCacheFailedError({
+                message:
+                  transaction.error?.message ?? "cache operation failed",
+              })
+            )
+          );
+        },
+        { once: true }
       );
-    };
-    transaction.oncomplete = () => {
-      resolve();
-    };
-  });
+      transaction.addEventListener(
+        "complete",
+        () => {
+          resume(Effect.void);
+        },
+        { once: true }
+      );
+    })
+  );
 }
 
 /** Stable cache key: provider + voice + speed + sentence content hash. */
@@ -173,7 +206,7 @@ export async function utteranceCacheKey(
     "SHA-256",
     new TextEncoder().encode(text)
   );
-  const hash = Array.from(new Uint8Array(digest))
+  const hash = [...new Uint8Array(digest)]
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
   const { speed, voiceId } = preferences;
@@ -183,17 +216,18 @@ export async function utteranceCacheKey(
 /** Returns the cached WAV for a key, or null on a miss. */
 export function readCachedUtterance(
   key: string
-): Effect.Effect<CachedUtterance | null, VoiceCacheFailed> {
+): Effect.Effect<CachedUtterance | null, VoiceCacheFailedError> {
   return Effect.gen(function* readUtterance() {
     const database = yield* openVoiceCache();
     try {
       const transaction = database.transaction(CACHE_STORE_NAME, "readonly");
       const record = yield* Effect.tryPromise({
         catch: (cause) =>
-          cause instanceof VoiceCacheFailed
+          cause instanceof VoiceCacheFailedError
             ? cause
-            : new VoiceCacheFailed({
-                message: cause instanceof Error ? cause.message : "cache read failed",
+            : new VoiceCacheFailedError({
+                message:
+                  cause instanceof Error ? cause.message : "cache read failed",
               }),
         try: () =>
           cacheRequest<CachedUtterance | undefined>(
@@ -209,7 +243,7 @@ export function readCachedUtterance(
 
 export function writeCachedUtterance(
   record: CachedUtterance
-): Effect.Effect<void, VoiceCacheFailed> {
+): Effect.Effect<void, VoiceCacheFailedError> {
   return Effect.gen(function* writeUtterance() {
     const database = yield* openVoiceCache();
     try {
@@ -217,9 +251,9 @@ export function writeCachedUtterance(
       transaction.objectStore(CACHE_STORE_NAME).put(record);
       yield* Effect.tryPromise({
         catch: (cause) =>
-          cause instanceof VoiceCacheFailed
+          cause instanceof VoiceCacheFailedError
             ? cause
-            : new VoiceCacheFailed({
+            : new VoiceCacheFailedError({
                 message:
                   cause instanceof Error ? cause.message : "cache write failed",
               }),
@@ -229,15 +263,16 @@ export function writeCachedUtterance(
       // lessons don't grow the database without bound.
       const transactionCount = yield* Effect.tryPromise({
         catch: (cause) =>
-          cause instanceof VoiceCacheFailed
+          cause instanceof VoiceCacheFailedError
             ? cause
-            : new VoiceCacheFailed({
+            : new VoiceCacheFailedError({
                 message:
                   cause instanceof Error ? cause.message : "cache count failed",
               }),
         try: () =>
           cacheRequest<number>(
-            database.transaction(CACHE_STORE_NAME, "readonly")
+            database
+              .transaction(CACHE_STORE_NAME, "readonly")
               .objectStore(CACHE_STORE_NAME)
               .count()
           ),
@@ -250,21 +285,42 @@ export function writeCachedUtterance(
         const pruneStore = pruneTransaction.objectStore(CACHE_STORE_NAME);
         yield* Effect.tryPromise({
           catch: (cause) =>
-            cause instanceof VoiceCacheFailed
+            cause instanceof VoiceCacheFailedError
               ? cause
-              : new VoiceCacheFailed({
+              : new VoiceCacheFailedError({
                   message:
-                    cause instanceof Error ? cause.message : "cache prune failed",
+                    cause instanceof Error
+                      ? cause.message
+                      : "cache prune failed",
                 }),
-          try: () => {
+          try: async () => {
             let staleDeleted = 0;
-            return new Promise<void>((resolve, reject) => {
+            // IndexedDB cursor iteration is callback-based; wrapping it in a
+            // promise is the only way to await completion.
+            // oxlint-disable-next-line promise/avoid-new
+            await new Promise<void>((resolve, reject) => {
               const cursorRequest = pruneStore.openCursor();
-              cursorRequest.onsuccess = () => {
+              const finish = async (onComplete: () => void): Promise<void> => {
+                try {
+                  await cacheTransaction(pruneTransaction);
+                  onComplete();
+                } catch (error: unknown) {
+                  reject(
+                    error instanceof VoiceCacheFailedError
+                      ? error
+                      : new VoiceCacheFailedError({
+                          message:
+                            error instanceof Error
+                              ? error.message
+                              : "cache prune failed",
+                        })
+                  );
+                }
+              };
+              cursorRequest.addEventListener("success", () => {
                 const cursor = cursorRequest.result;
                 if (cursor === null) {
-                  void cacheTransaction(pruneTransaction)
-                    .then(resolve, reject);
+                  void finish(resolve);
                   return;
                 }
                 const candidate = cursor.value as CachedUtterance | undefined;
@@ -277,20 +333,23 @@ export function writeCachedUtterance(
                   staleDeleted += 1;
                 }
                 if (staleDeleted > transactionCount - CACHE_MAX_ENTRIES) {
-                  void cacheTransaction(pruneTransaction)
-                    .then(resolve, reject);
+                  void finish(resolve);
                   return;
                 }
-                void cursor.continue();
-              };
-              cursorRequest.onerror = () => {
-                reject(
-                  new VoiceCacheFailed({
-                    message:
-                      cursorRequest.error?.message ?? "cache prune failed",
-                  })
-                );
-              };
+                cursor.continue();
+              });
+              cursorRequest.addEventListener(
+                "error",
+                () => {
+                  reject(
+                    new VoiceCacheFailedError({
+                      message:
+                        cursorRequest.error?.message ?? "cache prune failed",
+                    })
+                  );
+                },
+                { once: true }
+              );
             });
           },
         });
