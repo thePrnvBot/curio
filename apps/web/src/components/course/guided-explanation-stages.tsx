@@ -114,7 +114,17 @@ export function guidedCodeLanguageHint(
     zsh: "bash",
   };
   const languageHint = language?.trim().toLowerCase();
-  if (languageHint !== undefined && languageHint !== "") {
+  // A generic "text"/"code" hint disables syntax color even when the excerpt
+  // is unmistakably JavaScript or Python, so treat those as "guess for me".
+  const genericHints = new Set([
+    "",
+    "code",
+    "none",
+    "plain",
+    "plaintext",
+    "text",
+  ]);
+  if (languageHint !== undefined && !genericHints.has(languageHint)) {
     return aliases[languageHint] ?? languageHint;
   }
   if (/\bdef\s+\w+\s*\(|:\s*$/mu.test(source) && !/[;{]\s*$/mu.test(source)) {
