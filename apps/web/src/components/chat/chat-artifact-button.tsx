@@ -4,12 +4,13 @@ import {
 } from "@curio/ui/components/ai-elements/prompt-input";
 import { Effect, Result } from "effect";
 import { FilePlus2Icon } from "lucide-react";
-import { useState } from "react";
+import { useReducer } from "react";
 import { toast } from "sonner";
 
 import type { GeneratedArtifactResponseView } from "@/utils/chat-schemas";
 
 import { generateArtifact } from "./chat-artifact-generate";
+import { artifactButtonReducer } from "./chat-artifact-button-state";
 
 /**
  * The "Artifact" toolbar action: sends the prompt text as a generation
@@ -22,7 +23,9 @@ export function ArtifactActionButton({
   onPublished: (publishedArtifact: GeneratedArtifactResponseView) => void;
 }) {
   const promptInput = usePromptInputController();
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [state, dispatch] = useReducer(artifactButtonReducer, {
+    kind: "idle",
+  });
 
   async function publishArtifactFromPrompt(): Promise<void> {
     const promptText = promptInput.textInput.value.trim();
@@ -31,17 +34,18 @@ export function ArtifactActionButton({
       return;
     }
 
-    setIsGenerating(true);
+    dispatch({ type: "start" });
     const publishOutcome = await Effect.runPromise(
       Effect.result(generateArtifact(promptText))
     );
-    setIsGenerating(false);
 
     Result.match(publishOutcome, {
       onFailure: (generationError) => {
+        dispatch({ type: "error", message: generationError.detail });
         toast.error(generationError.detail);
       },
       onSuccess: (publishedArtifact) => {
+        dispatch({ type: "published", artifact: publishedArtifact });
         onPublished(publishedArtifact);
         promptInput.textInput.clear();
         toast.success(`Artifact "${publishedArtifact.brief.title}" published`);
@@ -54,7 +58,7 @@ export function ArtifactActionButton({
       onClick={() => {
         void publishArtifactFromPrompt();
       }}
-      variant={isGenerating ? "default" : "ghost"}
+      variant={state.kind === "generating" ? "default" : "ghost"}
     >
       <FilePlus2Icon className="size-4" />
       <span>Artifact</span>

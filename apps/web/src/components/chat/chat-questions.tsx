@@ -2,10 +2,12 @@ import { ASK_USER_TOOL_NAME } from "@curio/api/infrastructure/ask-user-tool";
 import { isToolUIPart } from "ai";
 import type { UIMessage } from "ai";
 import { Option } from "effect";
-import { useState } from "react";
+import { useEffect, useReducer, useRef } from "react";
 
 import { toPendingQuestions } from "@/utils/chat-schemas";
 import type { PendingQuestions } from "@/utils/chat-schemas";
+
+import { formatWizardAnswers, wizardReducer } from "./chat-questions-state";
 
 export function extractPendingQuestions(
   messages: readonly UIMessage[]
@@ -50,54 +52,34 @@ export function PendingQuestionsPanel({
   pendingQuestions: PendingQuestions;
 }) {
   const { questions } = pendingQuestions;
-  const [currentStep, setCurrentStep] = useState(0);
-  const [pickedChoices, setPickedChoices] = useState<
-    ReadonlyMap<number, number>
-  >(new Map());
-
-  const isLastStep = currentStep >= questions.length - 1;
-  const currentQuestion = questions[currentStep];
-
-  function sendAllAnswers(
-    finalPicks: ReadonlyMap<number, number> = pickedChoices
-  ): void {
-    const header = pendingQuestions.intro;
-    const answerLines = questions.map((question, questionIndex) => {
-      // Steps the user never answered contribute a blank line, so the
-      // Director still sees the question with an empty response.
-      const answer = Option.match(
-        Option.fromNullishOr(finalPicks.get(questionIndex)),
-        {
-          onNone: () => "",
-          onSome: (pickedOptionIndex) => question.options[pickedOptionIndex],
-        }
-      );
-      return `- ${question.question}: ${answer}`;
-    });
-    onAnswered([header, ...answerLines].join("\n"));
-  }
-
-  function pickOption(optionIndex: number): void {
-    // Compose the next picks map up front: the final pick must be part of
-    // the answers that get sent (state updates are async - reading
-    // `pickedChoices` here would send without the last answer).
-    const nextPicks: ReadonlyMap<number, number> = new Map([
-      ...pickedChoices,
-      [currentStep, optionIndex] as const,
-    ]);
-    setPickedChoices(nextPicks);
-    // One question per step: picking lands on the next question; the last
-    // pick sends the whole answer set.
-    if (isLastStep) {
-      sendAllAnswers(nextPicks);
+  const [state, dispatch] = useReducer(
+    (wizardState: ReturnType<typeof wizardReducer>, action: Parameters<typeof wizardReducer>[1]) =>
+      wizardReducer(wizardState, action, questions.length),
+    { kind: "answering", currentStep: 0, picks: new Map() }
+  );
+  // Submission is sent exactly once per wizard run: onAnswered identities can
+  // change every render upstream, so the sent-flag (not the callback) gates it.
+  const hasSentRef = useRef(false);
+  useEffect(() => {
+    if (state.kind === "answering") {
+      hasSentRef.current = false;
       return;
     }
-    setCurrentStep(currentStep + 1);
-  }
+    if (hasSentRef.current) {
+      return;
+    }
+    hasSentRef.current = true;
+    onAnswered(formatWizardAnswers(pendingQuestions, state.picks));
+  }, [pendingQuestions, state, onAnswered]);
 
-  const pickedChoiceIndex = Option.fromNullishOr(
-    pickedChoices.get(currentStep)
-  );
+  const currentStep = state.kind === "answering" ? state.currentStep : questions.length - 1;
+  const currentQuestion = questions[currentStep];
+  const { picks } = state;
+  const pickedChoiceIndex = Option.fromNullishOr(picks.get(currentStep));
+
+  function pickOption(optionIndex: number): void {
+    dispatch({ type: "pick", optionIndex });
+  }
 
   return (
     // data-align="block-start" tells the wrapping InputGroup this render owns
@@ -156,7 +138,7 @@ export function PendingQuestionsPanel({
           className="text-muted-foreground hover:text-foreground rounded-md px-2 py-1 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40"
           disabled={currentStep === 0 || busy}
           onClick={() => {
-            setCurrentStep(Math.max(currentStep - 1, 0));
+            dispatch({ type: "back" });
           }}
           type="button"
         >
@@ -168,7 +150,7 @@ export function PendingQuestionsPanel({
         >
           {questions.map((question, questionIndex) => {
             const isAnswered = Option.isSome(
-              Option.fromNullishOr(pickedChoices.get(questionIndex))
+              Option.fromNullishOr(picks.get(questionIndex))
             );
             const isCurrent = questionIndex === currentStep;
             return (

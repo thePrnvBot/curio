@@ -231,6 +231,42 @@ const recoverStaleRun = Effect.fnUntraced(function* markStaleRunCrashed(
   });
 });
 
+/** Outcome of the chunk-commit writer: drives the terminal run status. */
+export type CommitOutcome =
+  | { readonly _tag: "ok" }
+  | { readonly _tag: "commit-failed" }
+  | { readonly _tag: "stream-failed"; readonly cause: unknown };
+
+/** Folds a stream failure into the running commit outcome. */
+export function foldStreamFailure(
+  outcome: CommitOutcome,
+  streamOutcome: { readonly _tag: "Failure"; readonly failure: unknown }
+): CommitOutcome {
+  if (outcome._tag === "ok") {
+    return { _tag: "stream-failed", cause: streamOutcome.failure };
+  }
+  return outcome;
+}
+
+/** Resolves the terminal run status from the commit outcome and abort state. */
+export function resolveRunEndStatus(
+  outcome: CommitOutcome,
+  wasAborted: boolean
+): ChatRunExitStatus {
+  switch (outcome._tag) {
+    case "commit-failed":
+    case "stream-failed": {
+      return "error";
+    }
+    case "ok": {
+      return wasAborted ? "stopped" : "done";
+    }
+    default: {
+      return "error";
+    }
+  }
+}
+
 /**
  * The committed-chunk writer. Consumes one branch of the run's UI message
  * stream and commits its chunks into the run store in batches. Arrives as a
@@ -247,7 +283,7 @@ export const commitChatRunChunks = Effect.fn("durable-chat.commitChunks")(
     chunkStream: ReadableStream<UIMessageChunk>;
   }): Effect.fn.Return<ChatRunExitStatus, never, ChatRunStore> {
     const chatRunStore = yield* ChatRunStore;
-    let commitFailed = false;
+    let commitOutcome: CommitOutcome = { _tag: "ok" };
 
     const streamOutcome = yield* Effect.result(
       Stream.runForEach(
@@ -258,22 +294,22 @@ export const commitChatRunChunks = Effect.fn("durable-chat.commitChunks")(
         }).pipe(Stream.groupedWithin(16, "100 millis")),
         (chunkBatch) =>
           Effect.gen(function* commitChunkBatch() {
-            const commitOutcome = yield* Effect.result(
+            const appendOutcome = yield* Effect.result(
               chatRunStore.appendChunks(runId, chunkBatch)
             );
-            if (commitOutcome._tag === "Failure") {
-              commitFailed = true;
+            if (appendOutcome._tag === "Failure") {
+              commitOutcome = { _tag: "commit-failed" };
               yield* Effect.logError(
                 "Failed to append chat run chunks",
                 runId,
-                commitOutcome.failure
+                appendOutcome.failure
               );
             }
           })
       )
     );
     if (streamOutcome._tag === "Failure") {
-      commitFailed = true;
+      commitOutcome = foldStreamFailure(commitOutcome, streamOutcome);
       yield* Effect.logError(
         "Chat run chunk writer failed",
         runId,
@@ -286,12 +322,8 @@ export const commitChatRunChunks = Effect.fn("durable-chat.commitChunks")(
     if (!abortedRunIds.has(runId)) {
       yield* Effect.sleep(STOP_LABEL_SETTLE);
     }
-    let endStatus: ChatRunExitStatus = "done";
-    if (commitFailed) {
-      endStatus = "error";
-    } else if (abortedRunIds.has(runId)) {
-      endStatus = "stopped";
-    }
+    const wasAborted = abortedRunIds.has(runId);
+    const endStatus = resolveRunEndStatus(commitOutcome, wasAborted);
 
     yield* chatRunStore
       .finishRun(runId, endStatus)
