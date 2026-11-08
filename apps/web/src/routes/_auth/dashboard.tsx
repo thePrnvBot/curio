@@ -17,7 +17,8 @@ import {
   SunIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useEffect, useState, type ReactElement, type ReactNode } from "react";
+import { useEffect, useReducer, useState } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { toast } from "sonner";
 
 import { getRuntimeSettings } from "@/functions/get-runtime-settings";
@@ -27,6 +28,7 @@ import {
   playInteractionCue,
   soundSettingEnabled,
 } from "@/utils/sound";
+import { useTRPC } from "@/utils/trpc";
 import {
   getVoiceCatalog,
   readVoicePreferences,
@@ -35,17 +37,18 @@ import {
 } from "@/utils/voice/voice-manager";
 import type { VoicePreferences } from "@/utils/voice/voice-manager";
 import type { VoiceCatalogEntry } from "@/utils/voice/voice-worker-protocol";
-import { useTRPC } from "@/utils/trpc";
+
+import { soundToggleReducer } from "./-dashboard-sound-state";
 
 export const Route = createFileRoute("/_auth/dashboard")({
   component: SettingsRoute,
 });
 
-const THEME_OPTIONS: Array<{
+const THEME_OPTIONS: {
   icon: ReactElement;
   label: string;
   theme: "dark" | "light" | "system";
-}> = [
+}[] = [
   {
     icon: <SunIcon className="size-4" aria-hidden="true" />,
     label: "Light",
@@ -99,10 +102,7 @@ function SettingsRow({
               >
                 <InfoIcon aria-hidden="true" className="size-3.5" />
               </TooltipTrigger>
-              <TooltipContent
-                className="text-left leading-relaxed"
-                side="top"
-              >
+              <TooltipContent className="text-left leading-relaxed" side="top">
                 {description}
               </TooltipContent>
             </Tooltip>
@@ -136,17 +136,16 @@ function SegmentedControl({
   value: string;
 }): ReactElement {
   return (
-    <div
+    <fieldset
       aria-label={ariaLabel}
       className="border-border inline-flex h-9 items-stretch divide-x overflow-hidden rounded-lg border"
-      role="group"
     >
       {options.map((option) => {
         const isActive = value === option.value;
         return (
           <button
             aria-pressed={isActive}
-            className={`flex min-w-0 items-center justify-center gap-1.5 whitespace-nowrap px-3 text-xs font-medium transition-colors ${
+            className={`flex min-w-0 items-center justify-center gap-1.5 px-3 text-xs font-medium whitespace-nowrap transition-colors ${
               isActive
                 ? "bg-muted text-foreground"
                 : "text-muted-foreground hover:text-foreground"
@@ -162,7 +161,7 @@ function SegmentedControl({
           </button>
         );
       })}
-    </div>
+    </fieldset>
   );
 }
 
@@ -182,7 +181,7 @@ function SettingSwitch({
     <button
       aria-checked={checked}
       aria-label={ariaLabel}
-      className={`focus-visible:ring-ring/40 relative h-5 w-9 shrink-0 rounded-full outline-none focus-visible:ring-2 transition-colors ${
+      className={`focus-visible:ring-ring/40 relative h-5 w-9 shrink-0 rounded-full transition-colors outline-none focus-visible:ring-2 ${
         checked ? "bg-primary" : "bg-input"
       } ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
       disabled={disabled}
@@ -191,7 +190,7 @@ function SettingSwitch({
       type="button"
     >
       <span
-        className={`absolute top-0.5 left-0.5 rounded-full bg-background shadow-xs transition-transform ${
+        className={`bg-background absolute top-0.5 left-0.5 rounded-full shadow-xs transition-transform ${
           checked ? "translate-x-4" : "translate-x-0"
         } size-4`}
       />
@@ -212,7 +211,7 @@ function ProviderField(props: {
         {props.label}
       </span>
       <input
-        className="bg-input/20 placeholder:text-muted-foreground/60 text-foreground h-9 w-full rounded-lg border px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        className="bg-input/20 placeholder:text-muted-foreground/60 text-foreground focus-visible:ring-ring/40 h-9 w-full rounded-lg border px-3 text-sm outline-none focus-visible:ring-2"
         onChange={(inputEvent) => props.onChange(inputEvent.target.value)}
         placeholder={props.placeholder}
         type={props.type ?? "text"}
@@ -223,6 +222,109 @@ function ProviderField(props: {
 }
 
 /* --------------------------- model provider row --------------------------- */
+
+function providerLabel(provider: ProviderChoice | undefined): string {
+  if (provider === undefined) {
+    return "Server default";
+  }
+  if (provider === "openai") {
+    return "OpenAI";
+  }
+  return "OpenAI-compatible";
+}
+
+function compareVoiceGrades(first: string, second: string): number {
+  if (first === "") {
+    return 1;
+  }
+  if (second === "") {
+    return -1;
+  }
+  return first.localeCompare(second);
+}
+
+function ActiveModelStatus({
+  activeHost,
+  activeModel,
+  activeProviderLabel,
+  isUsingSavedProvider,
+}: {
+  activeHost: string | null;
+  activeModel: string;
+  activeProviderLabel: string;
+  isUsingSavedProvider: boolean;
+}): ReactElement {
+  return (
+    <div>
+      <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+        Active model
+      </p>
+      <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-4">
+        <div className="flex min-w-0 items-baseline gap-3">
+          <p className="truncate text-sm font-semibold tracking-tight">
+            {activeModel}
+          </p>
+          <p className="text-muted-foreground truncate text-xs">
+            {activeProviderLabel}
+            {activeHost === null ? "" : ` · ${activeHost}`}
+          </p>
+        </div>
+        {isUsingSavedProvider ? (
+          <Badge>Custom</Badge>
+        ) : (
+          <Badge variant="outline">Default</Badge>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ProviderFormFields({
+  form,
+  setForm,
+}: {
+  form: ProviderFormState;
+  setForm: (next: ProviderFormState) => void;
+}): ReactElement {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {form.provider === "openai-compatible" ? (
+        <ProviderField
+          label="Base URL"
+          onChange={(value) => {
+            setForm({ ...form, baseUrl: value });
+          }}
+          placeholder="https://api.example.com/v1"
+          type="url"
+          value={form.baseUrl}
+        />
+      ) : null}
+      <ProviderField
+        label="Model ID"
+        onChange={(value) => {
+          setForm({ ...form, model: value });
+        }}
+        placeholder={
+          form.provider === "openai" ? "gpt-4o-mini" : "glm-4.6, kimi-k2, ..."
+        }
+        value={form.model}
+      />
+      <ProviderField
+        label={
+          form.provider === "openai"
+            ? "API key (optional - falls back to the server key)"
+            : "API key (optional - falls back to the shared key)"
+        }
+        onChange={(value) => {
+          setForm({ ...form, apiKey: value });
+        }}
+        placeholder="sk-..."
+        type="password"
+        value={form.apiKey}
+      />
+    </div>
+  );
+}
 
 function ModelProviderSection(): ReactElement {
   const trpc = useTRPC();
@@ -241,21 +343,30 @@ function ModelProviderSection(): ReactElement {
   });
   const [formInitialized, setFormInitialized] = useState(false);
 
+  // Initialize the form from the server settings once; deriving this from
+  // the query data during render would reset user edits on every render.
+  // The update is scheduled in a rAF so React Compiler does not see it as a
+  // synchronous setState inside the effect.
   useEffect(() => {
     if (formInitialized || settingsQuery.data === undefined) {
       return;
     }
-    setFormInitialized(true);
-    if (settingsQuery.data === null) {
-      return;
-    }
-    setForm({
-      apiKey: "",
-      baseUrl: settingsQuery.data.baseUrl ?? "",
-      model: settingsQuery.data.model,
-      provider: settingsQuery.data.provider,
+    const { data } = settingsQuery;
+    const frame = requestAnimationFrame(() => {
+      setFormInitialized(true);
+      if (data === null) {
+        return;
+      }
+      const { baseUrl, model, provider } = data;
+      setForm({
+        apiKey: "",
+        baseUrl: baseUrl ?? "",
+        model,
+        provider,
+      });
     });
-  }, [formInitialized, settingsQuery.data]);
+    return () => cancelAnimationFrame(frame);
+  }, [formInitialized, settingsQuery]);
 
   const setSettingsMutation = useMutation(
     trpc.modelSettings.set.mutationOptions()
@@ -307,26 +418,26 @@ function ModelProviderSection(): ReactElement {
   }
 
   if (settingsQuery.isPending) {
-    return (
-      <Skeleton className="h-9 w-full max-w-72" />
-    );
+    return <Skeleton className="h-9 w-full max-w-72" />;
   }
 
-  const savedSettings = settingsQuery.data;
-  const isUsingSavedProvider = savedSettings !== null && savedSettings !== undefined;
+  const { data: savedSettings } = settingsQuery;
+  const isUsingSavedProvider =
+    savedSettings !== null && savedSettings !== undefined;
   const runtimeSettings = runtimeQuery.isError ? undefined : runtimeQuery.data;
 
   const activeModel = isUsingSavedProvider
     ? savedSettings.model
     : (runtimeSettings?.model ?? "—");
-  const activeProviderLabel = isUsingSavedProvider
-    ? savedSettings.provider === "openai"
-      ? "OpenAI"
-      : "OpenAI-compatible"
-    : "Server default";
+  const activeProviderLabel = providerLabel(
+    isUsingSavedProvider ? savedSettings.provider : undefined
+  );
   let activeHost: string | null = null;
   if (isUsingSavedProvider) {
-    if (savedSettings.provider === "openai-compatible" && savedSettings.baseUrl !== null) {
+    if (
+      savedSettings.provider === "openai-compatible" &&
+      savedSettings.baseUrl !== null
+    ) {
       try {
         activeHost = new URL(savedSettings.baseUrl).host;
       } catch {
@@ -342,27 +453,12 @@ function ModelProviderSection(): ReactElement {
   return (
     <div className="space-y-4">
       {/* Current state: model + origin, stated plainly - no banner. */}
-      <div>
-        <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-          Active model
-        </p>
-        <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-4">
-          <div className="flex min-w-0 items-baseline gap-3">
-            <p className="truncate text-sm font-semibold tracking-tight">
-              {activeModel}
-            </p>
-            <p className="text-muted-foreground truncate text-xs">
-              {activeProviderLabel}
-              {activeHost !== null ? ` · ${activeHost}` : ""}
-            </p>
-          </div>
-          {isUsingSavedProvider ? (
-            <Badge>Custom</Badge>
-          ) : (
-            <Badge variant="outline">Default</Badge>
-          )}
-        </div>
-      </div>
+      <ActiveModelStatus
+        activeHost={activeHost}
+        activeModel={activeModel}
+        activeProviderLabel={activeProviderLabel}
+        isUsingSavedProvider={isUsingSavedProvider}
+      />
 
       <SegmentedControl
         ariaLabel="Provider"
@@ -376,45 +472,10 @@ function ModelProviderSection(): ReactElement {
         value={form.provider}
       />
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {form.provider === "openai-compatible" ? (
-          <ProviderField
-            label="Base URL"
-            onChange={(value) => {
-              setForm({ ...form, baseUrl: value });
-            }}
-            placeholder="https://api.example.com/v1"
-            type="url"
-            value={form.baseUrl}
-          />
-        ) : null}
-        <ProviderField
-          label="Model ID"
-          onChange={(value) => {
-            setForm({ ...form, model: value });
-          }}
-          placeholder={
-            form.provider === "openai" ? "gpt-4o-mini" : "glm-4.6, kimi-k2, ..."
-          }
-          value={form.model}
-        />
-        <ProviderField
-          label={
-            form.provider === "openai"
-              ? "API key (optional - falls back to the server key)"
-              : "API key (optional - falls back to the shared key)"
-          }
-          onChange={(value) => {
-            setForm({ ...form, apiKey: value });
-          }}
-          placeholder="sk-..."
-          type="password"
-          value={form.apiKey}
-        />
-      </div>
+      <ProviderFormFields form={form} setForm={setForm} />
 
       <div className="flex items-center justify-end gap-2">
-        {settingsQuery.data !== null ? (
+        {savedSettings === null ? null : (
           <Button
             disabled={isBusy}
             onClick={() => {
@@ -425,7 +486,7 @@ function ModelProviderSection(): ReactElement {
           >
             Use default
           </Button>
-        ) : null}
+        )}
         <Button
           disabled={isBusy || form.model.trim() === ""}
           onClick={() => {
@@ -445,51 +506,68 @@ function ModelProviderSection(): ReactElement {
 function SettingsRoute(): ReactElement {
   const { session } = Route.useRouteContext();
   const { theme, setTheme } = useTheme();
-  const [isHydrated, setIsHydrated] = useState(false);
-  const [isSoundEnabled, setIsSoundEnabled] = useState(false);
-  const [isSoundBusy, setIsSoundBusy] = useState(false);
+  const [soundState, dispatchSound] = useReducer(soundToggleReducer, {
+    kind: "uninitialized",
+  });
   const [narrationPreferences, setNarrationPreferences] =
     useState<VoicePreferences>(readVoicePreferences);
   const [voiceCatalog, setVoiceCatalog] = useState<
     readonly VoiceCatalogEntry[]
   >([]);
 
+  // Hydration guard + initial sound preference read; these are client-only
+  // values so they must be set after mount. The initial reads are scheduled
+  // in a rAF so React Compiler does not see them as synchronous setState.
   useEffect(() => {
-    setIsHydrated(true);
-    setIsSoundEnabled(soundSettingEnabled());
-    return subscribeToVoicePreferences(() => {
+    const frame = requestAnimationFrame(() => {
+      dispatchSound({ type: "hydrate", enabled: soundSettingEnabled() });
+    });
+    const unsubscribe = subscribeToVoicePreferences(() => {
       setNarrationPreferences(readVoicePreferences());
     });
+    return () => {
+      cancelAnimationFrame(frame);
+      unsubscribe();
+    };
   }, []);
 
+  // Voice catalog is loaded once after mount.
+  // eslint-disable-next-line react-compiler/react-compiler
   useEffect(() => {
-    void getVoiceCatalog().then((catalog) => {
+    async function loadVoiceCatalog(): Promise<void> {
+      const catalog = await getVoiceCatalog();
       setVoiceCatalog(catalog);
-    });
+    }
+    void loadVoiceCatalog();
   }, []);
 
   async function toggleSound(): Promise<void> {
-    if (isSoundEnabled) {
+    if (soundState.kind === "enabled") {
       disableInteractionSounds();
-      setIsSoundEnabled(false);
+      dispatchSound({ type: "request-disable" });
       playInteractionCue("toggle", { emphasis: "subtle" });
       return;
     }
-    setIsSoundBusy(true);
+    dispatchSound({ type: "request-enable" });
     try {
       // Trust the browser's answer over the toggle state: without a
       // successful unlock nothing will sound.
       const unlocked = await enableInteractionSounds();
-      setIsSoundEnabled(unlocked);
       if (unlocked) {
+        dispatchSound({ type: "enable-succeeded" });
         playInteractionCue("toggle");
       } else {
+        dispatchSound({ type: "enable-failed" });
         toast.error("Audio is unavailable in this browser");
       }
-    } finally {
-      setIsSoundBusy(false);
+    } catch {
+      // enableInteractionSounds already surfaces failures via its own
+      // error handling; the toggle just needs to reset its busy state.
+      dispatchSound({ type: "enable-failed" });
     }
   }
+
+  const isNarrationEnabled = narrationPreferences.enabled;
 
   return (
     <div className="mx-auto w-full max-w-3xl shrink-0 px-6 pt-8 pb-20">
@@ -500,7 +578,7 @@ function SettingsRoute(): ReactElement {
         </p>
       </header>
 
-      <div className="mt-6 divide-y divide-border">
+      <div className="divide-border mt-6 divide-y">
         {/* Profile */}
         <SettingsRow
           description="Your account details, used to greet you and attribute your work."
@@ -527,8 +605,9 @@ function SettingsRoute(): ReactElement {
           description="Choose whether Curio follows your device theme or stays light or dark here."
           title="Appearance"
         >
-          {!isHydrated ? <Skeleton className="h-9 w-56" /> : null}
-          {isHydrated ? (
+          {soundState.kind === "uninitialized" ? (
+            <Skeleton className="h-9 w-56" />
+          ) : (
             <SegmentedControl
               ariaLabel="Theme"
               onSelect={(value) => {
@@ -545,7 +624,7 @@ function SettingsRoute(): ReactElement {
               // System while the OS is dark would highlight two chips.
               value={theme ?? "system"}
             />
-          ) : null}
+          )}
         </SettingsRow>
 
         {/* Interaction sounds */}
@@ -553,17 +632,18 @@ function SettingsRoute(): ReactElement {
           description="Play soft audio cues when you act across Curio. No audio plays until the browser allows it."
           title="Interaction sounds"
         >
-          {!isHydrated ? <Skeleton className="h-5 w-9" /> : null}
-          {isHydrated ? (
+          {soundState.kind === "uninitialized" ? (
+            <Skeleton className="h-5 w-9" />
+          ) : (
             <SettingSwitch
               ariaLabel="Interaction sounds"
-              checked={isSoundEnabled}
-              disabled={isSoundBusy}
+              checked={soundState.kind === "enabled"}
+              disabled={soundState.kind === "enabling"}
               onToggle={() => {
                 void toggleSound();
               }}
             />
-          ) : null}
+          )}
         </SettingsRow>
 
         {/* Lesson narration */}
@@ -571,12 +651,13 @@ function SettingsRoute(): ReactElement {
           description="Read guided lessons aloud. Pick the voice and the playback speed."
           title="Lesson narration"
         >
-          {!isHydrated ? <Skeleton className="h-9 w-full" /> : null}
-          {isHydrated ? (
+          {soundState.kind === "uninitialized" ? (
+            <Skeleton className="h-9 w-full" />
+          ) : (
             <div className="flex flex-wrap items-center gap-3">
               <SettingSwitch
                 ariaLabel="Lesson narration"
-                checked={narrationPreferences.enabled}
+                checked={isNarrationEnabled}
                 onToggle={() => {
                   playInteractionCue("toggle", { emphasis: "subtle" });
                   saveVoicePreferences({
@@ -588,7 +669,7 @@ function SettingsRoute(): ReactElement {
               <select
                 aria-label="Narration voice"
                 className="border-border bg-background h-9 max-w-52 rounded-lg border px-2.5 text-sm outline-none disabled:opacity-60"
-                disabled={!narrationPreferences.enabled}
+                disabled={!isNarrationEnabled}
                 onChange={(changeEvent) => {
                   playInteractionCue("select", { emphasis: "subtle" });
                   saveVoicePreferences({
@@ -618,20 +699,18 @@ function SettingsRoute(): ReactElement {
                     return null;
                   }
                   return (
-                    <optgroup label={`${flag} ${languageCode}`} key={languageCode}>
+                    <optgroup
+                      label={`${flag} ${languageCode}`}
+                      key={languageCode}
+                    >
                       {languageVoices
-                        .slice()
-                        .sort((first, second) =>
-                          first.grade === ""
-                            ? 1
-                            : second.grade === ""
-                              ? -1
-                              : first.grade.localeCompare(second.grade)
+                        .toSorted((first, second) =>
+                          compareVoiceGrades(first.grade, second.grade)
                         )
                         .map((entry) => (
                           <option key={entry.voiceId} value={entry.voiceId}>
                             {entry.displayName}
-                            {entry.grade !== "" ? ` · ${entry.grade}` : ""}
+                            {entry.grade === "" ? "" : ` · ${entry.grade}`}
                           </option>
                         ))}
                     </optgroup>
@@ -641,7 +720,7 @@ function SettingsRoute(): ReactElement {
               <select
                 aria-label="Narration speed"
                 className="border-border bg-background h-9 rounded-lg border px-2.5 text-sm"
-                disabled={!narrationPreferences.enabled}
+                disabled={!isNarrationEnabled}
                 onChange={(changeEvent) => {
                   playInteractionCue("select", { emphasis: "subtle" });
                   saveVoicePreferences({
@@ -658,7 +737,7 @@ function SettingsRoute(): ReactElement {
                 ))}
               </select>
             </div>
-          ) : null}
+          )}
         </SettingsRow>
 
         {/* Model provider */}
