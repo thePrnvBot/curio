@@ -13,6 +13,9 @@
     "check": "ultracite check && vp run -r check-types",
     "lint": "oxlint",
     "format": "oxfmt",
+    "test": "vitest run --exclude \"artifact-server/**\"",
+    "test:watch": "vitest --exclude \"artifact-server/**\"",
+    "test:coverage": "vitest run --coverage --exclude \"artifact-server/**\"",
     "staged": "vp staged",
     "hooks:setup": "vp config",
     "dev:web": "vp run --filter web dev",
@@ -28,13 +31,19 @@
   },
   "devDependencies": {
     "@curio/config": "workspace:*",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
     "@types/node": "^26.4.1",
+    "@vitest/coverage-v8": "^5.1.0",
+    "happy-dom": "^21.0.4",
+    "jsdom": "^30.1.2",
     "oxfmt": "^0.72.0",
     "oxlint": "^1.87.0",
     "rolldown": "1.2.7",
     "typescript": "catalog:",
     "ultracite": "7.12.4",
-    "vite-plus": "0.3.1"
+    "vite-plus": "0.3.1",
+    "vitest": "^5.1.0"
   },
   "packageManager": "pnpm@11.8.0"
 }
