@@ -13,7 +13,6 @@ import {
 } from "@curio/ui/components/tooltip";
 import { cn } from "@curio/ui/lib/utils";
 import { cjk } from "@streamdown/cjk";
-import { code } from "@streamdown/code";
 import type { UIMessage } from "ai";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import type { ComponentProps, HTMLAttributes, ReactElement } from "react";
@@ -29,6 +28,8 @@ import {
   useState,
 } from "react";
 import { Streamdown } from "streamdown";
+
+import { streamdownCodePlugin } from "./streamdown-code-plugin";
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];
@@ -323,7 +324,7 @@ export const MessageBranchPage = ({
 
 export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 
-const streamdownPlugins = { cjk, code };
+const streamdownPlugins = { cjk, code: streamdownCodePlugin };
 
 export const MessageResponse = memo(
   ({ className, ...props }: MessageResponseProps) => (

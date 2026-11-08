@@ -20,7 +20,6 @@
     "@fontsource-variable/geist-mono": "^5.3.0",
     "@shadcn/react": "^0.3.1",
     "@streamdown/cjk": "catalog:",
-    "@streamdown/code": "catalog:",
     "@tabler/icons-react": "catalog:",
     "ai": "catalog:",
     "class-variance-authority": "^0.7.1",

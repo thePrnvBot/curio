@@ -7,7 +7,6 @@ import {
 } from "@curio/ui/components/collapsible";
 import { cn } from "@curio/ui/lib/utils";
 import { cjk } from "@streamdown/cjk";
-import { code } from "@streamdown/code";
 import { BrainIcon, ChevronDownIcon } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 import {
@@ -23,6 +22,7 @@ import {
 import { Streamdown } from "streamdown";
 
 import { Shimmer } from "./shimmer";
+import { streamdownCodePlugin } from "./streamdown-code-plugin";
 
 interface ReasoningContextValue {
   isStreaming: boolean;
@@ -220,7 +220,7 @@ export type ReasoningContentProps = ComponentProps<
   children: string;
 };
 
-const streamdownPlugins = { cjk, code };
+const streamdownPlugins = { cjk, code: streamdownCodePlugin };
 
 export const ReasoningContent = memo(
   ({ className, children, ...props }: ReasoningContentProps) => (

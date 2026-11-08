@@ -787,6 +787,7 @@ export const PromptInputTextarea = ({
 
   return (
     <InputGroupTextarea
+      aria-label="Message"
       className={cn("field-sizing-content max-h-48 min-h-16", className)}
       name="message"
       onCompositionEnd={handleCompositionEnd}
@@ -913,7 +914,13 @@ export const PromptInputActionMenuTrigger = ({
   ...props
 }: PromptInputActionMenuTriggerProps) => (
   <DropdownMenuTrigger
-    render={<PromptInputButton className={className} {...props} />}
+    render={
+      <PromptInputButton
+        aria-label="More actions"
+        className={className}
+        {...props}
+      />
+    }
   >
     {children ?? <PlusIcon className="size-4" />}
   </DropdownMenuTrigger>

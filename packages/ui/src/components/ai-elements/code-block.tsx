@@ -16,14 +16,107 @@ import {
 } from "react";
 import type {
   BundledLanguage,
-  BundledTheme,
   HighlighterGeneric,
+  LanguageInput,
   ThemedToken,
+  ThemeInput,
 } from "shiki";
-import { createHighlighter } from "shiki";
+import { createBundledHighlighter } from "shiki/core";
+import { createOnigurumaEngine } from "shiki/engine/oniguruma";
 
 /** Re-exported so app code can type Shiki languages without importing shiki directly. */
 export type { BundledLanguage };
+
+/**
+ * Fine-grained Shiki bundle: only the grammars the Director actually emits
+ * are in the graph, dynamically imported per language. The default `shiki`
+ * entry point bundles every grammar (hundreds of chunks, several MB); this
+ * keeps the editor payload to the languages we support and loads each one on
+ * demand.
+ */
+const LANGUAGE_LOADERS = {
+  bash: () => import("shiki/langs/bash.mjs").then((module) => module.default),
+  c: () => import("shiki/langs/c.mjs").then((module) => module.default),
+  cpp: () => import("shiki/langs/cpp.mjs").then((module) => module.default),
+  csharp: () =>
+    import("shiki/langs/csharp.mjs").then((module) => module.default),
+  css: () => import("shiki/langs/css.mjs").then((module) => module.default),
+  go: () => import("shiki/langs/go.mjs").then((module) => module.default),
+  html: () => import("shiki/langs/html.mjs").then((module) => module.default),
+  java: () => import("shiki/langs/java.mjs").then((module) => module.default),
+  javascript: () =>
+    import("shiki/langs/javascript.mjs").then((module) => module.default),
+  json: () => import("shiki/langs/json.mjs").then((module) => module.default),
+  jsx: () => import("shiki/langs/jsx.mjs").then((module) => module.default),
+  markdown: () =>
+    import("shiki/langs/markdown.mjs").then((module) => module.default),
+  python: () =>
+    import("shiki/langs/python.mjs").then((module) => module.default),
+  rust: () => import("shiki/langs/rust.mjs").then((module) => module.default),
+  sql: () => import("shiki/langs/sql.mjs").then((module) => module.default),
+  tsx: () => import("shiki/langs/tsx.mjs").then((module) => module.default),
+  typescript: () =>
+    import("shiki/langs/typescript.mjs").then((module) => module.default),
+  yaml: () => import("shiki/langs/yaml.mjs").then((module) => module.default),
+} satisfies Record<string, LanguageInput>;
+
+const THEME_LOADERS = {
+  "github-dark": () =>
+    import("shiki/themes/github-dark.mjs").then((module) => module.default),
+  "github-light": () =>
+    import("shiki/themes/github-light.mjs").then((module) => module.default),
+} satisfies Record<string, ThemeInput>;
+
+type SupportedLanguage = keyof typeof LANGUAGE_LOADERS;
+type SupportedTheme = keyof typeof THEME_LOADERS;
+
+const LANGUAGE_ALIASES: Record<string, SupportedLanguage> = {
+  "c#": "csharp",
+  "c++": "cpp",
+  cjs: "javascript",
+  cs: "csharp",
+  golang: "go",
+  htm: "html",
+  js: "javascript",
+  mjs: "javascript",
+  py: "python",
+  rs: "rust",
+  sh: "bash",
+  shell: "bash",
+  ts: "typescript",
+  yml: "yaml",
+  zsh: "bash",
+};
+
+function resolveSupportedLanguage(
+  language: string
+): SupportedLanguage | undefined {
+  const normalized = language.trim().toLowerCase();
+  if (normalized in LANGUAGE_LOADERS) {
+    return normalized as SupportedLanguage;
+  }
+  return LANGUAGE_ALIASES[normalized];
+}
+
+/** Languages the fine-grained bundle can highlight. */
+export const HIGHLIGHT_LANGUAGES = Object.keys(
+  LANGUAGE_LOADERS
+) as readonly SupportedLanguage[];
+
+/** True when `highlightCode` can highlight this language. */
+export function isHighlightableLanguage(language: string): boolean {
+  return resolveSupportedLanguage(language) !== undefined;
+}
+
+const createCurioHighlighter = createBundledHighlighter<
+  SupportedLanguage,
+  SupportedTheme
+>({
+  engine: () => createOnigurumaEngine(import("shiki/wasm")),
+  langs: LANGUAGE_LOADERS,
+  themes: THEME_LOADERS,
+});
+
 // Shiki uses bitflags for font styles: 1=italic, 2=bold, 4=underline
 const isItalic = (fontStyle: number | undefined) => fontStyle && fontStyle & 1;
 const isBold = (fontStyle: number | undefined) => fontStyle && fontStyle & 2;
@@ -121,8 +214,8 @@ const CodeBlockContext = createContext<CodeBlockContextType>({
 });
 
 const highlighterCache = new Map<
-  string,
-  Promise<HighlighterGeneric<BundledLanguage, BundledTheme>>
+  SupportedLanguage,
+  Promise<HighlighterGeneric<SupportedLanguage, SupportedTheme>>
 >();
 
 const tokensCache = new Map<string, TokenizedCode>();
@@ -136,14 +229,14 @@ const getTokensCacheKey = (code: string, language: BundledLanguage) => {
 };
 
 const getHighlighter = (
-  language: BundledLanguage
-): Promise<HighlighterGeneric<BundledLanguage, BundledTheme>> => {
+  language: SupportedLanguage
+): Promise<HighlighterGeneric<SupportedLanguage, SupportedTheme>> => {
   const cached = highlighterCache.get(language);
   if (cached) {
     return cached;
   }
 
-  const highlighterPromise = createHighlighter({
+  const highlighterPromise = createCurioHighlighter({
     langs: [language],
     themes: ["github-light", "github-dark"],
   });
@@ -180,6 +273,13 @@ export const highlightCode = (
     return cached;
   }
 
+  const supportedLanguage = resolveSupportedLanguage(language);
+  if (supportedLanguage === undefined) {
+    // Unknown language: callers render raw tokens instead of waiting for a
+    // highlighter that will never load.
+    return null;
+  }
+
   if (callback) {
     if (!subscribers.has(tokensCacheKey)) {
       subscribers.set(tokensCacheKey, new Set());
@@ -187,17 +287,12 @@ export const highlightCode = (
     subscribers.get(tokensCacheKey)?.add(callback);
   }
 
-  void getHighlighter(language)
+  void getHighlighter(supportedLanguage)
     // highlightCode is intentionally a sync-cache + async-callback API
     // oxlint-disable-next-line eslint-plugin-promise(prefer-await-to-then)
     .then((highlighter) => {
-      const availableLangs = highlighter.getLoadedLanguages();
-      const languageToUse = availableLangs.includes(language)
-        ? language
-        : "text";
-
       const result = highlighter.codeToTokens(code, {
-        lang: languageToUse,
+        lang: supportedLanguage,
         themes: {
           dark: "github-dark",
           light: "github-light",
@@ -483,6 +578,7 @@ export const CodeBlockCopyButton = ({
 
   return (
     <Button
+      aria-label={isCopied ? "Copied" : "Copy code"}
       className={cn("shrink-0", className)}
       onClick={copyToClipboard}
       size="icon"
