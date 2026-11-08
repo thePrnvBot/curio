@@ -141,9 +141,14 @@ export function createCourseTool(chunks: {
         "Step 2 of course creation: fill ONE lesson (by id from create_course) " +
         "with its finished content. Call once per lesson, in order. " +
         "Pass content as a JSON object, never as a stringified JSON blob. " +
-        "For a guided-explanation that walks one code excerpt, set content.code " +
-        "once and omit visual.source from each step; steps then only need " +
-        "narration and visual.focus, which keeps the tool call small.",
+        "Guided-explanation code steps need visual.focus: 1-based lines counted " +
+        "from the first line of the excerpt, plus cursor.token copied verbatim " +
+        "from the code (the UI locates that exact text; line/column are only " +
+        "fallbacks). For a walkthrough that reuses one code excerpt, set " +
+        "content.code once and omit visual.source from each step; steps then " +
+        "only need narration and visual.focus, which keeps the tool call small. " +
+        "Write narration as plain spoken sentences without markdown, backticks " +
+        "or literal operator symbols.",
       execute: (input) => chunks.createScopedCourseLesson(input),
       inputSchema: z.object({
         content: lessonContentSchema,

@@ -51,9 +51,12 @@ export interface RecapLessonContent {
 /** Where the floating cursor should point inside a code visual.
  * Columns and lines are 1-based, matching how authors count code. */
 export interface GuidedExplanationCursor {
+  /** Exact code text under the cursor, copied from the excerpt. Preferred
+   * over counting columns because the UI locates the token itself. */
+  readonly token?: string;
   /** 1-based line; defaults to the first focused line. */
   readonly line?: number;
-  /** 1-based character column. */
+  /** 1-based character column (fallback when `token` is absent). */
   readonly column?: number;
   /** Number of characters highlighted below the cursor. */
   readonly length?: number;

@@ -31,9 +31,14 @@ const LESSON_GENERATOR_INSTRUCTIONS =
   "narration: a SHORT code excerpt, a formula, or compact notes/a table. Never " +
   "repeat the narration text in the visual; code excerpts stay under 80 lines. " +
   "For every code visual set visual.focus.lines to the 1-based line number(s) the " +
-  "narration is currently explaining - usually exactly one line - and set " +
-  "visual.focus.cursor to the exact identifier/expression being discussed (1-based " +
-  "line and column, plus its character length). Reuse the same source across " +
+  "narration is currently explaining - usually exactly one line, counted from the " +
+  "first line of the excerpt with blank lines included - and set " +
+  "visual.focus.cursor.token to the exact code text being discussed, copied " +
+  "character-for-character from the excerpt (e.g. 'unknown', 'items.map' or " +
+  "'error.message'). The token is located in the source itself, so prefer it over " +
+  "counting columns; line/column/length are only fallbacks. Write narration as plain " +
+  "spoken sentences: no markdown, backticks, bullet symbols or literal operator " +
+  "strings, and say code names as natural words. Reuse the same source across " +
   "consecutive steps that continue one walkthrough so the highlight and floating " +
   "cursor travel across the panel instead of the panel remounting. When every step " +
   "reuses one excerpt, set code { language, source } ONCE at the lesson level and " +

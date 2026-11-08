@@ -116,9 +116,11 @@ const CHAT_INSTRUCTIONS =
   "videoUrl), card decks for condensed reads, one or two interactive HTML animations across the whole " +
   "course, recaps with 2-4 crafted quiz questions, and guided explanations for the concept or code " +
   "walkthroughs that deserve a narrated, step-by-step reveal (guided explanation steps stay short: a " +
-  "two-sentence narration and one focused code excerpt per step; when every step reuses the same " +
-  "excerpt, put it once in content.code and omit visual.source from each step - pass content as a " +
-  "JSON object, never a stringified JSON blob). Stream the whole build without " +
+  "two-sentence plain-spoken narration and one focused code excerpt per step; every code step needs " +
+  "visual.focus with 1-based line numbers and cursor.token copied verbatim from the code - the token " +
+  "is what keeps the highlight and pointer accurate; when every step reuses the same excerpt, put it " +
+  "once in content.code and omit visual.source from each step - pass content as a JSON object, never " +
+  "a stringified JSON blob). Stream the whole build without " +
   "stopping: immediately after each create_lesson result, call create_lesson again for the next " +
   "lesson - do not write prose between lesson calls, do not ask for confirmation, and do not end your " +
   "turn until every lesson id from the scaffold is filled exactly once. Never skip or reorder lessons. " +

@@ -74,7 +74,7 @@ const guidedCursor = z.object({
     .max(500)
     .optional()
     .describe(
-      "1-based character column of the exact token being discussed, e.g. 15 for 'unknown' in 'catch (error: unknown) {'"
+      "Fallback 1-based character column. Set token instead whenever possible; a miscounted column is snapped to the nearest token"
     ),
   length: z
     .number()
@@ -82,7 +82,9 @@ const guidedCursor = z.object({
     .min(0)
     .max(200)
     .optional()
-    .describe("Number of characters the cursor points at"),
+    .describe(
+      "Fallback number of characters the cursor points at. Ignored when token is found"
+    ),
   line: z
     .number()
     .int()
@@ -90,7 +92,15 @@ const guidedCursor = z.object({
     .max(200)
     .optional()
     .describe(
-      "1-based line for the cursor; defaults to the first focused line"
+      "Fallback 1-based line for the cursor; defaults to the first focused line"
+    ),
+  token: z
+    .string()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe(
+      "Exact code text the cursor should point at, copied verbatim from the excerpt - e.g. 'unknown' or 'error.message'. PREFERRED over line/column counting because the UI locates this text itself"
     ),
 });
 
@@ -120,7 +130,7 @@ const guidedFocus = z.object({
     .min(1)
     .max(8)
     .describe(
-      "1-based line numbers the narration is explaining right now. Usually exactly one line. Every other line dims"
+      "1-based line numbers the narration is explaining right now, counted from the first line of the code excerpt (blank lines included). Usually exactly one line. Every other line dims"
     ),
 });
 
@@ -138,7 +148,7 @@ const guidedExplanationContent = z
             .min(1)
             .max(1200)
             .describe(
-              "What the narrator says over this step - one or two sentences"
+              "What the narrator says over this step - one or two plain spoken sentences. No markdown, backticks, bullets or literal operator strings; name code identifiers in natural language"
             ),
           visual: z.object({
             kind: z.enum(["code", "markdown"]),
@@ -158,7 +168,7 @@ const guidedExplanationContent = z
             focus: guidedFocus
               .optional()
               .describe(
-                "Code-only narration spotlight. REQUIRED for every code visual: name the 1-based line(s) the narration is on and, when possible, the exact token under the cursor. The focused line stays bright while the rest dims"
+                "Code-only narration spotlight. REQUIRED for every code visual: name the 1-based line(s) the narration is on and set cursor.token to the exact code text being discussed, copied verbatim. The focused line stays bright while the rest dims"
               ),
           }),
         })
@@ -248,6 +258,7 @@ export function toStoredLessonContent(
                               column: step.visual.focus.cursor.column,
                               length: step.visual.focus.cursor.length,
                               line: step.visual.focus.cursor.line,
+                              token: step.visual.focus.cursor.token,
                             },
                       lines: step.visual.focus.lines,
                     },
