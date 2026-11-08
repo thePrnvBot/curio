@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ProgressFromZero } from "./animated-progress";
@@ -13,6 +13,16 @@ describe("ProgressFromZero", () => {
     const { rerender } = render(
       <ProgressFromZero className="h-2 rounded" percent={-10} />
     );
+    // Flush the mount animation frame inside act so its state update is not
+    // reported as an unwrapped update.
+    await act(async () => {
+      // oxlint-disable-next-line promise/avoid-new -- flush one animation frame
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => {
+          resolve();
+        });
+      });
+    });
     await vi.waitFor(() => {
       expect(screen.getByRole("progressbar")).toHaveValue(0);
     });

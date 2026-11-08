@@ -31,9 +31,9 @@ const NAV_LINKS = [
   },
   {
     match: (pathname: string) =>
-      pathname === "/dashboard" || pathname.startsWith("/dashboard/"),
+      pathname === "/settings" || pathname.startsWith("/settings/"),
     label: "Settings",
-    to: "/dashboard",
+    to: "/settings",
   },
 ] as const;
 
@@ -51,10 +51,7 @@ function DesktopDock() {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
-  const activeIndex = Math.max(
-    0,
-    NAV_LINKS.findIndex((navLink) => navLink.match(pathname))
-  );
+  const activeIndex = NAV_LINKS.findIndex((navLink) => navLink.match(pathname));
 
   const containerRef = useRef<HTMLElement | null>(null);
   const itemRefs = useRef<Record<string, HTMLAnchorElement | null>>({});
@@ -81,6 +78,7 @@ function DesktopDock() {
       }
       const activeItem = itemRefs.current[String(activeIndex)];
       if (activeItem === null || activeItem === undefined) {
+        setActivePill(null);
         return;
       }
       setActivePill({
@@ -191,10 +189,7 @@ function MobileDock() {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
-  const activeIndex = Math.max(
-    0,
-    NAV_LINKS.findIndex((navLink) => navLink.match(pathname))
-  );
+  const activeIndex = NAV_LINKS.findIndex((navLink) => navLink.match(pathname));
 
   const [navMenuOpen, setNavMenuOpen] = useState(false);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -222,6 +217,8 @@ function MobileDock() {
           top: activeItem.offsetTop,
           width: activeItem.offsetWidth,
         });
+      } else {
+        setActivePill(null);
       }
       if (hoveredIndex === null) {
         setHoveredPill(null);

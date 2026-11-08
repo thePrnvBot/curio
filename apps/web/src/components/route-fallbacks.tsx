@@ -3,6 +3,9 @@ import type {
   ErrorComponentProps,
   NotFoundRouteProps,
 } from "@tanstack/react-router";
+import { useEffect } from "react";
+
+import { logger } from "@/utils/logger";
 
 /**
  * Route-level fallbacks: TanStack used to render an unstyled
@@ -15,8 +18,8 @@ function FallbackCard(props: {
   readonly explanation: string;
 }) {
   return (
-    <div className="bg-background flex min-h-dvh items-center justify-center px-6">
-      <div className="border-border bg-card w-full max-w-md rounded-2xl border p-8 text-center shadow-sm">
+    <div className="bg-background flex min-h-0 flex-1 items-center justify-center px-6 py-16">
+      <div className="border-border bg-card w-full max-w-md rounded-xl border p-8 text-center shadow-sm">
         <p className="text-4xl">🧭</p>
         <h1 className="text-foreground mt-4 text-lg font-semibold">
           {props.heading}
@@ -50,13 +53,13 @@ export function RouteNotFoundComponent(props: NotFoundRouteProps) {
 
 /** Shown when a route render or loader throws. */
 export function RouteErrorComponent(props: ErrorComponentProps) {
+  useEffect(() => {
+    logger.error("Route render failed", props.error);
+  }, [props.error]);
+
   return (
     <FallbackCard
-      explanation={
-        props.error instanceof Error
-          ? props.error.message.slice(0, 200)
-          : "Something went wrong while rendering this page."
-      }
+      explanation="Something went wrong while rendering this page. Try reloading it; if the problem persists, check the server logs."
       heading="Something broke"
     />
   );

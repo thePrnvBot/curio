@@ -14,13 +14,16 @@ function prefersReducedMotion(): boolean {
  * Respects `prefers-reduced-motion`.
  */
 export function ProgressFromZero({
-  percent,
   className,
+  label = "Progress",
+  percent,
 }: {
   /** 0-100 target value; the bar animates up to it. */
   percent: number;
   /** Track classes; include height/rounding/background. */
   className: string;
+  /** Accessible name announced with the numeric value. */
+  label?: string;
 }): React.ReactElement {
   const [hasMounted, setHasMounted] = useState(prefersReducedMotion());
 
@@ -35,11 +38,14 @@ export function ProgressFromZero({
   }, []);
 
   const clampedPercent = Math.max(0, Math.min(100, Math.round(percent)));
-  const renderedPercent = hasMounted ? Math.max(clampedPercent, 2) : 0;
+  // The semantic value must stay honest (0% announces 0%); the 2px visual
+  // minimum is CSS-only.
+  const renderedPercent = hasMounted ? clampedPercent : 0;
 
   return (
     <progress
-      className={`overflow-hidden rounded-full bg-muted [&::-moz-progress-bar]:rounded-full [&::-moz-progress-bar]:bg-primary [&::-webkit-progress-bar]:rounded-full [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:rounded-full [&::-webkit-progress-value]:bg-primary [&::-webkit-progress-value]:transition-[width] [&::-webkit-progress-value]:duration-700 [&::-webkit-progress-value]:ease-out ${className}`}
+      aria-label={label}
+      className={`bg-muted [&::-moz-progress-bar]:bg-primary [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:bg-primary overflow-hidden rounded-full [&::-moz-progress-bar]:min-w-0.5 [&::-moz-progress-bar]:rounded-full [&::-webkit-progress-bar]:rounded-full [&::-webkit-progress-value]:min-w-0.5 [&::-webkit-progress-value]:rounded-full [&::-webkit-progress-value]:transition-[width] [&::-webkit-progress-value]:duration-700 [&::-webkit-progress-value]:ease-out ${className}`}
       max={100}
       value={renderedPercent}
     />

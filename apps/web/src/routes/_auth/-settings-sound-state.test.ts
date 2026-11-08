@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { SoundToggleState } from "./-dashboard-sound-state";
-import { soundToggleReducer } from "./-dashboard-sound-state";
+import type { SoundToggleState } from "./-settings-sound-state";
+import { soundToggleReducer } from "./-settings-sound-state";
 
 describe("soundToggleReducer", () => {
   it("hydrates to enabled when sound is on", () => {
@@ -24,9 +24,7 @@ describe("soundToggleReducer", () => {
     const state: SoundToggleState = { kind: "uninitialized" };
     expect(soundToggleReducer(state, { type: "request-enable" })).toBe(state);
     expect(soundToggleReducer(state, { type: "request-disable" })).toBe(state);
-    expect(
-      soundToggleReducer(state, { type: "enable-succeeded" })
-    ).toBe(state);
+    expect(soundToggleReducer(state, { type: "enable-succeeded" })).toBe(state);
     expect(soundToggleReducer(state, { type: "enable-failed" })).toBe(state);
   });
 
