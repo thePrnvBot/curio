@@ -32,6 +32,8 @@ used in `packages/api`.
   `apps/web/src/test/setup.ts`).
 - The three local gates are `pnpm lint`, `pnpm check-types`, and `pnpm test`;
   run all three before committing.
+- Do not configure Vitest to pass when no tests are found: an empty suite must
+  fail the gate instead of passing vacuously.
 - When adding new pure helpers (e.g. parsers, validators, URL filters), export
   them and add unit tests in the same directory using the existing `.test.ts`
   convention.

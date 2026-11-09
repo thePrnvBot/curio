@@ -149,7 +149,7 @@ Per-user model settings are stored in the `user_model_settings` table. API keys 
 | `pnpm dev:web`       | Start only the web app.                      |
 | `pnpm build`         | Build all workspaces.                        |
 | `pnpm check-types`   | Type-check every package.                    |
-| `pnpm check`         | Ultracite checks plus workspace type checks. |
+| `pnpm check`         | Ultracite checks, workspace type checks, and tests. |
 | `pnpm lint`          | Run Oxlint.                                  |
 | `pnpm format`        | Run Oxfmt.                                   |
 | `pnpm fix`           | Apply Ultracite fixes and formatting.        |
@@ -177,7 +177,7 @@ Per-user model settings are stored in the `user_model_settings` table. API keys 
 ## Contributing
 
 1. Fork and create a feature branch.
-2. Run `pnpm check-types` and `pnpm fix` before opening a pull request.
+2. Run the local gates — `pnpm lint`, `pnpm check-types`, and `pnpm test` — before opening a pull request. Use `pnpm fix` to apply formatting and lint fixes.
 3. Keep domain contracts in `packages/api/src/domain` and `services` free of framework imports.
 
 ## License

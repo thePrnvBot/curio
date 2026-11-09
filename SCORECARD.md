@@ -158,10 +158,13 @@ pnpm test        # vitest run — 17 files, 105 tests PASSED
 
 ### Verification
 
+Last verified at `22e1c6d` on 2026-11-09 after restoring the suite removed in
+`2d572bb`:
+
 ```bash
-pnpm lint        # oxlint — PASSED
-pnpm check-types # all workspaces + web build — PASSED
-pnpm test        # 25 files, 148 tests — PASSED
+pnpm test        # vitest run — 28 files, 167 tests PASSED
+pnpm lint        # oxlint — FAILED: pre-existing Aurora.tsx filename-case mismatch
+pnpm check-types # tsc via vp run — FAILED: same pre-existing Aurora.tsx import casing mismatch
 ```
 
 The fine-grained Shiki bundle removed the hundreds of per-grammar chunks (e.g. emacs-lisp, wolfram, cpp) that the full bundle emitted; only the curated languages load on demand.

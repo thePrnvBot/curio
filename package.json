@@ -10,7 +10,7 @@
     "dev": "vp run -r dev",
     "build": "vp run -r build",
     "check-types": "vp run -r check-types",
-    "check": "ultracite check && vp run -r check-types",
+    "check": "ultracite check && vp run -r check-types && pnpm test",
     "lint": "oxlint",
     "format": "oxfmt",
     "test": "vitest run --exclude \"artifact-server/**\"",
