@@ -13,12 +13,16 @@ import { createUIMessageStreamResponse } from "ai";
 import { Data, Effect, Option, Stream } from "effect";
 import { z } from "zod";
 
+import { notifyRunChunk, waitForRunChunk } from "./run-chunk-notifier";
 import { withSecurityHeaders } from "./security-headers";
 
 /* ---------------------------------- tuning --------------------------------- */
 
-/** How often a resuming client polls for freshly committed chunks. */
-const RESUME_POLL_INTERVAL = "200 millis";
+/**
+ * Idle fallback for a resuming client. The writer normally wakes the tail as
+ * soon as it commits a batch; this timeout covers a remote or dead writer.
+ */
+const RESUME_POLL_TIMEOUT_MS = 1000;
 
 /** A run the writer has not touched for this long is treated as crashed. */
 const STALE_RUN_THRESHOLD_MS = 300_000;
@@ -349,6 +353,9 @@ export const commitChatRunChunks = Effect.fn("durable-chat.commitChunks")(
                 runId,
                 appendOutcome.failure
               );
+            } else {
+              // Wake the resume tail only after the batch is durable.
+              notifyRunChunk(runId);
             }
           })
       )
@@ -457,7 +464,13 @@ function buildReplayStream(
           Option.none(),
         ] as const;
       }
-      yield* Effect.sleep(RESUME_POLL_INTERVAL);
+      // If the poll returned chunks, loop immediately; otherwise wait for the
+      // writer's notification or the idle fallback.
+      if (committedChunks.length === 0) {
+        yield* Effect.promise((signal) =>
+          waitForRunChunk(runId, RESUME_POLL_TIMEOUT_MS, signal)
+        );
+      }
       return [committedChunksOnly, Option.some({ lastSeq })] as const;
     })
   );
