@@ -385,6 +385,10 @@ export function GuidedExplanationPlayer(props: {
           transcriptSentences.length - 1
         );
 
+  // The Up next/completion block only appears after the final voice line has
+  // finished, so it never steals vertical space while the explanation plays.
+  const showUpNext = isLastStep && !isPlaying && stepProgress >= 100;
+
   // Audio-driven narration loop: with the voice on, each step's lines are
   // synthesized (cache-first) and spoken IN FULL, one at a time — the step
   // advances when its last line ends. This replaces the estimate clock, which
@@ -755,17 +759,43 @@ export function GuidedExplanationPlayer(props: {
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-5xl px-6 pb-6">
-        <LessonCompletionControls
-          className="mt-2"
-          completed={props.completed}
-          courseId={props.courseId}
-          lessonId={props.lessonId}
-          nextLessonId={props.nextLessonId}
-          nextLessonTitle={props.nextLessonTitle}
-          onGoToLesson={props.onGoToLesson}
-        />
-      </div>
+      <AnimatePresence initial={false}>
+        {showUpNext ? (
+          <motion.div
+            animate={{ height: "auto" }}
+            className="overflow-hidden"
+            exit={{ height: 0 }}
+            initial={{ height: 0 }}
+            transition={
+              prefersReducedMotion
+                ? { duration: 0.01 }
+                : { duration: 0.7, ease: "easeOut" }
+            }
+          >
+            <motion.div
+              animate={{ opacity: 1, y: 0 }}
+              initial={{ opacity: 0, y: 16 }}
+              transition={
+                prefersReducedMotion
+                  ? { duration: 0.01 }
+                  : { delay: 0.1, duration: 0.5, ease: "easeOut" }
+              }
+            >
+              <div className="mx-auto w-full max-w-5xl px-6 pb-6">
+                <LessonCompletionControls
+                  className="mt-2"
+                  completed={props.completed}
+                  courseId={props.courseId}
+                  lessonId={props.lessonId}
+                  nextLessonId={props.nextLessonId}
+                  nextLessonTitle={props.nextLessonTitle}
+                  onGoToLesson={props.onGoToLesson}
+                />
+              </div>
+            </motion.div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 
