@@ -1,4 +1,5 @@
 import { toUIMessage } from "@curio/api/domain/chat";
+import { ModelCredentialRequired } from "@curio/api/domain/model-settings";
 import { createArtifactTool } from "@curio/api/infrastructure/artifact-create-tool";
 import {
   ASK_USER_TOOL_NAME,
@@ -300,49 +301,6 @@ async function persistGeneratedMessages({
   await curioRuntime.runPromise(persistEffect);
 }
 
-async function persistPartialMessages({
-  chatId,
-  conversation,
-  partialSteps,
-  userId,
-}: {
-  chatId: string;
-  conversation: UIMessage[];
-  partialSteps: Parameters<
-    NonNullable<Parameters<typeof streamText>[0]["onAbort"]>
-  >[0]["steps"];
-  userId: string;
-}): Promise<void> {
-  // Persist the user's input no matter what; the in-flight step is never in
-  // `partialSteps`, so partial-model output is appended only when present.
-  const partialAssistantText = partialSteps
-    .flatMap((step) =>
-      step.content
-        .filter((part) => part.type === "text")
-        .map((part) => (part.type === "text" ? part.text : ""))
-    )
-    .join("")
-    .trim();
-
-  const partialMessages: UIMessage[] = [...conversation];
-  if (partialAssistantText.length > 0) {
-    partialMessages.push({
-      id: generateAssistantMessageId(),
-      parts: [{ text: partialAssistantText, type: "text" }],
-      role: "assistant",
-    });
-  }
-
-  await persistGeneratedMessages({
-    chatId,
-    // The title was already derived (and possibly composed) when the run
-    // started; stopping must not overwrite it with a re-derived first line.
-    chatTitle: Option.none(),
-    generatedMessages: partialMessages,
-    userId,
-  });
-}
-
 async function composeAndPersistChatTitle({
   chatId,
   generatedMessages,
@@ -419,21 +377,11 @@ async function createChatResponse({
       instructions: CHAT_INSTRUCTIONS,
       messages: modelMessages,
       model: chatModel,
-      // When the stop button aborts the stream, persist the user's message
-      // plus any partial text so the saved history matches what the user saw.
-      // The callback is awaited by the SDK before the stream settles.
-      onAbort: async ({ steps: partialSteps }) => {
+      // When the stop button aborts the stream, mark the run here. The
+      // committed-chunk writer persists the in-flight text before it settles
+      // the run; `onEnd` skips its full-transcript write for aborted runs.
+      onAbort: () => {
         markRunAborted(runId);
-        try {
-          await persistPartialMessages({
-            chatId,
-            conversation,
-            partialSteps,
-            userId,
-          });
-        } catch (error: unknown) {
-          logger.error("Failed to persist aborted chat messages", error);
-        }
       },
       stopWhen: isStepCount(MAX_STREAM_STEPS),
       prepareStep: prepareCourseChunkStep,
@@ -451,8 +399,8 @@ async function createChatResponse({
           : JSON.stringify(streamError);
       },
       onEnd: async ({ isAborted, messages: generatedMessages }) => {
-        // Aborted runs persist their partial transcript in `onAbort`; writing
-        // again here would race that snapshot.
+        // The committed-chunk writer persists the stopped run's partial
+        // transcript; writing again here would race that snapshot.
         if (isAborted) {
           return;
         }
@@ -492,9 +440,11 @@ async function createChatResponse({
     const [writerStream, responseStream] = uiStream.tee();
     curioRuntime.runFork(
       commitChatRunChunks({
+        chatId,
         chunkStream: writerStream,
         hasPersistenceFailure: () => persistenceFailure !== null,
         runId,
+        userId,
       }).pipe(Effect.ensuring(releaseRunRegistration(runId)))
     );
 
@@ -647,6 +597,10 @@ export const Route = createFileRoute("/api/chat")({
             Effect.gen(function* history() {
               const chatStore = yield* ChatStore;
               yield* chatStore.ensureChatForUser(chatId, userId);
+              // Recover before reading history: a crashed run's committed
+              // partial must be part of the transcript and model context,
+              // otherwise the submit rewrites it away.
+              yield* recoverStaleChatRun(chatId, userId);
               const messageRecords = yield* chatStore.listMessageRecords(
                 chatId,
                 userId
@@ -703,10 +657,6 @@ export const Route = createFileRoute("/api/chat")({
         const modelMessages = await convertToModelMessages(
           sanitizedConversation
         );
-
-        // A crashed process leaves a `running` row behind; recover it so the
-        // unique running-run index does not reject the next submit.
-        await curioRuntime.runPromise(recoverStaleChatRun(chatId, userId));
 
         // Atomic admission: the database refuses a second running run, so
         // two tabs or a double submit cannot both start generation.
@@ -765,7 +715,18 @@ export const Route = createFileRoute("/api/chat")({
         try {
           chatModel = await createScopedModel(userId, chatId);
         } catch (modelError: unknown) {
-          logger.error("Failed to resolve the chat model", modelError);
+          const credentialMissing =
+            modelError instanceof ModelCredentialRequired;
+          if (credentialMissing) {
+            // Misconfiguration, not a server defect: the user must supply the
+            // key for their custom endpoint. Never retry against that host.
+            logger.warn(
+              "Chat model is missing a user credential",
+              modelError.message
+            );
+          } else {
+            logger.error("Failed to resolve the chat model", modelError);
+          }
           await curioRuntime
             .runPromise(
               Effect.gen(function* failRun() {
@@ -774,6 +735,9 @@ export const Route = createFileRoute("/api/chat")({
               })
             )
             .catch(() => null);
+          if (credentialMissing) {
+            return secureJson({ error: modelError.message }, { status: 400 });
+          }
           return secureJson(
             { error: "Failed to resolve the chat model" },
             { status: 500 }

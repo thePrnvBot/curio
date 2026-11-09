@@ -4,6 +4,7 @@ import { Option } from "effect";
 import { curioRuntime } from "../../services";
 import { requestSession, unauthorizedResponse } from "../../utils/api-session";
 import { resumeChatStreamResponse } from "../../utils/durable-chat";
+import { checkRateLimit, rateLimitResponse } from "../../utils/rate-limit";
 import { withSecurityHeaders } from "../../utils/security-headers";
 
 /**
@@ -27,6 +28,14 @@ export const Route = createFileRoute("/api/chat/$chatId/stream")({
           return withSecurityHeaders(unauthorizedResponse());
         }
         const session = sessionOption.value;
+
+        const rateLimit = checkRateLimit(`stream:${session.user.id}`, {
+          limit: 20,
+          windowMs: 60_000,
+        });
+        if (!rateLimit.allowed) {
+          return withSecurityHeaders(rateLimitResponse(rateLimit.headers));
+        }
 
         return await curioRuntime.runPromise(
           resumeChatStreamResponse({

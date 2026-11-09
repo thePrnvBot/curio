@@ -134,12 +134,12 @@ Core server configuration is validated in `apps/web/src/env.server.ts`.
 | `OBSCURA_BIN` | no | Path/name of the Obscura CLI used by `web_read`. |
 | `OBSCURA_STEALTH` | no | Set to `1` to pass `--stealth` to Obscura. |
 
-Per-user model settings are stored in the `user_model_settings` table. API keys are encrypted at rest with AES-256-GCM (versioned `enc:v1:` values; legacy plaintext rows are read and re-encrypted on the next save) and are never returned by the API; responses expose only `hasApiKey`.
+Per-user model settings are stored in the `user_model_settings` table. API keys are encrypted at rest with AES-256-GCM (versioned `enc:v1:` values; legacy plaintext rows are read and re-encrypted on the next save) and are never returned by the API; responses expose only `hasApiKey`. A custom OpenAI-compatible `baseUrl` requires a per-user API key: the server `AI_API_KEY` is never sent to user-supplied hosts.
 
 ### Optional integrations
 
 - **Obscura** (`web_read`) — install the [Obscura](https://docs.obscura.sh) CLI and make sure it is on `PATH`, or set `OBSCURA_BIN`. Without it, web search still works and `web_read` returns an install hint.
-- **Artifact Server** (`create_artifact`) — point `ARTIFACT_SERVER_URL` at an Artifact Server MCP endpoint (`http://127.0.0.1:8787/mcp`; an origin-only URL is normalized automatically) and set `ARTIFACT_SERVER_API_KEY` to the server's bearer token. When the URL is unset, artifact tools are disabled and the `/api/artifacts/generate` route answers `501`. A reachability warning is logged at boot.
+- **Artifact Server** (`create_artifact`) — point `ARTIFACT_SERVER_URL` at an Artifact Server MCP endpoint (`http://127.0.0.1:8787/mcp`; an origin-only URL is normalized automatically) and set `ARTIFACT_SERVER_API_KEY` to the server's bearer token. When the URL is unset, artifact tools are disabled. A reachability warning is logged at boot.
 
 ## Available scripts
 
@@ -149,7 +149,7 @@ Per-user model settings are stored in the `user_model_settings` table. API keys 
 | `pnpm dev:web`       | Start only the web app.                      |
 | `pnpm build`         | Build all workspaces.                        |
 | `pnpm check-types`   | Type-check every package.                    |
-| `pnpm check`         | Ultracite checks plus workspace type checks. |
+| `pnpm check`         | Ultracite checks, workspace type checks, and tests. |
 | `pnpm lint`          | Run Oxlint.                                  |
 | `pnpm format`        | Run Oxfmt.                                   |
 | `pnpm fix`           | Apply Ultracite fixes and formatting.        |
@@ -171,13 +171,15 @@ Per-user model settings are stored in the `user_model_settings` table. API keys 
 
 - Never commit `apps/web/.env`; only `.env.example` belongs in git.
 - Chat, course and artifact routes require an authenticated session and scope reads/writes to the session user.
-- `web_read` rejects loopback, private, link-local and reserved addresses. It cannot fully defend against DNS rebinding; if you need stronger isolation, run the reader in a network-restricted sandbox.
+- `web_read` rejects loopback, private, link-local and reserved addresses. It validates the initial URL and every HTTP redirect hop, and rejects hostnames that resolve to private addresses. It still cannot see JavaScript/meta-refresh redirects or DNS rebinding between the check and the browser fetch. If you need strong isolation, run the reader behind egress filtering or in a network-restricted sandbox.
 - Per-user API keys are encrypted with AES-256-GCM before they are stored in Postgres. Set a dedicated `MODEL_SETTINGS_ENCRYPTION_KEY` in production and keep it stable: rotating it makes previously saved keys unreadable (users can re-enter them).
+- A custom OpenAI-compatible `baseUrl` requires a per-user API key. The server `AI_API_KEY` is never sent to user-supplied hosts. Use the server default provider if you want to rely on the deployment key.
+- Model-rendered markdown does not load remote images by default; `data:` and `blob:` images are allowed. The document CSP is intentionally image-only (`img-src 'self' data: blob:`) so narration model downloads and lesson video/media embeds keep working, while the `SafeMarkdownImage` component adds a second image layer. Use the artifact server or a local asset for rich media; do not add remote origins to `img-src` without an explicit allowlist/proxy.
 
 ## Contributing
 
 1. Fork and create a feature branch.
-2. Run `pnpm check-types` and `pnpm fix` before opening a pull request.
+2. Run the local gates — `pnpm lint`, `pnpm check-types`, and `pnpm test` — before opening a pull request. Use `pnpm fix` to apply formatting and lint fixes.
 3. Keep domain contracts in `packages/api/src/domain` and `services` free of framework imports.
 
 ## License

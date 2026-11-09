@@ -54,7 +54,7 @@ Generated: 2026-11-07
 
 - Centralized logging in `apps/web/src/utils/logger.ts` and replaced ad-hoc `console.error` / `console.warn` in chat, voice, and artifact routes.
 - Wired root route fallbacks (`RouteErrorComponent`, `RouteNotFoundComponent`) so route errors render a styled card instead of raw dumps.
-- Added a sliding-window rate limiter (`apps/web/src/utils/rate-limit.ts`) applied to `/api/chat` and `/api/artifacts/generate`.
+- Added a sliding-window rate limiter (`apps/web/src/utils/rate-limit.ts`) applied to `/api/chat`.
 - Added security headers helper (`apps/web/src/utils/security-headers.ts`) and applied CSP, referrer policy, and frame-options to API responses.
 - Lazy-loaded the Aurora canvas component on the landing page (separate chunk observed in build output).
 - Converted `animated-progress` to a semantic `<progress>` element with `prefers-reduced-motion` support.
@@ -158,10 +158,13 @@ pnpm test        # vitest run — 17 files, 105 tests PASSED
 
 ### Verification
 
+Last verified at `22e1c6d` on 2026-11-09 after restoring the suite removed in
+`2d572bb`:
+
 ```bash
-pnpm lint        # oxlint — PASSED
-pnpm check-types # all workspaces + web build — PASSED
-pnpm test        # 25 files, 148 tests — PASSED
+pnpm test        # vitest run — 28 files, 167 tests PASSED
+pnpm lint        # oxlint — FAILED: pre-existing Aurora.tsx filename-case mismatch
+pnpm check-types # tsc via vp run — FAILED: same pre-existing Aurora.tsx import casing mismatch
 ```
 
 The fine-grained Shiki bundle removed the hundreds of per-grammar chunks (e.g. emacs-lisp, wolfram, cpp) that the full bundle emitted; only the curated languages load on demand.

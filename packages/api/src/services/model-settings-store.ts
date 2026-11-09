@@ -17,7 +17,8 @@ export interface UserModelSettingsInput {
   readonly provider: UserModelProvider;
   readonly model: string;
   readonly baseUrl: string | null;
-  readonly apiKey: string | null;
+  /** undefined = leave the stored key unchanged; null = clear it. */
+  readonly apiKey: string | null | undefined;
 }
 
 export interface ModelSettingsStoreContract {

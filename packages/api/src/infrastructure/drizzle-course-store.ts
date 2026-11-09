@@ -56,15 +56,22 @@ interface CourseSectionRow {
   readonly title: string;
 }
 
-interface CourseLessonRow {
+interface CourseLessonSummaryRow {
   readonly completedAt: Date | null;
-  readonly content: LessonContent | null;
-  readonly courseId: string;
+  readonly hasContent: boolean;
   readonly id: string;
   readonly kind: string;
   readonly position: number;
-  readonly sectionId: string | null;
   readonly title: string;
+}
+
+interface CourseLessonRow extends CourseLessonSummaryRow {
+  readonly courseId: string;
+  readonly sectionId: string | null;
+}
+
+interface CourseLessonContentRow extends CourseLessonRow {
+  readonly content: LessonContent | null;
 }
 
 function toCourseSummary(row: CourseRow): CourseSummary {
@@ -116,6 +123,19 @@ function normalizeLessonPosition(value: number): number {
   return Number.isFinite(value) && value > 0 ? value : 1;
 }
 
+export function toLessonSummary(
+  row: CourseLessonSummaryRow
+): CourseLessonSummary {
+  return {
+    completed: row.completedAt !== null,
+    hasContent: row.hasContent,
+    id: row.id,
+    kind: normalizeLessonKind(row.kind),
+    position: normalizeLessonPosition(row.position),
+    title: row.title,
+  };
+}
+
 function generateId(prefix: string): string {
   return `${prefix}_${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}`;
 }
@@ -133,13 +153,20 @@ const courseSelection = {
 
 const lessonSelection = {
   completedAt: courseLesson.completedAt,
-  content: courseLesson.content,
   courseId: courseLesson.courseId,
+  hasContent: sql<boolean>`(${courseLesson.content} is not null)`,
   id: courseLesson.id,
   kind: courseLesson.kind,
   position: courseLesson.position,
   sectionId: courseLesson.sectionId,
   title: courseLesson.title,
+} as const;
+
+/** Detail reads keep the JSONB body; structure lists project only
+ * `hasContent`. */
+const lessonContentSelection = {
+  ...lessonSelection,
+  content: courseLesson.content,
 } as const;
 
 export function createDrizzleCourseStore(
@@ -487,16 +514,6 @@ export function createDrizzleCourseStore(
               .orderBy(asc(courseLesson.position))
           );
 
-          const toSummary = (
-            lessonRow: CourseLessonRow
-          ): CourseLessonSummary => ({
-            completed: lessonRow.completedAt !== null,
-            hasContent: lessonRow.content !== null,
-            id: lessonRow.id,
-            kind: normalizeLessonKind(lessonRow.kind),
-            position: normalizeLessonPosition(lessonRow.position),
-            title: lessonRow.title,
-          });
           const unclaimed = new Set(lessonRows.map((row) => row.id));
 
           // Mutable while grouping; the readonly CourseSectionDetail shape is
@@ -508,7 +525,7 @@ export function createDrizzleCourseStore(
           }[] = sectionRows.map((sectionRow) => {
             const members = lessonRows
               .filter((row) => row.sectionId === sectionRow.id)
-              .map(toSummary);
+              .map(toLessonSummary);
             for (const memberRow of members) {
               unclaimed.delete(memberRow.id);
             }
@@ -529,11 +546,11 @@ export function createDrizzleCourseStore(
             if (firstSection === undefined) {
               sections.push({
                 id: null,
-                lessons: unsectioned.map(toSummary),
+                lessons: unsectioned.map(toLessonSummary),
                 title: courseRow.title,
               });
             } else {
-              firstSection.lessons.push(...unsectioned.map(toSummary));
+              firstSection.lessons.push(...unsectioned.map(toLessonSummary));
             }
           }
 
@@ -558,17 +575,18 @@ export function createDrizzleCourseStore(
             return yield* Effect.fail(new CourseNotFound({ courseId }));
           }
 
-          const lessonRows: CourseLessonRow[] = yield* Effect.tryPromise(() =>
-            database
-              .select(lessonSelection)
-              .from(courseLesson)
-              .where(
-                and(
-                  eq(courseLesson.id, lessonId),
-                  eq(courseLesson.courseId, courseId)
+          const lessonRows: CourseLessonContentRow[] = yield* Effect.tryPromise(
+            () =>
+              database
+                .select(lessonContentSelection)
+                .from(courseLesson)
+                .where(
+                  and(
+                    eq(courseLesson.id, lessonId),
+                    eq(courseLesson.courseId, courseId)
+                  )
                 )
-              )
-              .limit(1)
+                .limit(1)
           );
           const lessonRow = lessonRows.at(0);
           if (lessonRow === undefined) {

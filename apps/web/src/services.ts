@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import { createCurioRuntime } from "@curio/api/composition/runtime";
 import { toStoredLessonContent } from "@curio/api/domain/lesson-content";
+import { ModelCredentialRequired } from "@curio/api/domain/model-settings";
 import { createApiKeyCipher } from "@curio/api/infrastructure/api-key-cipher";
 import type { ArtifactPublisherFunction } from "@curio/api/infrastructure/artifact-create-tool";
 import type {
@@ -291,13 +292,38 @@ export async function createScopedModel(
       const userSettingsOption =
         yield* modelSettingsStore.getUserModelSettings(userId);
       if (userSettingsOption !== null) {
+        if (userSettingsOption.provider === "openai-compatible") {
+          if (
+            userSettingsOption.apiKey === null ||
+            userSettingsOption.baseUrl === null
+          ) {
+            return yield* Effect.fail(
+              new ModelCredentialRequired({
+                baseUrl: userSettingsOption.baseUrl ?? "",
+                provider: userSettingsOption.provider,
+              })
+            );
+          }
+          return createUserChatModel(
+            {
+              apiKey: userSettingsOption.apiKey,
+              baseUrl: userSettingsOption.baseUrl,
+              model: userSettingsOption.model,
+              provider: userSettingsOption.provider,
+              sessionHeaderName: OPENCODE_SESSION_HEADER_NAME,
+            },
+            chatId
+          );
+        }
         return createUserChatModel(
           {
-            ...userSettingsOption,
+            apiKey: userSettingsOption.apiKey,
+            model: userSettingsOption.model,
+            provider: userSettingsOption.provider,
             sessionHeaderName: OPENCODE_SESSION_HEADER_NAME,
           },
           chatId,
-          { apiKey: ENV.AI_API_KEY, baseUrl: ENV.AI_BASE_URL }
+          { serverOpenAiApiKey: ENV.AI_API_KEY }
         );
       }
       const chatModelProviderService = yield* ChatModelProvider;
