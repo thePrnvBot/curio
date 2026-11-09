@@ -173,6 +173,7 @@ Per-user model settings are stored in the `user_model_settings` table. API keys 
 - Chat, course and artifact routes require an authenticated session and scope reads/writes to the session user.
 - `web_read` rejects loopback, private, link-local and reserved addresses. It cannot fully defend against DNS rebinding; if you need stronger isolation, run the reader in a network-restricted sandbox.
 - Per-user API keys are encrypted with AES-256-GCM before they are stored in Postgres. Set a dedicated `MODEL_SETTINGS_ENCRYPTION_KEY` in production and keep it stable: rotating it makes previously saved keys unreadable (users can re-enter them).
+- Model-rendered markdown does not load remote images by default; `data:` and `blob:` images are allowed. The document CSP (`img-src 'self' data: blob:`) and the `SafeMarkdownImage` component add two independent layers. Use the artifact server or a local asset for rich media; do not add remote origins to `img-src` without an explicit allowlist/proxy.
 
 ## Contributing
 

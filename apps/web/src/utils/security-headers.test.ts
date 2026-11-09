@@ -1,8 +1,21 @@
 import { describe, expect, it } from "vitest";
 
-import { SECURITY_HEADERS, withSecurityHeaders } from "./security-headers";
+import {
+  CONTENT_SECURITY_POLICY,
+  SECURITY_HEADERS,
+  withSecurityHeaders,
+} from "./security-headers";
 
 describe("security-headers", () => {
+  it("restricts document images to self, data and blob", () => {
+    expect(CONTENT_SECURITY_POLICY).toContain(
+      "img-src 'self' data: blob:"
+    );
+    expect(SECURITY_HEADERS["Content-Security-Policy"]).toBe(
+      CONTENT_SECURITY_POLICY
+    );
+  });
+
   it("applies the shared headers to a response", () => {
     const response = withSecurityHeaders(
       Response.json({ ok: true }, { status: 200 })
