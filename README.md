@@ -174,6 +174,7 @@ Per-user model settings are stored in the `user_model_settings` table. API keys 
 - `web_read` rejects loopback, private, link-local and reserved addresses. It validates the initial URL and every HTTP redirect hop, and rejects hostnames that resolve to private addresses. It still cannot see JavaScript/meta-refresh redirects or DNS rebinding between the check and the browser fetch. If you need strong isolation, run the reader behind egress filtering or in a network-restricted sandbox.
 - Per-user API keys are encrypted with AES-256-GCM before they are stored in Postgres. Set a dedicated `MODEL_SETTINGS_ENCRYPTION_KEY` in production and keep it stable: rotating it makes previously saved keys unreadable (users can re-enter them).
 - A custom OpenAI-compatible `baseUrl` requires a per-user API key. The server `AI_API_KEY` is never sent to user-supplied hosts. Use the server default provider if you want to rely on the deployment key.
+- Model-rendered markdown does not load remote images by default; `data:` and `blob:` images are allowed. The document CSP is intentionally image-only (`img-src 'self' data: blob:`) so narration model downloads and lesson video/media embeds keep working, while the `SafeMarkdownImage` component adds a second image layer. Use the artifact server or a local asset for rich media; do not add remote origins to `img-src` without an explicit allowlist/proxy.
 
 ## Contributing
 

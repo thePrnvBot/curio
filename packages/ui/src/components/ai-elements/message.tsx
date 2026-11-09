@@ -326,6 +326,30 @@ export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 
 const streamdownPlugins = { cjk, code: streamdownCodePlugin };
 
+const SAFE_IMAGE_PREFIXES = ["data:", "blob:"] as const;
+
+/**
+ * Render only local/inline markdown images. Remote images in model output are
+ * a tracking-beacon vector (the browser loads them without a click), so drop
+ * any `src` that is not a `data:` or `blob:` URL. The document CSP in
+ * `apps/web` is a second layer with `img-src 'self' data: blob:`.
+ */
+export function SafeMarkdownImage({
+  alt,
+  src,
+}: ComponentProps<"img">): ReactElement | null {
+  if (typeof src !== "string") {
+    return null;
+  }
+  const isSafe = SAFE_IMAGE_PREFIXES.some((prefix) => src.startsWith(prefix));
+  if (!isSafe) {
+    return null;
+  }
+  return <img alt={alt ?? ""} src={src} />;
+}
+
+const streamdownComponents = { img: SafeMarkdownImage };
+
 export const MessageResponse = memo(
   ({ className, ...props }: MessageResponseProps) => (
     <Streamdown
@@ -333,6 +357,7 @@ export const MessageResponse = memo(
         "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
         className
       )}
+      components={streamdownComponents}
       plugins={streamdownPlugins}
       {...props}
     />
