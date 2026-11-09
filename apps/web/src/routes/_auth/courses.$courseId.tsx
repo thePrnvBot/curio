@@ -1,8 +1,15 @@
 import type { CourseLessonKind, LessonContent } from "@curio/api/domain/course";
+import { Button } from "@curio/ui/components/button";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeftIcon, CheckIcon, LoaderCircleIcon } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
+import {
+  ArrowLeftIcon,
+  CheckIcon,
+  LoaderCircleIcon,
+  PanelLeftCloseIcon,
+  PanelLeftOpenIcon,
+} from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -141,6 +148,7 @@ function CourseSidebar({
   course,
   flatLessons,
   goToLesson,
+  onCollapse,
   progressPercent,
   sections,
   selectedLessonId,
@@ -152,20 +160,38 @@ function CourseSidebar({
   };
   flatLessons: readonly LessonLike[];
   goToLesson: (lessonId: string | null) => void;
+  onCollapse: () => void;
   progressPercent: number;
   sections: readonly CourseSidebarSection[];
   selectedLessonId: string | null;
 }) {
   return (
-    <aside className="border-border/70 bg-sidebar [scrollbar-width:none] overscroll-contain md:h-full md:overflow-y-auto md:border-r [&::-webkit-scrollbar]:hidden">
+    <aside
+      className="border-border/70 bg-sidebar [scrollbar-width:none] overscroll-contain md:h-full md:overflow-y-auto md:border-r [&::-webkit-scrollbar]:hidden"
+      id="course-outline"
+    >
       <div className="space-y-6 px-5 py-6">
-        <Link
-          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs font-medium"
-          to="/courses"
-        >
-          <ArrowLeftIcon className="size-3.5" aria-hidden="true" />
-          All courses
-        </Link>
+        <div className="flex items-center justify-between gap-2">
+          <Link
+            className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs font-medium"
+            to="/courses"
+          >
+            <ArrowLeftIcon className="size-3.5" aria-hidden="true" />
+            All courses
+          </Link>
+          <Button
+            aria-controls="course-outline"
+            aria-expanded={true}
+            aria-label="Collapse course outline"
+            className="-mr-1.5"
+            onClick={onCollapse}
+            size="icon-sm"
+            title="Collapse course outline"
+            variant="ghost"
+          >
+            <PanelLeftCloseIcon aria-hidden="true" className="size-4" />
+          </Button>
+        </div>
         <div>
           <h1 className="text-lg font-semibold tracking-tight">
             {course.title}
@@ -329,6 +355,7 @@ function CoursePageRoute() {
   const { courseId } = Route.useParams();
   const { lesson: requestedLessonId } = Route.useSearch();
   const navigate = useNavigate();
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const pollStartedAtRef = useRef<{
     readonly courseId: string;
     readonly startedAt: number;
@@ -503,18 +530,46 @@ function CoursePageRoute() {
 
   return (
     <div className="bg-background text-foreground flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] overflow-hidden md:grid-cols-[300px_1fr]">
+      <div
+        className={`grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] overflow-hidden transition-[grid-template-columns] duration-200 ease-out ${
+          isSidebarCollapsed
+            ? "md:grid-cols-[44px_minmax(0,1fr)]"
+            : "md:grid-cols-[300px_minmax(0,1fr)]"
+        }`}
+      >
         {/* Sidebar: course, headings (sections), subheadings (lessons) */}
-        <div className="hidden min-h-0 md:block">
-          <CourseSidebar
-            course={course}
-            flatLessons={flatLessons}
-            goToLesson={goToLesson}
-            progressPercent={progressPercent}
-            sections={sections}
-            selectedLessonId={selectedLessonId}
-          />
-        </div>
+        {isSidebarCollapsed ? (
+          <div className="border-border/70 bg-sidebar hidden min-h-0 flex-col items-center border-r pt-4 md:flex">
+            <Button
+              aria-expanded={false}
+              aria-label="Expand course outline"
+              onClick={() => {
+                playInteractionCue("toggle", { emphasis: "subtle" });
+                setIsSidebarCollapsed(false);
+              }}
+              size="icon-sm"
+              title="Expand course outline"
+              variant="ghost"
+            >
+              <PanelLeftOpenIcon aria-hidden="true" className="size-4" />
+            </Button>
+          </div>
+        ) : (
+          <div className="hidden min-h-0 md:block">
+            <CourseSidebar
+              course={course}
+              flatLessons={flatLessons}
+              goToLesson={goToLesson}
+              onCollapse={() => {
+                playInteractionCue("toggle", { emphasis: "subtle" });
+                setIsSidebarCollapsed(true);
+              }}
+              progressPercent={progressPercent}
+              sections={sections}
+              selectedLessonId={selectedLessonId}
+            />
+          </div>
+        )}
 
         {/* Center: lesson content — scrolls internally, never the page */}
         <main className="flex min-h-0 flex-1 [scrollbar-width:none] flex-col overflow-y-auto overscroll-contain [&::-webkit-scrollbar]:hidden">
