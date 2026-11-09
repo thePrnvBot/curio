@@ -171,7 +171,7 @@ Per-user model settings are stored in the `user_model_settings` table. API keys 
 
 - Never commit `apps/web/.env`; only `.env.example` belongs in git.
 - Chat, course and artifact routes require an authenticated session and scope reads/writes to the session user.
-- `web_read` rejects loopback, private, link-local and reserved addresses. It cannot fully defend against DNS rebinding; if you need stronger isolation, run the reader in a network-restricted sandbox.
+- `web_read` rejects loopback, private, link-local and reserved addresses. It validates the initial URL and every HTTP redirect hop, and rejects hostnames that resolve to private addresses. It still cannot see JavaScript/meta-refresh redirects or DNS rebinding between the check and the browser fetch. If you need strong isolation, run the reader behind egress filtering or in a network-restricted sandbox.
 - Per-user API keys are encrypted with AES-256-GCM before they are stored in Postgres. Set a dedicated `MODEL_SETTINGS_ENCRYPTION_KEY` in production and keep it stable: rotating it makes previously saved keys unreadable (users can re-enter them).
 
 ## Contributing

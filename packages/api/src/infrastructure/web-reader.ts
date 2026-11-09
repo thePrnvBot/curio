@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
+import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 
 import { Effect } from "effect";
@@ -82,6 +83,14 @@ export function isBlockedIpv6(hostname: string): boolean {
   ) {
     return true;
   }
+  // NAT64 (64:ff9b::/96) embeds an IPv4 address.
+  if (address.startsWith("64:ff9b:")) {
+    return true;
+  }
+  // 6to4 (2002::/16) embeds an IPv4 address.
+  if (address.startsWith("2002:")) {
+    return true;
+  }
   if (address.startsWith("::ffff:")) {
     const mapped = address.slice("::ffff:".length);
     if (mapped.includes(".")) {
@@ -148,6 +157,86 @@ export function isPublicHttpUrl(candidate: string): boolean {
     return !isBlockedIpv6(hostname);
   }
   return true;
+}
+
+/* ---------------------------- Redirect preflight --------------------------- */
+
+const MAX_REDIRECT_HOPS = 5;
+const REDIRECT_TIMEOUT_MS = 5000;
+
+function isBlockedResolvedAddress(address: string): boolean {
+  const version = isIP(address);
+  if (version === 4) {
+    return isBlockedIpv4(address);
+  }
+  if (version === 6) {
+    return isBlockedIpv6(address);
+  }
+  return true;
+}
+
+/**
+ * Resolve a hostname and refuse the request when any returned address is
+ * private, loopback, link-local or otherwise non-public. IP literals were
+ * already checked by `isPublicHttpUrl`, so they skip DNS.
+ */
+async function assertPublicHostname(hostname: string): Promise<void> {
+  const normalized = hostname.replaceAll(/^\[|\]$/gu, "").toLowerCase();
+  if (isIP(normalized) !== 0) {
+    return;
+  }
+  const addresses = await lookup(normalized, { all: true, verbatim: true });
+  if (addresses.length === 0) {
+    throw new Error(`No DNS records for ${normalized}`);
+  }
+  for (const { address } of addresses) {
+    if (isBlockedResolvedAddress(address)) {
+      throw new Error(`${normalized} resolves to a non-public address`);
+    }
+  }
+}
+
+/**
+ * Follow redirects with a cheap preflight and validate every hop before
+ * Obscura fetches it. This cannot see client-side (JavaScript/meta-refresh)
+ * redirects; egress filtering remains the stronger deployment-level control.
+ *
+ * The preflight deliberately sends no cookies or authorization headers.
+ */
+export async function resolvePublicRedirect(
+  candidate: string
+): Promise<string> {
+  let current = candidate;
+  for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop += 1) {
+    if (!isPublicHttpUrl(current)) {
+      throw new Error("Redirected to a non-public URL");
+    }
+    const parsed = new URL(current);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- redirect hops must be checked in order
+    await assertPublicHostname(parsed.hostname);
+
+    // oxlint-disable-next-line eslint/no-await-in-loop -- each hop depends on the previous response
+    const response = await fetch(current, {
+      // A Range request keeps the preflight cheap; cancel the body before
+      // reading it. Some servers ignore Range, so cancel explicitly.
+      headers: { Range: "bytes=0-0" },
+      method: "GET",
+      redirect: "manual",
+      signal: AbortSignal.timeout(REDIRECT_TIMEOUT_MS),
+    });
+    void response.body?.cancel();
+
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("location");
+      if (location === null) {
+        return current;
+      }
+      current = new URL(location, current).toString();
+      continue;
+    }
+    return current;
+  }
+  throw new Error(`Too many redirects (more than ${MAX_REDIRECT_HOPS})`);
 }
 
 function obscuraBinaryCandidates(): readonly string[] {
@@ -275,9 +364,18 @@ export const webPageReadEffect = Effect.fnUntraced(function* webPageReadEffect(
       })
     );
   }
+  const resolvedUrl = yield* Effect.tryPromise({
+    catch: (cause) =>
+      new WebReadFailed({
+        readFailureMessage: `Refusing to read a URL that redirects to a non-public host: ${
+          cause instanceof Error ? cause.message : String(cause)
+        }`,
+      }),
+    try: () => resolvePublicRedirect(url),
+  });
   const rawMarkdown = yield* obscuraFetchEffect([
     "fetch",
-    url,
+    resolvedUrl,
     "--dump",
     "markdown",
     "-q",
@@ -298,7 +396,7 @@ export const webPageReadEffect = Effect.fnUntraced(function* webPageReadEffect(
       ? "Page text was truncated; read again with a narrower source if key details are missing."
       : undefined,
     truncated,
-    url,
+    url: resolvedUrl,
   };
 });
 
