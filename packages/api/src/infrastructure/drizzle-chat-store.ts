@@ -277,32 +277,6 @@ export function createDrizzleChatStore(database: Database): ChatStoreContract {
         Effect.asVoid
       ),
 
-    appendMessage: (chatId, userId, message) =>
-      requireChatRow(chatId, userId).pipe(
-        Effect.flatMap(() =>
-          withStoreError("appendMessage")(
-            Effect.tryPromise(() =>
-              database.transaction(async (transactionDatabase) => {
-                await transactionDatabase
-                  .insert(chatMessage)
-                  .values({
-                    chatId,
-                    id: message.id,
-                    parts: message.parts,
-                    role: message.role,
-                  })
-                  .onConflictDoNothing({ target: chatMessage.id });
-                await transactionDatabase
-                  .update(chat)
-                  .set({ updatedAt: new Date() })
-                  .where(and(eq(chat.id, chatId), eq(chat.userId, userId)));
-              })
-            )
-          )
-        ),
-        Effect.asVoid
-      ),
-
     listMessageRecords: (chatId, userId) =>
       requireChatRow(chatId, userId).pipe(
         Effect.flatMap(() => listMessageRecordsFor(chatId))

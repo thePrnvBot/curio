@@ -54,7 +54,7 @@ Generated: 2026-11-07
 
 - Centralized logging in `apps/web/src/utils/logger.ts` and replaced ad-hoc `console.error` / `console.warn` in chat, voice, and artifact routes.
 - Wired root route fallbacks (`RouteErrorComponent`, `RouteNotFoundComponent`) so route errors render a styled card instead of raw dumps.
-- Added a sliding-window rate limiter (`apps/web/src/utils/rate-limit.ts`) applied to `/api/chat` and `/api/artifacts/generate`.
+- Added a sliding-window rate limiter (`apps/web/src/utils/rate-limit.ts`) applied to `/api/chat`.
 - Added security headers helper (`apps/web/src/utils/security-headers.ts`) and applied CSP, referrer policy, and frame-options to API responses.
 - Lazy-loaded the Aurora canvas component on the landing page (separate chunk observed in build output).
 - Converted `animated-progress` to a semantic `<progress>` element with `prefers-reduced-motion` support.

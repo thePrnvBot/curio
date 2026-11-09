@@ -139,7 +139,7 @@ Per-user model settings are stored in the `user_model_settings` table. API keys 
 ### Optional integrations
 
 - **Obscura** (`web_read`) — install the [Obscura](https://docs.obscura.sh) CLI and make sure it is on `PATH`, or set `OBSCURA_BIN`. Without it, web search still works and `web_read` returns an install hint.
-- **Artifact Server** (`create_artifact`) — point `ARTIFACT_SERVER_URL` at an Artifact Server MCP endpoint (`http://127.0.0.1:8787/mcp`; an origin-only URL is normalized automatically) and set `ARTIFACT_SERVER_API_KEY` to the server's bearer token. When the URL is unset, artifact tools are disabled and the `/api/artifacts/generate` route answers `501`. A reachability warning is logged at boot.
+- **Artifact Server** (`create_artifact`) — point `ARTIFACT_SERVER_URL` at an Artifact Server MCP endpoint (`http://127.0.0.1:8787/mcp`; an origin-only URL is normalized automatically) and set `ARTIFACT_SERVER_API_KEY` to the server's bearer token. When the URL is unset, artifact tools are disabled. A reachability warning is logged at boot.
 
 ## Available scripts
 
