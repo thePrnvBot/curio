@@ -14,7 +14,7 @@ import type { ThemeProviderProps } from "next-themes";
 import { ThemeProvider } from "next-themes";
 import { useEffect } from "react";
 
-import { CONTENT_SECURITY_POLICY } from "@/utils/security-headers";
+import { DOCUMENT_CONTENT_SECURITY_POLICY } from "@/utils/security-headers";
 import { bindInteractionSounds } from "@/utils/sound";
 
 import Header from "../components/header";
@@ -45,7 +45,7 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
       },
       {
         httpEquiv: "Content-Security-Policy",
-        content: CONTENT_SECURITY_POLICY,
+        content: DOCUMENT_CONTENT_SECURITY_POLICY,
       },
     ],
     links: [
