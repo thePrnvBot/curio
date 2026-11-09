@@ -18,6 +18,8 @@ import { ChatStore } from "../services/chat-store";
 import { ChatTitleComposer } from "../services/chat-title-composer";
 import type { CourseStoreContract } from "../services/course-store";
 import { CourseStore } from "../services/course-store";
+import { LearningPreferencesStore } from "../services/learning-preferences-store";
+import type { LearningPreferencesStoreContract } from "../services/learning-preferences-store";
 import { LessonCompletion } from "../services/lesson-completion";
 import { LessonGenerator } from "../services/lesson-generator";
 import { ModelSettingsStore } from "../services/model-settings-store";
@@ -37,6 +39,7 @@ export type CurioRuntime = ManagedRuntime.ManagedRuntime<
   | ChatTitleComposer
   | ArtifactGenerator
   | CourseStore
+  | LearningPreferencesStore
   | ModelSettingsStore,
   never
 >;
@@ -57,6 +60,7 @@ export interface CurioApiDependencies {
   readonly chatRunStore: ChatRunStoreContract;
   readonly chatStore: ChatStoreContract;
   readonly courseStore: CourseStoreContract;
+  readonly learningPreferencesStore: LearningPreferencesStoreContract;
   readonly modelSettingsStore: ModelSettingsStoreContract;
 }
 
@@ -138,6 +142,10 @@ function buildCurioLayer(dependencies: CurioApiDependencies) {
     lessonCompletionLayer,
     Layer.succeed(ArtifactPublisher, artifactPublisherContract),
     courseStoreLayer,
+    Layer.succeed(
+      LearningPreferencesStore,
+      dependencies.learningPreferencesStore
+    ),
     Layer.succeed(ModelSettingsStore, dependencies.modelSettingsStore)
   );
 }

@@ -14,6 +14,7 @@ import type {
 import { createDrizzleChatRunStore } from "@curio/api/infrastructure/drizzle-chat-run-store";
 import { createDrizzleChatStore } from "@curio/api/infrastructure/drizzle-chat-store";
 import { createDrizzleCourseStore } from "@curio/api/infrastructure/drizzle-course-store";
+import { createDrizzleLearningPreferencesStore } from "@curio/api/infrastructure/drizzle-learning-preferences-store";
 import { createDrizzleModelSettingsStore } from "@curio/api/infrastructure/drizzle-model-settings-store";
 import { createMcpArtifactPublisher } from "@curio/api/infrastructure/mcp-artifact-publisher";
 import {
@@ -25,6 +26,7 @@ import { ArtifactPublisher } from "@curio/api/services/artifact-publisher";
 import { ChatModelProvider } from "@curio/api/services/chat-model-provider";
 import { ChatRunStore } from "@curio/api/services/chat-run-store";
 import { CourseStore } from "@curio/api/services/course-store";
+import { LearningPreferencesStore } from "@curio/api/services/learning-preferences-store";
 import { ModelSettingsStore } from "@curio/api/services/model-settings-store";
 import { createAuth } from "@curio/auth";
 import { createDb } from "@curio/db";
@@ -160,6 +162,7 @@ export const curioRuntime = createCurioRuntime({
   chatRunStore,
   chatStore,
   courseStore,
+  learningPreferencesStore: createDrizzleLearningPreferencesStore(db),
   modelSettingsStore: createDrizzleModelSettingsStore(db, apiKeyCipher),
 });
 
@@ -275,6 +278,28 @@ export async function createScopedCourseLesson(
     position: written.position,
     title: written.title,
   };
+}
+
+/**
+ * Loads the learner's custom instructions for the Director. A settings read
+ * failure must never block chat, so it degrades to "no custom instructions".
+ */
+export async function getScopedLearningInstructions(
+  userId: string
+): Promise<string | null> {
+  try {
+    return await curioRuntime.runPromise(
+      Effect.gen(function* resolveLearningInstructions() {
+        const store = yield* LearningPreferencesStore;
+        const preferences = yield* store.get(userId);
+        const customInstructions = preferences?.customInstructions.trim() ?? "";
+        return customInstructions === "" ? null : customInstructions;
+      })
+    );
+  } catch (error: unknown) {
+    logger.warn("Failed to load learning preferences", error);
+    return null;
+  }
 }
 
 /**

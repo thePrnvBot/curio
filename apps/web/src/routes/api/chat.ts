@@ -35,6 +35,7 @@ import {
   createScopedModel,
   curioFeatures,
   curioRuntime,
+  getScopedLearningInstructions,
   runtimeScopedArtifactPublisher,
 } from "../../services";
 import { requestSession, unauthorizedResponse } from "../../utils/api-session";
@@ -51,6 +52,7 @@ import {
 import { logger } from "../../utils/logger";
 import { checkRateLimit, rateLimitResponse } from "../../utils/rate-limit";
 import { withSecurityHeaders } from "../../utils/security-headers";
+import { buildChatInstructions } from "./-chat-instructions";
 
 /**
  * Human-in-the-loop reconstruction: an ask_user call can stay unresolved
@@ -98,40 +100,6 @@ function sanitizePendingQuestionTools(
     return mutated ? { ...message, parts: sanitizedParts } : message;
   });
 }
-
-const CHAT_INSTRUCTIONS =
-  "You are Curio, the Director - a learning guide that builds courses with the user. " +
-  "Answer clearly and use markdown for structure. " +
-  "When the user asks you to build a page, document, design, or any publishable deliverable, " +
-  "use the create_artifact tool to publish it. " +
-  "Do NOT include the artifact review link or any 'View the artifact' link in your reply text; " +
-  "the chat renders the published artifact itself as an interactive card directly below your message. " +
-  "When the user wants to learn something or asks you to create a course: first use the ask_user " +
-  "tool with at most four multiple-choice questions about their level, goal, and preferred pace; " +
-  "the UI collects the answers and they arrive in the next user message. Then create the course in " +
-  "two phases. Phase 1 - call create_course with the OUTLINE ONLY: a title, a short description, 3 to 6 " +
-  "sections (3 to 6 coherent sidebar themes) and 8 to 12 lessons (8 to 12 lesson titles with kinds " +
-  "'video', 'cards', 'animation', 'recap' or 'guided-explanation' mixed sensibly); it returns every " +
-  "lesson id. NO lesson content in this call. Phase 2 - call create_lesson once per lesson id, IN " +
-  "ORDER, passing that lesson's finished content: video walkthroughs with teaching prose (optional " +
-  "videoUrl), card decks for condensed reads, one or two interactive HTML animations across the whole " +
-  "course, recaps with 2-4 crafted quiz questions, and guided explanations for the concept or code " +
-  "walkthroughs that deserve a narrated, step-by-step reveal (guided explanation steps stay short: a " +
-  "two-sentence plain-spoken narration and one focused code excerpt per step; every code step needs " +
-  "visual.focus with 1-based line numbers and cursor.token copied verbatim from the code - the token " +
-  "is what keeps the highlight and pointer accurate; when every step reuses the same excerpt, put it " +
-  "once in content.code and omit visual.source from each step - pass content as a JSON object, never " +
-  "a stringified JSON blob). Stream the whole build without " +
-  "stopping: immediately after each create_lesson result, call create_lesson again for the next " +
-  "lesson - do not write prose between lesson calls, do not ask for confirmation, and do not end your " +
-  "turn until every lesson id from the scaffold is filled exactly once. Never skip or reorder lessons. " +
-  "Include real teaching content in every " +
-  "lesson; never leave lessons empty. When all lessons are filled, confirm to the user that the course " +
-  "is ready in the Courses tab. Never invent course creation results: only report courses that the " +
-  "create_course tool actually created. " +
-  "Use web_search when fresh or external facts matter (releases, versions, prices, news): search first, then " +
-  "web_read only the most promising urls started from web_search results, and cite sources as links in your " +
-  "answer or lesson prose.";
 
 const MAX_STREAM_STEPS = 40;
 
@@ -348,6 +316,7 @@ async function createChatResponse({
   chatId,
   chatModel,
   conversation,
+  customInstructions,
   modelMessages,
   runId,
   tools,
@@ -356,6 +325,7 @@ async function createChatResponse({
   chatId: string;
   chatModel: LanguageModel;
   conversation: UIMessage[];
+  customInstructions: string | null;
   modelMessages: ModelMessage[];
   runId: string;
   tools: Parameters<typeof streamText>[0]["tools"];
@@ -374,7 +344,7 @@ async function createChatResponse({
       // Aborts come from the stop button via the abort route, not from the
       // HTTP request: the agent keeps working when the chat is closed.
       abortSignal: runAbortController.signal,
-      instructions: CHAT_INSTRUCTIONS,
+      instructions: buildChatInstructions(customInstructions),
       messages: modelMessages,
       model: chatModel,
       // When the stop button aborts the stream, mark the run here. The
@@ -712,8 +682,12 @@ export const Route = createFileRoute("/api/chat")({
         }
 
         let chatModel: LanguageModel;
+        let customInstructions: string | null = null;
         try {
-          chatModel = await createScopedModel(userId, chatId);
+          [chatModel, customInstructions] = await Promise.all([
+            createScopedModel(userId, chatId),
+            getScopedLearningInstructions(userId),
+          ]);
         } catch (modelError: unknown) {
           const credentialMissing =
             modelError instanceof ModelCredentialRequired;
@@ -748,6 +722,7 @@ export const Route = createFileRoute("/api/chat")({
           chatId,
           chatModel,
           conversation: sanitizedConversation,
+          customInstructions,
           modelMessages,
           runId,
           tools: {

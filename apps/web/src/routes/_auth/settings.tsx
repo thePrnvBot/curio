@@ -1,6 +1,8 @@
+import { MAX_CUSTOM_INSTRUCTIONS_LENGTH } from "@curio/api/domain/learning-preferences";
 import { Badge } from "@curio/ui/components/badge";
 import { Button } from "@curio/ui/components/button";
 import { Skeleton } from "@curio/ui/components/skeleton";
+import { Textarea } from "@curio/ui/components/textarea";
 import {
   Tooltip,
   TooltipContent,
@@ -666,6 +668,110 @@ function ModelProviderSection(): ReactElement {
   );
 }
 
+/* --------------------------- learning preferences -------------------------- */
+
+function LearningPreferencesSection(): ReactElement {
+  const trpc = useTRPC();
+  const queryClient = useQueryClient();
+  const preferencesQuery = useQuery(
+    trpc.learningPreferences.get.queryOptions()
+  );
+  const [instructions, setInstructions] = useState("");
+  const [initialized, setInitialized] = useState(false);
+
+  // Initialize once from the server value; deriving the textarea from query
+  // data during render would overwrite edits on every refetch.
+  useEffect(() => {
+    if (initialized || preferencesQuery.data === undefined) {
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      setInitialized(true);
+      setInstructions(preferencesQuery.data?.customInstructions ?? "");
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [initialized, preferencesQuery.data]);
+
+  const setMutation = useMutation(
+    trpc.learningPreferences.set.mutationOptions()
+  );
+
+  if (preferencesQuery.isPending) {
+    return <Skeleton className="h-32 w-full" />;
+  }
+
+  if (preferencesQuery.isError) {
+    return (
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed px-4 py-3">
+        <p className="text-muted-foreground text-xs">
+          Could not load your learning preferences.
+        </p>
+        <Button
+          onClick={() => {
+            void preferencesQuery.refetch();
+          }}
+          size="sm"
+          variant="outline"
+        >
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
+  const savedInstructions = preferencesQuery.data?.customInstructions ?? "";
+  const isDirty = instructions.trim() !== savedInstructions.trim();
+  const isTooLong = instructions.length > MAX_CUSTOM_INSTRUCTIONS_LENGTH;
+
+  function savePreferences(): void {
+    setMutation.mutate(
+      { customInstructions: instructions },
+      {
+        onError: (mutationError) => {
+          toast.error(mutationError.message);
+        },
+        onSuccess: (saved) => {
+          queryClient.setQueryData(
+            trpc.learningPreferences.get.queryKey(),
+            saved
+          );
+          setInstructions(saved.customInstructions);
+          playInteractionCue("success");
+          toast.success("Learning preferences saved");
+        },
+      }
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <Textarea
+        aria-label="Learning preferences for the Director"
+        className="min-h-28"
+        maxLength={MAX_CUSTOM_INSTRUCTIONS_LENGTH}
+        onChange={(changeEvent) => {
+          setInstructions(changeEvent.target.value);
+        }}
+        placeholder="e.g. Explain with analogies and concrete examples. Keep lessons under 10 minutes. Quiz me every few lessons. Avoid jargon until I ask for it."
+        rows={5}
+        value={instructions}
+      />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-muted-foreground text-xs">
+          {`${instructions.length}/${MAX_CUSTOM_INSTRUCTIONS_LENGTH} · Applied to every Director chat.`}
+        </p>
+        <Button
+          disabled={!isDirty || isTooLong || setMutation.isPending}
+          onClick={savePreferences}
+          size="sm"
+        >
+          Save preferences
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 /* ------------------------------ page - rows ------------------------------- */
 
 function SettingsRoute(): ReactElement {
@@ -849,6 +955,14 @@ function SettingsRoute(): ReactElement {
               }}
             />
           )}
+        </SettingsRow>
+
+        {/* Learning preferences */}
+        <SettingsRow
+          description="Tell the Director how you learn best. These instructions are added to the agent's system prompt for every chat: pace, depth, tone, examples, and study strategies."
+          title="Learning preferences"
+        >
+          <LearningPreferencesSection />
         </SettingsRow>
 
         {/* Lesson narration */}

@@ -1,6 +1,7 @@
 import type { CurioRuntime } from "../composition/runtime";
 import { createChatsRouter } from "./chats";
 import { createCoursesRouter } from "./courses";
+import { createLearningPreferencesRouter } from "./learning-preferences";
 import { createModelSettingsRouter } from "./model-settings";
 import { publicProcedure, router } from "./trpc";
 
@@ -9,6 +10,7 @@ export function createAppRouter(runtime: CurioRuntime) {
     chats: createChatsRouter(runtime),
     courses: createCoursesRouter(runtime),
     healthCheck: publicProcedure.query(() => "OK"),
+    learningPreferences: createLearningPreferencesRouter(runtime),
     modelSettings: createModelSettingsRouter(runtime),
   });
 }
