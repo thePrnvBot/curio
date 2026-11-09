@@ -1,9 +1,7 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { isTRPCClientError } from "@trpc/client";
 
 import Chat, { ChatSkeleton } from "@/components/chat";
-import { useTRPC } from "@/utils/trpc";
 
 export const Route = createFileRoute("/_auth/chat/$chatId")({
   loader: async ({ context, params }) => {
@@ -29,8 +27,6 @@ export const Route = createFileRoute("/_auth/chat/$chatId")({
 });
 
 function ExistingChatRoute() {
-  const trpc = useTRPC();
-  const queryClient = useQueryClient();
   const { chatDetail } = Route.useLoaderData();
 
   return (
@@ -38,17 +34,6 @@ function ExistingChatRoute() {
       key={chatDetail.summary.id}
       chatId={chatDetail.summary.id}
       persistedMessages={chatDetail.messages}
-      onChatUpdated={() => {
-        void queryClient.invalidateQueries({
-          queryKey: trpc.chats.list.queryKey(),
-        });
-        void queryClient.invalidateQueries({
-          queryKey: trpc.courses.list.queryKey(),
-        });
-        void queryClient.invalidateQueries({
-          queryKey: trpc.courses.listBadges.queryKey(),
-        });
-      }}
     />
   );
 }

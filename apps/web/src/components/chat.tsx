@@ -56,7 +56,6 @@ import type { ReactNode } from "react";
 import { toast } from "sonner";
 
 import ChatSessionPanel from "@/components/chat-session-panel";
-import { ArtifactActionButton } from "@/components/chat/chat-artifact-button";
 import { ArtifactInlineView } from "@/components/chat/chat-artifact-card";
 import { ArtifactToolView } from "@/components/chat/chat-artifact-tool-card";
 import { InlineFilePartView } from "@/components/chat/chat-file-media";
@@ -452,11 +451,9 @@ ChatMessageRow.displayName = "ChatMessageRow";
 function ChatConversation({
   chatId,
   initialMessages,
-  onChatUpdated,
 }: {
   chatId: string;
   initialMessages: UIMessage[];
-  onChatUpdated?: () => void;
 }) {
   // The Chat instance lives outside the React tree: navigating away to
   // another conversation never tears an in-flight stream down, and coming
@@ -751,8 +748,8 @@ function ChatConversation({
 
         <div className="shrink-0 px-4 pb-4">
           <div className="mx-auto w-full max-w-3xl space-y-3">
-            {/* Provider lifts the textarea state so the artifact action can read
-              unsent text without prop-drilling. */}
+            {/* The provider keeps the draft text and staged attachments alive
+              while the questionnaire panel temporarily replaces the input. */}
             <PromptInputProvider>
               <PromptInput
                 accept={CHAT_ATTACHMENT_ACCEPT}
@@ -787,33 +784,6 @@ function ChatConversation({
                             <PromptInputActionAddAttachments />
                           </PromptInputActionMenuContent>
                         </PromptInputActionMenu>
-                        <ArtifactActionButton
-                          chatId={chatId}
-                          disabled={isStreaming}
-                          onPublished={(artifactResult) => {
-                            const artifactMessage: UIMessage = {
-                              id: artifactResult.messageId,
-                              parts: [
-                                {
-                                  data: {
-                                    content: artifactResult.brief.content,
-                                    mediaType: artifactResult.brief.mediaType,
-                                    reviewUrl: artifactResult.links.review,
-                                    summary: artifactResult.brief.summary,
-                                    title: artifactResult.brief.title,
-                                  },
-                                  type: "data-artifact",
-                                },
-                              ],
-                              role: "assistant",
-                            };
-                            setMessages((previousMessages) => [
-                              ...previousMessages,
-                              artifactMessage,
-                            ]);
-                            onChatUpdated?.();
-                          }}
-                        />
                         <PromptInputButton
                           aria-label="Session files"
                           className="lg:hidden"
@@ -854,11 +824,9 @@ function ChatConversation({
 
 export default function Chat({
   chatId,
-  onChatUpdated,
   persistedMessages,
 }: {
   chatId: string;
-  onChatUpdated?: () => void;
   persistedMessages?: readonly PersistedChatMessageRecord[];
 }) {
   const restoredState = useRestoredMessages(persistedMessages);
@@ -873,7 +841,6 @@ export default function Chat({
     <ChatConversation
       chatId={chatId}
       initialMessages={restoredState.messages}
-      onChatUpdated={onChatUpdated}
     />
   );
 }

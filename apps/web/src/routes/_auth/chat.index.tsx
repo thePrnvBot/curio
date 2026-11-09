@@ -1,10 +1,8 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
 import Chat, { ChatSkeleton } from "@/components/chat";
 import { subscribeToNewChat } from "@/utils/chat-runtime";
-import { useTRPC } from "@/utils/trpc";
 
 export const Route = createFileRoute("/_auth/chat/")({
   component: NewChatRoute,
@@ -28,23 +26,5 @@ function NewChatRoute() {
 }
 
 function NewChatComponent({ chatId }: { chatId: string }) {
-  const trpc = useTRPC();
-  const queryClient = useQueryClient();
-
-  return (
-    <Chat
-      chatId={chatId}
-      onChatUpdated={() => {
-        void queryClient.invalidateQueries({
-          queryKey: trpc.chats.list.queryKey(),
-        });
-        void queryClient.invalidateQueries({
-          queryKey: trpc.courses.list.queryKey(),
-        });
-        void queryClient.invalidateQueries({
-          queryKey: trpc.courses.listBadges.queryKey(),
-        });
-      }}
-    />
-  );
+  return <Chat chatId={chatId} />;
 }
