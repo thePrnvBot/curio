@@ -25,7 +25,7 @@ export type ToolProps = ComponentProps<typeof Collapsible>;
 
 export const Tool = ({ className, ...props }: ToolProps) => (
   <Collapsible
-    className={cn("group not-prose mb-2 w-full", className)}
+    className={cn("group not-prose mb-1 w-full", className)}
     {...props}
   />
 );
@@ -65,7 +65,7 @@ const statusIcons: Record<ToolPart["state"], ReactNode> = {
 };
 
 export const getStatusBadge = (status: ToolPart["state"]) => (
-  <Badge className="gap-1.5" variant="secondary">
+  <Badge className="h-4 gap-1 px-1.5 py-0" variant="secondary">
     {statusIcons[status]}
     {statusLabels[status]}
   </Badge>
@@ -85,17 +85,19 @@ export const ToolHeader = ({
   return (
     <CollapsibleTrigger
       className={cn(
-        "flex w-full items-center justify-between gap-4 p-3",
+        "flex w-full items-center justify-between gap-2 px-2 py-1.5",
         className
       )}
       {...props}
     >
-      <div className="flex items-center gap-2">
-        <WrenchIcon className="text-muted-foreground size-4" />
-        <span className="text-sm font-medium">{title ?? derivedName}</span>
+      <div className="flex min-w-0 items-center gap-1.5">
+        <WrenchIcon className="text-muted-foreground size-3.5 shrink-0" />
+        <span className="truncate text-xs font-medium">
+          {title ?? derivedName}
+        </span>
         {getStatusBadge(state)}
       </div>
-      <ChevronDownIcon className="text-muted-foreground size-4 transition-transform group-data-open:rotate-180" />
+      <ChevronDownIcon className="text-muted-foreground size-3.5 shrink-0 transition-transform group-data-open:rotate-180" />
     </CollapsibleTrigger>
   );
 };
