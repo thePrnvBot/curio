@@ -63,7 +63,9 @@ export function createModelSettingsRouter(runtime: CurioRuntime) {
           Effect.gen(function* setModelSettings() {
             const modelSettingsStore = yield* ModelSettingsStore;
             const settings = yield* modelSettingsStore.setUserModelSettings({
-              apiKey: input.apiKey ?? null,
+              // undefined preserves the saved key; null clears it. The input
+              // schema rejects empty strings, so "" never silently clears.
+              apiKey: input.apiKey,
               baseUrl:
                 input.provider === "openai-compatible"
                   ? (input.baseUrl ?? null)

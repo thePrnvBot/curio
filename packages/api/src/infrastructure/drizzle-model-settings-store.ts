@@ -78,13 +78,32 @@ export function createDrizzleModelSettingsStore(
     setUserModelSettings: ({ apiKey, baseUrl, model, provider, userId }) =>
       withModelError("setUserModelSettings")(
         Effect.tryPromise(async () => {
-          const storedApiKey =
-            apiKey === null || apiKey === "" ? null : cipher.encrypt(apiKey);
+          // undefined preserves the stored key; null clears it; any other
+          // value replaces it. Never let undefined collapse into null here.
+          let storedApiKey: string | null | undefined;
+          if (apiKey === undefined) {
+            storedApiKey = undefined;
+          } else if (apiKey === null || apiKey === "") {
+            storedApiKey = null;
+          } else {
+            storedApiKey = cipher.encrypt(apiKey);
+          }
           const insertedRows = await database
             .insert(userModelSettings)
-            .values({ apiKey: storedApiKey, baseUrl, model, provider, userId })
+            .values({
+              apiKey: storedApiKey ?? null,
+              baseUrl,
+              model,
+              provider,
+              userId,
+            })
             .onConflictDoUpdate({
-              set: { apiKey: storedApiKey, baseUrl, model, provider },
+              set: {
+                baseUrl,
+                model,
+                provider,
+                ...(storedApiKey === undefined ? {} : { apiKey: storedApiKey }),
+              },
               target: userModelSettings.userId,
             })
             .returning(settingsSelection);

@@ -38,6 +38,10 @@ import {
 import type { VoicePreferences } from "@/utils/voice/voice-manager";
 import type { VoiceCatalogEntry } from "@/utils/voice/voice-worker-protocol";
 
+import {
+  providerKeyUpdateToInput,
+  resolveProviderKeyUpdate,
+} from "./-settings-provider-key";
 import { soundToggleReducer } from "./-settings-sound-state";
 
 export const Route = createFileRoute("/_auth/settings")({
@@ -326,6 +330,69 @@ function ProviderFormFields({
   );
 }
 
+function ProviderKeyStatus({
+  clearRequested,
+  hasSavedKey,
+  typedKey,
+}: {
+  clearRequested: boolean;
+  hasSavedKey: boolean;
+  typedKey: string;
+}): ReactElement | null {
+  if (clearRequested) {
+    return (
+      <p className="text-muted-foreground text-xs">
+        The saved key will be removed when you save.
+      </p>
+    );
+  }
+  if (hasSavedKey && typedKey.trim() === "") {
+    return <p className="text-muted-foreground text-xs">Saved key in use</p>;
+  }
+  return null;
+}
+
+function ProviderActions({
+  hasSavedKey,
+  isBusy,
+  isUsingSavedProvider,
+  onRemoveKey,
+  onReset,
+  onSave,
+  saveDisabled,
+}: {
+  hasSavedKey: boolean;
+  isBusy: boolean;
+  isUsingSavedProvider: boolean;
+  onRemoveKey: () => void;
+  onReset: () => void;
+  onSave: () => void;
+  saveDisabled: boolean;
+}): ReactElement {
+  return (
+    <div className="flex items-center justify-end gap-2">
+      {hasSavedKey ? (
+        <Button
+          disabled={saveDisabled}
+          onClick={onRemoveKey}
+          size="sm"
+          variant="ghost"
+        >
+          Remove saved key
+        </Button>
+      ) : null}
+      {isUsingSavedProvider ? (
+        <Button disabled={isBusy} onClick={onReset} size="sm" variant="outline">
+          Use default
+        </Button>
+      ) : null}
+      <Button disabled={saveDisabled} onClick={onSave} size="sm">
+        Save provider
+      </Button>
+    </div>
+  );
+}
+
 function ModelProviderSection(): ReactElement {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
@@ -342,6 +409,14 @@ function ModelProviderSection(): ReactElement {
     provider: "openai",
   });
   const [formInitialized, setFormInitialized] = useState(false);
+  const [clearRequested, setClearRequested] = useState(false);
+
+  function updateForm(next: ProviderFormState): void {
+    if (next.apiKey !== form.apiKey) {
+      setClearRequested(false);
+    }
+    setForm(next);
+  }
 
   // Initialize the form from the server settings once; deriving this from
   // the query data during render would reset user edits on every render.
@@ -377,11 +452,21 @@ function ModelProviderSection(): ReactElement {
 
   const isBusy =
     setSettingsMutation.isPending || clearSettingsMutation.isPending;
+  const hasSavedKey = settingsQuery.data?.hasApiKey ?? false;
 
-  function saveProvider(): void {
+  function saveProvider({
+    clearKey = false,
+  }: {
+    clearKey?: boolean;
+  } = {}): void {
+    const keyUpdate = resolveProviderKeyUpdate({
+      clearRequested: clearKey || clearRequested,
+      hasSavedKey,
+      typedKey: form.apiKey,
+    });
     setSettingsMutation.mutate(
       {
-        apiKey: form.apiKey.trim() === "" ? null : form.apiKey.trim(),
+        apiKey: providerKeyUpdateToInput(keyUpdate),
         baseUrl: form.baseUrl.trim() === "" ? null : form.baseUrl.trim(),
         model: form.model.trim(),
         provider: form.provider,
@@ -390,7 +475,10 @@ function ModelProviderSection(): ReactElement {
         onError: (mutationError) => {
           toast.error(mutationError.message);
         },
-        onSuccess: () => {
+        onSuccess: (saved) => {
+          setClearRequested(false);
+          setForm((current) => ({ ...current, apiKey: "" }));
+          queryClient.setQueryData(trpc.modelSettings.get.queryKey(), saved);
           void queryClient.invalidateQueries({
             queryKey: trpc.modelSettings.get.queryKey(),
           });
@@ -401,12 +489,18 @@ function ModelProviderSection(): ReactElement {
     );
   }
 
+  function removeSavedKey(): void {
+    setClearRequested(true);
+    saveProvider({ clearKey: true });
+  }
+
   function resetToDefault(): void {
     clearSettingsMutation.mutate(undefined, {
       onError: (mutationError) => {
         toast.error(mutationError.message);
       },
       onSuccess: () => {
+        setClearRequested(false);
         setForm({ apiKey: "", baseUrl: "", model: "", provider: "openai" });
         void queryClient.invalidateQueries({
           queryKey: trpc.modelSettings.get.queryKey(),
@@ -491,31 +585,25 @@ function ModelProviderSection(): ReactElement {
         value={form.provider}
       />
 
-      <ProviderFormFields form={form} setForm={setForm} />
+      <ProviderFormFields form={form} setForm={updateForm} />
 
-      <div className="flex items-center justify-end gap-2">
-        {savedSettings === null ? null : (
-          <Button
-            disabled={isBusy}
-            onClick={() => {
-              resetToDefault();
-            }}
-            size="sm"
-            variant="outline"
-          >
-            Use default
-          </Button>
-        )}
-        <Button
-          disabled={isBusy || form.model.trim() === ""}
-          onClick={() => {
-            saveProvider();
-          }}
-          size="sm"
-        >
-          Save provider
-        </Button>
-      </div>
+      <ProviderKeyStatus
+        clearRequested={clearRequested}
+        hasSavedKey={hasSavedKey}
+        typedKey={form.apiKey}
+      />
+
+      <ProviderActions
+        hasSavedKey={hasSavedKey}
+        isBusy={isBusy}
+        isUsingSavedProvider={isUsingSavedProvider}
+        onRemoveKey={removeSavedKey}
+        onReset={resetToDefault}
+        onSave={() => {
+          saveProvider();
+        }}
+        saveDisabled={isBusy || form.model.trim() === ""}
+      />
     </div>
   );
 }
