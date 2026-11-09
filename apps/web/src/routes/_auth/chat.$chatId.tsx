@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { TRPCError } from "@trpc/server";
+import { isTRPCClientError } from "@trpc/client";
 
 import Chat, { ChatSkeleton } from "@/components/chat";
 import { useTRPC } from "@/utils/trpc";
@@ -15,7 +15,10 @@ export const Route = createFileRoute("/_auth/chat/$chatId")({
         await context.queryClient.ensureQueryData(queryOptions);
       return { chatDetail };
     } catch (error) {
-      if (error instanceof TRPCError && error.code === "NOT_FOUND") {
+      // The loader runs through the tRPC client on both the server and the
+      // browser, so a missing chat surfaces as a client error, not the server
+      // `TRPCError` class.
+      if (isTRPCClientError(error) && error.data?.code === "NOT_FOUND") {
         throw redirect({ to: "/chat" });
       }
       throw error;
