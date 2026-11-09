@@ -154,6 +154,19 @@ export function markChatIdle(chatId: string): void {
   emitActivityChange();
 }
 
+/**
+ * Drops every user-scoped chat instance and marker. Call on sign-out or when
+ * the authenticated user changes; component subscriptions are left intact so
+ * their existing cleanup can run.
+ */
+export function resetChatRuntime(): void {
+  instances.clear();
+  stoppedChatIds.clear();
+  resumeAttempts.clear();
+  activity.clear();
+  emitActivityChange();
+}
+
 const MAX_CACHED_CHAT_INSTANCES = 20;
 
 export function getChatInstance(

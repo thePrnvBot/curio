@@ -9,11 +9,13 @@ import {
   DropdownMenuTrigger,
 } from "@curio/ui/components/dropdown-menu";
 import { Skeleton } from "@curio/ui/components/skeleton";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { LogInIcon } from "lucide-react";
 import type { ReactElement } from "react";
 
 import { authClient } from "@/lib/auth-client";
+import { resetChatRuntime } from "@/utils/chat-runtime";
 import { playInteractionCue } from "@/utils/sound";
 
 function AccountMenuContent({
@@ -22,6 +24,7 @@ function AccountMenuContent({
   session: { user: { email: string } };
 }): ReactElement {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   return (
     <DropdownMenuContent className="bg-card">
       <DropdownMenuGroup>
@@ -35,6 +38,8 @@ function AccountMenuContent({
             authClient.signOut({
               fetchOptions: {
                 onSuccess: () => {
+                  resetChatRuntime();
+                  queryClient.clear();
                   navigate({
                     to: "/",
                   });
