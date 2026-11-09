@@ -92,7 +92,6 @@ function createRecoveryStores(
   };
 
   const chatStore: ChatStoreContract = {
-    appendMessage: () => Effect.void,
     createChat: () => Effect.die("createChat is not used by recovery"),
     deleteChat: () => Effect.void,
     ensureChatForUser: () => Effect.void,
