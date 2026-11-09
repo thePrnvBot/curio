@@ -345,6 +345,62 @@ function SessionEntryIcon({ entry }: { entry: ChatSessionEntry }) {
   return <FileIcon className="text-muted-foreground size-3.5" />;
 }
 
+/** Breathing room above a message after the transcript jumps to it. */
+const MESSAGE_SCROLL_EDGE_PADDING_PX = 16;
+
+/**
+ * Finds the nearest element that actually scrolls vertically. The chat
+ * transcript lives inside `StickToBottom.Content` (overflow: auto); walking
+ * the ancestors keeps this independent of the panel's DOM relationship.
+ */
+function findScrollableAncestor(element: HTMLElement): HTMLElement | null {
+  let ancestor = element.parentElement;
+  while (ancestor !== null) {
+    const { overflowY } = getComputedStyle(ancestor);
+    const handlesVerticalScroll =
+      overflowY === "auto" || overflowY === "scroll";
+    if (
+      handlesVerticalScroll &&
+      ancestor.scrollHeight > ancestor.clientHeight
+    ) {
+      return ancestor;
+    }
+    ancestor = ancestor.parentElement;
+  }
+  return null;
+}
+
+/**
+ * Scrolls the transcript to the message that produced a session entry.
+ *
+ * `scrollIntoView` is deliberately avoided: it scrolls every ancestor,
+ * including `overflow: hidden` ones (the Conversation shell), which leaves the
+ * entire chat offset upwards with no scrollbar to move it back. Moving only
+ * the real transcript scroller keeps the layout fixed.
+ */
+function scrollToSessionMessage(messageId: string): void {
+  const target = document.querySelector<HTMLElement>(
+    `[data-message-id="${CSS.escape(messageId)}"]`
+  );
+  if (target === null) {
+    return;
+  }
+  const scroller = findScrollableAncestor(target);
+  if (scroller === null) {
+    return;
+  }
+
+  const targetTop =
+    scroller.scrollTop +
+    target.getBoundingClientRect().top -
+    scroller.getBoundingClientRect().top -
+    MESSAGE_SCROLL_EDGE_PADDING_PX;
+  scroller.scrollTo({
+    behavior: "smooth",
+    top: Math.max(0, targetTop),
+  });
+}
+
 function SessionEntryRow({ entry }: { entry: ChatSessionEntry }) {
   const rowContent = (
     <>
@@ -381,12 +437,7 @@ function SessionEntryRow({ entry }: { entry: ChatSessionEntry }) {
     <button
       className={rowClassName}
       onClick={() => {
-        document
-          .querySelector(`[data-message-id="${entry.messageId}"]`)
-          ?.scrollIntoView({
-            behavior: "smooth",
-            block: "start",
-          });
+        scrollToSessionMessage(entry.messageId);
       }}
       title={entry.title}
       type="button"
