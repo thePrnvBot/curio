@@ -318,11 +318,21 @@ function LessonMainContent({
   );
 }
 
+/** Poll quickly while a course is filling, then back off so a stalled
+ * generation does not keep every open course tab polling forever. */
+const COURSE_POLL_INTERVAL_MS = 2500;
+const COURSE_POLL_BACKOFF_INTERVAL_MS = 30_000;
+const COURSE_POLL_BACKOFF_AFTER_MS = 10 * 60 * 1000;
+
 function CoursePageRoute() {
   const trpc = useTRPC();
   const { courseId } = Route.useParams();
   const { lesson: requestedLessonId } = Route.useSearch();
   const navigate = useNavigate();
+  const pollStartedAtRef = useRef<{
+    readonly courseId: string;
+    readonly startedAt: number;
+  } | null>(null);
 
   const courseQuery = useQuery({
     ...trpc.courses.get.queryOptions({ courseId }),
@@ -336,7 +346,20 @@ function CoursePageRoute() {
       const hasUnfilledLesson = detail.sections.some((section) =>
         section.lessons.some((lesson) => !lesson.hasContent)
       );
-      return hasUnfilledLesson ? 2500 : false;
+      if (!hasUnfilledLesson) {
+        pollStartedAtRef.current = null;
+        return false;
+      }
+      const now = Date.now();
+      const pollStartedAt = pollStartedAtRef.current;
+      if (pollStartedAt === null || pollStartedAt.courseId !== courseId) {
+        pollStartedAtRef.current = { courseId, startedAt: now };
+        return COURSE_POLL_INTERVAL_MS;
+      }
+      const elapsed = now - pollStartedAt.startedAt;
+      return elapsed > COURSE_POLL_BACKOFF_AFTER_MS
+        ? COURSE_POLL_BACKOFF_INTERVAL_MS
+        : COURSE_POLL_INTERVAL_MS;
     },
   });
   const sections = courseQuery.data?.sections ?? EMPTY_SECTIONS;
