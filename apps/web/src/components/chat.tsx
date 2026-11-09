@@ -603,7 +603,7 @@ function ChatConversation({
     void sendTextMessage(answersText);
   }
 
-  async function handleMessageSubmit(message: PromptInputMessage) {
+  function handleMessageSubmit(message: PromptInputMessage): void {
     if (Option.isSome(pendingQuestions)) {
       // The question panel owns the input while questions are unanswered
       if (message.text.trim().length > 0) {
@@ -629,15 +629,22 @@ function ChatConversation({
 
     stopSequenceRef.current += 1;
     clearChatStopped(chatId);
-    try {
-      // Attachments-only messages carry no placeholder text.
-      await (hasText
-        ? sendMessage({ files: message.files, text: message.text })
-        : sendMessage({ files: message.files }));
-      playInteractionCue("tap");
-    } catch (sendError: unknown) {
-      reportSendError(sendError);
-    }
+    playInteractionCue("tap");
+
+    // `sendMessage` resolves only once the whole response stream finishes.
+    // Returning that promise would keep the submitted text in the input until
+    // then, so dispatch it in the background and let PromptInput clear the
+    // textarea and staged attachments immediately.
+    void (async () => {
+      try {
+        // Attachments-only messages carry no placeholder text.
+        await (hasText
+          ? sendMessage({ files: message.files, text: message.text })
+          : sendMessage({ files: message.files }));
+      } catch (sendError: unknown) {
+        reportSendError(sendError);
+      }
+    })();
   }
 
   function handleMessageStop(): void {
