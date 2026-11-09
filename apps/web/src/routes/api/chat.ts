@@ -597,6 +597,10 @@ export const Route = createFileRoute("/api/chat")({
             Effect.gen(function* history() {
               const chatStore = yield* ChatStore;
               yield* chatStore.ensureChatForUser(chatId, userId);
+              // Recover before reading history: a crashed run's committed
+              // partial must be part of the transcript and model context,
+              // otherwise the submit rewrites it away.
+              yield* recoverStaleChatRun(chatId, userId);
               const messageRecords = yield* chatStore.listMessageRecords(
                 chatId,
                 userId
@@ -653,10 +657,6 @@ export const Route = createFileRoute("/api/chat")({
         const modelMessages = await convertToModelMessages(
           sanitizedConversation
         );
-
-        // A crashed process leaves a `running` row behind; recover it so the
-        // unique running-run index does not reject the next submit.
-        await curioRuntime.runPromise(recoverStaleChatRun(chatId, userId));
 
         // Atomic admission: the database refuses a second running run, so
         // two tabs or a double submit cannot both start generation.
