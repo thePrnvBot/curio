@@ -52,6 +52,7 @@ const chatModelProvider = createOpenAiCompatibleChatModelProvider({
   // OpenCode Go routes requests per conversation via this header
   modelId: ENV.AI_MODEL,
   sessionHeaderName: OPENCODE_SESSION_HEADER_NAME,
+  supportsStructuredOutputs: ENV.AI_STRUCTURED_OUTPUTS,
 });
 
 const artifactPublisher = ENV.ARTIFACT_SERVER_URL

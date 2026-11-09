@@ -127,6 +127,7 @@ Core server configuration is validated in `apps/web/src/env.server.ts`.
 | `AI_API_KEY` | yes | Server default model API key. |
 | `AI_MODEL` | yes | Model ID used by default, e.g. `gpt-4o-mini`. |
 | `AI_PROTOCOL` | no | `chat-completions` (default) or `responses`. |
+| `AI_STRUCTURED_OUTPUTS` | no | `true` (default) sends JSON Schema response formats. Set `false` for gateways that reject them. |
 | `MODEL_SETTINGS_ENCRYPTION_KEY` | no | At least 32 chars. Encrypts per-user model keys at rest; defaults to `BETTER_AUTH_SECRET` when unset. |
 | `ARTIFACT_SERVER_URL` | no | MCP endpoint of an Artifact Server, e.g. `http://127.0.0.1:8787/mcp`. Origin-only URLs are normalized to `/mcp`. Enables artifact publishing. |
 | `ARTIFACT_SERVER_API_KEY` | no | Bearer token for the Artifact Server (local token file: `artifact-server/.artifact-server/local-api-token`). |

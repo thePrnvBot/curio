@@ -16,6 +16,10 @@ export const ENV = z
     AI_PROTOCOL: z
       .enum(["chat-completions", "responses"])
       .default("chat-completions"),
+    AI_STRUCTURED_OUTPUTS: z
+      .enum(["true", "false"])
+      .default("true")
+      .transform((value) => value === "true"),
     MODEL_SETTINGS_ENCRYPTION_KEY: z
       .string()
       .min(32)

@@ -29,6 +29,11 @@ export interface OpenAiCompatibleProviderConfig {
   readonly protocol?: "chat-completions" | "responses";
   readonly providerName?: string;
   /**
+   * Whether the gateway accepts JSON Schema `response_format` requests.
+   * Defaults to false to match the OpenAI-compatible provider's behavior.
+   */
+  readonly supportsStructuredOutputs?: boolean;
+  /**
    * Gateways that route requests per conversation receive the chat id under
    * this header; see {@link OPENCODE_SESSION_HEADER_NAME}.
    */
@@ -55,6 +60,7 @@ function buildChatModel(
         headers: sessionHeaders,
         includeUsage: true,
         name: config.providerName ?? "curio-openai-compatible",
+        supportsStructuredOutputs: config.supportsStructuredOutputs,
       }).chatModel(config.modelId);
 }
 
