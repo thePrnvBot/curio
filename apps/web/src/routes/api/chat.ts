@@ -1,4 +1,5 @@
 import { toUIMessage } from "@curio/api/domain/chat";
+import { ModelCredentialRequired } from "@curio/api/domain/model-settings";
 import { createArtifactTool } from "@curio/api/infrastructure/artifact-create-tool";
 import {
   ASK_USER_TOOL_NAME,
@@ -765,7 +766,18 @@ export const Route = createFileRoute("/api/chat")({
         try {
           chatModel = await createScopedModel(userId, chatId);
         } catch (modelError: unknown) {
-          logger.error("Failed to resolve the chat model", modelError);
+          const credentialMissing =
+            modelError instanceof ModelCredentialRequired;
+          if (credentialMissing) {
+            // Misconfiguration, not a server defect: the user must supply the
+            // key for their custom endpoint. Never retry against that host.
+            logger.warn(
+              "Chat model is missing a user credential",
+              modelError.message
+            );
+          } else {
+            logger.error("Failed to resolve the chat model", modelError);
+          }
           await curioRuntime
             .runPromise(
               Effect.gen(function* failRun() {
@@ -774,6 +786,9 @@ export const Route = createFileRoute("/api/chat")({
               })
             )
             .catch(() => null);
+          if (credentialMissing) {
+            return secureJson({ error: modelError.message }, { status: 400 });
+          }
           return secureJson(
             { error: "Failed to resolve the chat model" },
             { status: 500 }

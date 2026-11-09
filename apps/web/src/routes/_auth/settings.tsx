@@ -39,9 +39,11 @@ import type { VoicePreferences } from "@/utils/voice/voice-manager";
 import type { VoiceCatalogEntry } from "@/utils/voice/voice-worker-protocol";
 
 import {
+  customProviderNeedsKey,
   providerKeyUpdateToInput,
   resolveProviderKeyUpdate,
 } from "./-settings-provider-key";
+import type { ProviderChoice } from "./-settings-provider-key";
 import { soundToggleReducer } from "./-settings-sound-state";
 
 export const Route = createFileRoute("/_auth/settings")({
@@ -69,8 +71,6 @@ const THEME_OPTIONS: {
     theme: "system",
   },
 ];
-
-type ProviderChoice = "openai" | "openai-compatible";
 
 interface ProviderFormState {
   apiKey: string;
@@ -317,7 +317,7 @@ function ProviderFormFields({
         label={
           form.provider === "openai"
             ? "API key (optional - falls back to the server key)"
-            : "API key (optional - falls back to the shared key)"
+            : "API key (required for custom endpoints)"
         }
         onChange={(value) => {
           setForm({ ...form, apiKey: value });
@@ -326,6 +326,12 @@ function ProviderFormFields({
         type="password"
         value={form.apiKey}
       />
+      {form.provider === "openai-compatible" ? (
+        <p className="text-muted-foreground text-xs sm:col-span-2">
+          Custom endpoints require your own API key. The server key is never
+          sent to a host you choose.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -537,6 +543,14 @@ function ModelProviderSection(): ReactElement {
   const { data: savedSettings } = settingsQuery;
   const isUsingSavedProvider =
     savedSettings !== null && savedSettings !== undefined;
+  // A custom endpoint needs a key saved for that same provider; the server
+  // rejects anything else. Blank still means "keep" when that key exists.
+  const needsCustomKey = customProviderNeedsKey({
+    hasApiKey: hasSavedKey,
+    provider: form.provider,
+    savedSettings,
+    typedKey: form.apiKey,
+  });
   const runtimeSettings = runtimeQuery.isError ? undefined : runtimeQuery.data;
 
   const activeModel = isUsingSavedProvider
@@ -602,7 +616,7 @@ function ModelProviderSection(): ReactElement {
         onSave={() => {
           saveProvider();
         }}
-        saveDisabled={isBusy || form.model.trim() === ""}
+        saveDisabled={isBusy || form.model.trim() === "" || needsCustomKey}
       />
     </div>
   );

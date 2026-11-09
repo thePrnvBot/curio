@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  customProviderNeedsKey,
   providerKeyUpdateToInput,
   resolveProviderKeyUpdate,
 } from "./-settings-provider-key";
@@ -103,5 +104,73 @@ describe("providerKeyUpdateToInput", () => {
         apiKey: "sk-new-12345678901234567890",
       })
     ).toBe("sk-new-12345678901234567890");
+  });
+});
+
+describe("customProviderNeedsKey", () => {
+  it("requires a key for a new custom endpoint", () => {
+    expect(
+      customProviderNeedsKey({
+        hasApiKey: false,
+        provider: "openai-compatible",
+        savedSettings: null,
+        typedKey: "",
+      })
+    ).toBe(true);
+  });
+
+  it("requires a key when only an OpenAI-provider key is saved", () => {
+    expect(
+      customProviderNeedsKey({
+        hasApiKey: true,
+        provider: "openai-compatible",
+        savedSettings: { provider: "openai" },
+        typedKey: "",
+      })
+    ).toBe(true);
+  });
+
+  it("accepts a blank field when a compatible key is saved", () => {
+    expect(
+      customProviderNeedsKey({
+        hasApiKey: true,
+        provider: "openai-compatible",
+        savedSettings: { provider: "openai-compatible" },
+        typedKey: "",
+      })
+    ).toBe(false);
+  });
+
+  it("accepts a newly typed key", () => {
+    expect(
+      customProviderNeedsKey({
+        hasApiKey: false,
+        provider: "openai-compatible",
+        savedSettings: null,
+        typedKey: "sk-user-12345678901234567890",
+      })
+    ).toBe(false);
+  });
+
+  it("treats a whitespace-only key as blank", () => {
+    expect(
+      customProviderNeedsKey({
+        hasApiKey: false,
+        provider: "openai-compatible",
+        savedSettings: null,
+        typedKey: "   ",
+      })
+    ).toBe(true);
+  });
+
+  it("does not require a key for the fixed OpenAI provider", () => {
+    expect(
+      customProviderNeedsKey({
+        hasApiKey: false,
+        provider: "openai",
+        savedSettings: null,
+        typedKey: "",
+      })
+    ).toBe(false);
   });
 });

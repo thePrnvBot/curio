@@ -3,7 +3,13 @@ import { z } from "zod";
 
 import type { CurioRuntime } from "../composition/runtime";
 import { ModelSettingsStore } from "../services/model-settings-store";
-import { protectedProcedure, respondInternalError, router } from "./trpc";
+import { resolveProviderCredential } from "./model-settings-credential";
+import {
+  protectedProcedure,
+  respondBadRequest,
+  respondInternalError,
+  router,
+} from "./trpc";
 
 const providerInputSchema = z.object({
   apiKey: z.string().min(20).max(300).optional().nullable(),
@@ -62,10 +68,31 @@ export function createModelSettingsRouter(runtime: CurioRuntime) {
         runtime.runPromise(
           Effect.gen(function* setModelSettings() {
             const modelSettingsStore = yield* ModelSettingsStore;
+            // undefined preserves the saved key; null clears it. The input
+            // schema rejects empty strings, so "" never silently clears.
+            const apiKey =
+              input.apiKey === null || input.apiKey === undefined
+                ? input.apiKey
+                : input.apiKey.trim();
+            const existingSettings =
+              input.apiKey === undefined
+                ? yield* modelSettingsStore.getUserModelSettings(
+                    ctx.session.user.id
+                  )
+                : null;
+            const credential = resolveProviderCredential({
+              apiKey,
+              baseUrl: input.baseUrl ?? null,
+              existingSettings,
+              provider: input.provider,
+            });
+            if (!credential.ok) {
+              // Fail before writing: a custom endpoint without a usable key
+              // must never fall back to the deployment key at chat time.
+              return yield* Effect.fail(credential.error);
+            }
             const settings = yield* modelSettingsStore.setUserModelSettings({
-              // undefined preserves the saved key; null clears it. The input
-              // schema rejects empty strings, so "" never silently clears.
-              apiKey: input.apiKey,
+              apiKey,
               baseUrl:
                 input.provider === "openai-compatible"
                   ? (input.baseUrl ?? null)
@@ -75,7 +102,10 @@ export function createModelSettingsRouter(runtime: CurioRuntime) {
               userId: ctx.session.user.id,
             });
             return withoutApiKey(settings);
-          }).pipe(modelSettingsErrorMapping)
+          }).pipe(
+            Effect.catchTag("ModelCredentialRequired", respondBadRequest),
+            modelSettingsErrorMapping
+          )
         )
       ),
 

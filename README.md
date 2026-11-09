@@ -134,7 +134,7 @@ Core server configuration is validated in `apps/web/src/env.server.ts`.
 | `OBSCURA_BIN` | no | Path/name of the Obscura CLI used by `web_read`. |
 | `OBSCURA_STEALTH` | no | Set to `1` to pass `--stealth` to Obscura. |
 
-Per-user model settings are stored in the `user_model_settings` table. API keys are encrypted at rest with AES-256-GCM (versioned `enc:v1:` values; legacy plaintext rows are read and re-encrypted on the next save) and are never returned by the API; responses expose only `hasApiKey`.
+Per-user model settings are stored in the `user_model_settings` table. API keys are encrypted at rest with AES-256-GCM (versioned `enc:v1:` values; legacy plaintext rows are read and re-encrypted on the next save) and are never returned by the API; responses expose only `hasApiKey`. A custom OpenAI-compatible `baseUrl` requires a per-user API key: the server `AI_API_KEY` is never sent to user-supplied hosts.
 
 ### Optional integrations
 
@@ -173,6 +173,7 @@ Per-user model settings are stored in the `user_model_settings` table. API keys 
 - Chat, course and artifact routes require an authenticated session and scope reads/writes to the session user.
 - `web_read` rejects loopback, private, link-local and reserved addresses. It cannot fully defend against DNS rebinding; if you need stronger isolation, run the reader in a network-restricted sandbox.
 - Per-user API keys are encrypted with AES-256-GCM before they are stored in Postgres. Set a dedicated `MODEL_SETTINGS_ENCRYPTION_KEY` in production and keep it stable: rotating it makes previously saved keys unreadable (users can re-enter them).
+- A custom OpenAI-compatible `baseUrl` requires a per-user API key. The server `AI_API_KEY` is never sent to user-supplied hosts. Use the server default provider if you want to rely on the deployment key.
 
 ## Contributing
 

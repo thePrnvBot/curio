@@ -42,6 +42,18 @@ export const respondNotFound = (
     })
   );
 
+/** Fails the program with a 400 for invalid client input or configuration. */
+export const respondBadRequest = (
+  domainError: Error
+): Effect.Effect<never, TRPCError> =>
+  Effect.fail(
+    new TRPCError({
+      cause: domainError,
+      code: "BAD_REQUEST",
+      message: domainError.message,
+    })
+  );
+
 /** Fails the program with a 500 for domain failures clients cannot recover from. */
 export const respondInternalError = (
   domainError: Error
