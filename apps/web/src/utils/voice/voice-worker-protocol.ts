@@ -1,5 +1,7 @@
 /** Wire protocol between the UI voice layer and the Kokoro web worker. */
 
+import type { VoiceGpuPreference } from "./voice-cache";
+
 export interface VoiceCatalogEntry {
   /** e.g. "af_heart" */
   readonly voiceId: string;
@@ -15,6 +17,11 @@ export interface VoiceCatalogEntry {
 
 export type VoiceWorkerRequest =
   | { readonly type: "catalog" }
+  | {
+      readonly gpuPreference: VoiceGpuPreference;
+      readonly type: "configure";
+    }
+  | { readonly type: "warm" }
   | {
       readonly id: number;
       readonly speed: number;

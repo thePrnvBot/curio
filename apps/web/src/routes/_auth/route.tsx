@@ -3,6 +3,7 @@ import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect } from "react";
 
 import { AppPageSkeleton } from "@/components/page-skeletons";
+import { VoiceBackgroundService } from "@/components/voice-background-service";
 import { getUser } from "@/functions/get-user";
 import { subscribeToChatFinish } from "@/utils/chat-runtime";
 import { useTRPC } from "@/utils/trpc";
@@ -54,5 +55,10 @@ function AuthLayout() {
     [queryClient, trpc]
   );
 
-  return <Outlet />;
+  return (
+    <>
+      <VoiceBackgroundService />
+      <Outlet />
+    </>
+  );
 }

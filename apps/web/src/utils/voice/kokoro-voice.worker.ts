@@ -1,9 +1,11 @@
 /// <reference lib="webworker" />
+import { env } from "@huggingface/transformers";
 import { KokoroTTS } from "kokoro-js";
 import type { GenerateOptions } from "kokoro-js";
 
-import { narrationLog } from "./voice-playback";
 import { audioLooksLikeSpeech, probeAudioSamples } from "./voice-audio-probe";
+import type { VoiceGpuPreference } from "./voice-cache";
+import { narrationLog } from "./voice-playback";
 import type {
   VoiceWorkerRequest,
   VoiceWorkerResponse,
@@ -15,18 +17,30 @@ import type {
  * to 16-bit PCM WAV on demand; results are postMessage'd back with the
  * request id.
  *
- * Device policy: WebGPU first, WASM always works. The WebGPU engine once
- * rendered full-scale static on some browsers, so the first synthesis off
- * WebGPU goes through a speech probe; any load failure or garbled output
- * blacklists WebGPU for the session and rebuilds on WASM q8, re-rendering
- * that sentence before it reaches the player.
+ * Device policy: WebGPU first (patched model, explicit adapter), WASM always
+ * works. The first synthesis off WebGPU still goes through a speech probe;
+ * any load failure or garbled output blacklists WebGPU for the session and
+ * rebuilds on WASM q8, re-rendering that sentence before it reaches the player.
  */
 
-const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
+/**
+ * ORT's WebGPU `ConvTranspose` mis-renders the vocoder upsampling layer
+ * (`generator/ups.1`), which turns every sample into garbage (peaks ~3e5+
+ * instead of ~0.6) on affected GPUs. This Apache-2.0 model is the official
+ * Kokoro fp32 graph with those ConvTranspose nodes rewritten to an equivalent
+ * zero-insertion upsample + Conv, which produces clean audio on WebGPU.
+ * WASM keeps using the official model.
+ */
+const WEBGPU_MODEL_ID = "DevAmarnadhCG/Kokoro-82M-v1.0-ONNX-webgpu";
+const WASM_MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 
 interface EnginePlan {
   readonly device: "webgpu" | "wasm";
   readonly dtype: "fp32" | "q8";
+}
+
+function modelIdForPlan(plan: EnginePlan): string {
+  return plan.device === "webgpu" ? WEBGPU_MODEL_ID : WASM_MODEL_ID;
 }
 
 /**
@@ -80,55 +94,71 @@ function isWebGpuAvailable(): boolean {
 }
 
 /**
- * onnxruntime-web requests its default GPU adapter with no options, so
- * Chromium hands out the power-saving adapter - integrated graphics on
- * laptops even while plugged in. Wrap the worker's requestAdapter once to
- * inject high-performance (discrete when present) and log what was picked,
- * while preserving any future explicit caller preference.
+ * Selected by the settings page and sent before the first synthesis. It only
+ * matters until an adapter is created; changing it later restarts the worker
+ * (the manager owns that lifecycle).
  */
-function steerGpuAdapterToDiscrete(): void {
-  const gpu = typeof navigator === "undefined" ? undefined : navigator.gpu;
-  if (
-    gpu === undefined ||
-    typeof gpu.requestAdapter !== "function" ||
-    (gpu as { curioPowerSteered?: boolean }).curioPowerSteered === true
-  ) {
-    return;
-  }
-  const originalRequestAdapter = gpu.requestAdapter.bind(gpu);
-  gpu.requestAdapter = async (
-    options?: GPURequestAdapterOptions
-  ): Promise<GPUAdapter | null> => {
-    const adapter = (await originalRequestAdapter(
-      options?.powerPreference === undefined
-        ? { ...options, powerPreference: "high-performance" }
-        : options
-    )) as
-      | (GPUAdapter & {
-          info?: { vendor?: string; architecture?: string; device?: string };
-        })
-      | null;
-    if (adapter) {
-      const adapterInfo = adapter.info;
-      narrationLog(
-        "WebGPU adapter:",
-        adapterInfo?.vendor ?? "unknown vendor",
-        adapterInfo?.architecture ?? "",
-        adapterInfo?.device ?? ""
-      );
-    } else {
-      narrationLog("WebGPU requestAdapter returned no adapter");
-    }
-    return adapter;
-  };
-  (gpu as unknown as { curioPowerSteered: boolean }).curioPowerSteered = true;
+let gpuPreference: VoiceGpuPreference = "high-performance";
+
+interface AdapterInfoLike {
+  readonly architecture?: string;
+  readonly description?: string;
+  readonly device?: string;
+  readonly vendor?: string;
 }
 
-function loadEnginePlan(plan: EnginePlan): Promise<KokoroTTS> {
+/**
+ * The proper way to pin ONNX Runtime to a GPU: request the adapter ourselves,
+ * then hand that exact adapter to `env.backends.onnx.webgpu.adapter` before
+ * the first session is created. ORT reads this value instead of making its own
+ * `requestAdapter()` call, so the settings choice cannot be overridden by the
+ * browser's default adapter.
+ */
+async function requestSelectedAdapter(): Promise<GPUAdapter | null> {
+  const gpu = typeof navigator === "undefined" ? undefined : navigator.gpu;
+  if (gpu === undefined) {
+    return null;
+  }
+  const options =
+    gpuPreference === "auto" || gpuPreference === "wasm"
+      ? undefined
+      : ({ powerPreference: gpuPreference as GPUPowerPreference } as const);
+  return await gpu.requestAdapter(options);
+}
+
+function bindAdapterToOnnxRuntime(adapter: GPUAdapter): void {
+  const onnxBackend = env.backends.onnx as unknown as
+    | { webgpu?: { adapter?: GPUAdapter } }
+    | undefined;
+  if (onnxBackend === undefined) {
+    throw new Error("ONNX Runtime backend environment is unavailable");
+  }
+  onnxBackend.webgpu = { ...onnxBackend.webgpu, adapter };
+}
+
+function logSelectedAdapter(adapter: GPUAdapter): void {
+  const { info } = adapter as unknown as { info?: AdapterInfoLike };
   narrationLog(
-    `loading Kokoro model (${plan.device} ${plan.dtype})`
+    "WebGPU adapter:",
+    info?.description ?? "",
+    info?.vendor ?? "unknown vendor",
+    info?.architecture ?? "",
+    info?.device ?? ""
   );
-  const pendingLoad = KokoroTTS.from_pretrained(MODEL_ID, {
+}
+
+async function loadEnginePlan(plan: EnginePlan): Promise<KokoroTTS> {
+  const modelId = modelIdForPlan(plan);
+  narrationLog(`loading Kokoro model (${plan.device} ${plan.dtype})`, modelId);
+  if (plan.device === "webgpu") {
+    const adapter = await requestSelectedAdapter();
+    if (adapter === null) {
+      throw new Error("No WebGPU adapter for the selected GPU preference");
+    }
+    bindAdapterToOnnxRuntime(adapter);
+    logSelectedAdapter(adapter);
+  }
+  const pendingLoad = KokoroTTS.from_pretrained(modelId, {
     // Model download is sizeable (~330MB fp32 on GPU, ~80MB q8 on WASM):
     // stream progress back so the UI keeps a "downloading narration model"
     // state across the potential two-attempt load path.
@@ -156,13 +186,17 @@ async function loadFirstAvailableEngine(): Promise<LoadedEngine> {
       continue;
     }
     const plan = ENGINE_PLAN[planIndex];
-    if (plan.device === "webgpu" && !isWebGpuAvailable()) {
+    if (
+      plan.device === "webgpu" &&
+      (gpuPreference === "wasm" || !isWebGpuAvailable())
+    ) {
       rejectedPlanIndexes.add(planIndex);
-      narrationLog("WebGPU unavailable in this worker; skipping to WASM");
+      narrationLog(
+        gpuPreference === "wasm"
+          ? "CPU-only narration selected; skipping WebGPU"
+          : "WebGPU unavailable in this worker; skipping to WASM"
+      );
       continue;
-    }
-    if (plan.device === "webgpu") {
-      steerGpuAdapterToDiscrete();
     }
     try {
       // oxlint-disable-next-line no-await-in-loop -- plan attempts are inherently sequential (the fallback engine only downloads when needed)
@@ -318,6 +352,26 @@ async function renderRequest(
 // oxlint-disable-next-line unicorn/prefer-add-event-listener -- the worker owns exactly one message protocol; the on* handler states that single-subscriber intent
 workerScope.onmessage = async (event: MessageEvent<VoiceWorkerRequest>) => {
   const request = event.data;
+  if (request.type === "configure") {
+    const { gpuPreference: nextGpuPreference } = request;
+    gpuPreference = nextGpuPreference;
+    return;
+  }
+  if (request.type === "warm") {
+    // Pay the model download/load up front so the first spoken sentence does
+    // not wait behind it. Failures surface through the next synthesis retry.
+    void (async () => {
+      try {
+        await getEngine();
+      } catch (warmError: unknown) {
+        narrationLog(
+          "warm-up failed:",
+          warmError instanceof Error ? warmError.message : String(warmError)
+        );
+      }
+    })();
+    return;
+  }
   if (request.type !== "synthesize") {
     return;
   }

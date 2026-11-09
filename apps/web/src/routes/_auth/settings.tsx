@@ -30,12 +30,20 @@ import {
 } from "@/utils/sound";
 import { useTRPC } from "@/utils/trpc";
 import {
+  detectVoiceGpus,
+  voiceGpuFallbackLabel,
+} from "@/utils/voice/voice-gpu";
+import type { VoiceGpuDetection } from "@/utils/voice/voice-gpu";
+import {
   getVoiceCatalog,
   readVoicePreferences,
   saveVoicePreferences,
   subscribeToVoicePreferences,
 } from "@/utils/voice/voice-manager";
-import type { VoicePreferences } from "@/utils/voice/voice-manager";
+import type {
+  VoiceGpuPreference,
+  VoicePreferences,
+} from "@/utils/voice/voice-manager";
 import type { VoiceCatalogEntry } from "@/utils/voice/voice-worker-protocol";
 
 import {
@@ -236,6 +244,22 @@ function providerLabel(provider: ProviderChoice | undefined): string {
     return "OpenAI";
   }
   return "OpenAI-compatible";
+}
+
+function gpuStatusMessage(detection: VoiceGpuDetection | null): string {
+  if (detection === null) {
+    return "Looking for GPUs…";
+  }
+  if (!detection.webgpuAvailable) {
+    return "WebGPU is unavailable in this browser; narration runs on CPU (WASM).";
+  }
+  if (detection.namesHidden) {
+    return "Firefox hides WebGPU adapter names for privacy. The options above are the distinct adapters Firefox exposed, chosen by power hint. ONNX Runtime's WebGPU backend is not officially supported on Firefox, so narration may fall back to CPU (WASM); choose CPU only for reliable playback.";
+  }
+  if (detection.adapters.length === 0) {
+    return "WebGPU is available but returned no adapter; narration runs on CPU (WASM).";
+  }
+  return "These are the GPUs WebGPU exposed to this page. Chrome on Windows shares one adapter with the whole browser; to force the discrete GPU, set Chrome to High performance under Windows Settings → System → Display → Graphics (or enable chrome://flags/#force-high-performance-gpu).";
 }
 
 function compareVoiceGrades(first: string, second: string): number {
@@ -658,6 +682,9 @@ function SettingsRoute(): ReactElement {
   const [voiceCatalogState, setVoiceCatalogState] = useState<
     "loading" | "ready" | "error"
   >("loading");
+  const [gpuDetection, setGpuDetection] = useState<VoiceGpuDetection | null>(
+    null
+  );
 
   // Hydration guard + initial sound preference read; these are client-only
   // values so they must be set after mount. The initial reads are scheduled
@@ -698,6 +725,21 @@ function SettingsRoute(): ReactElement {
     };
   }, []);
 
+  // Adapter discovery only powers option labels; the preference is a WebGPU
+  // power hint, not an adapter index (the web API has no such thing).
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const detection = await detectVoiceGpus();
+      if (!cancelled) {
+        setGpuDetection(detection);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   async function toggleSound(): Promise<void> {
     if (soundState.kind === "enabled") {
       disableInteractionSounds();
@@ -725,6 +767,12 @@ function SettingsRoute(): ReactElement {
   }
 
   const isNarrationEnabled = narrationPreferences.enabled;
+  const gpuAdapters = gpuDetection?.adapters ?? [];
+  const currentGpuIsListed =
+    narrationPreferences.gpuPreference === "wasm" ||
+    gpuAdapters.some(
+      (adapter) => adapter.id === narrationPreferences.gpuPreference
+    );
 
   return (
     <div className="mx-auto w-full max-w-3xl shrink-0 px-6 pt-8 pb-20">
@@ -901,6 +949,46 @@ function SettingsRoute(): ReactElement {
               </select>
             </div>
           )}
+        </SettingsRow>
+
+        {/* Narration GPU */}
+        <SettingsRow
+          description="Pick the GPU Kokoro should run on. WebGPU only exposes adapters by power hint, so this lists the actual GPU names the browser returns and pins the worker to the selected one. Changing it restarts the background worker; generated lines stay cached."
+          title="Narration GPU"
+        >
+          <div className="space-y-2">
+            <select
+              aria-label="Narration GPU"
+              className="border-border bg-background focus-visible:ring-ring h-9 w-full max-w-72 rounded-lg border px-2.5 text-sm focus-visible:ring-2 focus-visible:outline-none disabled:opacity-60"
+              disabled={!isNarrationEnabled || gpuDetection === null}
+              onChange={(changeEvent) => {
+                playInteractionCue("select", { emphasis: "subtle" });
+                saveVoicePreferences({
+                  ...narrationPreferences,
+                  gpuPreference: changeEvent.target.value as VoiceGpuPreference,
+                });
+              }}
+              value={narrationPreferences.gpuPreference}
+            >
+              {gpuDetection === null ? (
+                <option value="">Looking for GPUs…</option>
+              ) : null}
+              {gpuAdapters.map((adapter) => (
+                <option key={adapter.id} value={adapter.id}>
+                  {adapter.name}
+                </option>
+              ))}
+              {currentGpuIsListed ? null : (
+                <option value={narrationPreferences.gpuPreference}>
+                  {voiceGpuFallbackLabel(narrationPreferences.gpuPreference)}
+                </option>
+              )}
+              <option value="wasm">CPU only (WASM)</option>
+            </select>
+            <p className="text-muted-foreground text-xs">
+              {gpuStatusMessage(gpuDetection)}
+            </p>
+          </div>
         </SettingsRow>
 
         {/* Model provider */}

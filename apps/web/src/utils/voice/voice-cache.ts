@@ -9,20 +9,51 @@ import { Effect } from "effect";
 
 export type VoiceProviderId = "kokoro-web-v2";
 
+/** How the narration engine picks its compute device. WebGPU has no portable
+ * way to address a device by name, so `auto` / `high-performance` / `low-power`
+ * are the only GPU selectors and `wasm` forces the CPU engine. */
+export type VoiceGpuPreference =
+  | "auto"
+  | "high-performance"
+  | "low-power"
+  | "wasm";
+
+export const VOICE_GPU_PREFERENCES: readonly VoiceGpuPreference[] = [
+  "auto",
+  "high-performance",
+  "low-power",
+  "wasm",
+];
+
 export interface VoicePreferences {
   readonly enabled: boolean;
+  readonly gpuPreference: VoiceGpuPreference;
   readonly speed: number;
   readonly voiceId: string;
 }
 
 const VOICE_PREFERENCES_KEY = "curio-voice-preferences";
 
-/** Defaults are conservative: narration is OFF until the learner opts in. */
+/** Defaults are conservative: narration is OFF until the learner opts in.
+ * High performance preserves the previous behaviour of steering WebGPU to a
+ * discrete adapter when the machine has one. */
 export const DEFAULT_VOICE_PREFERENCES: VoicePreferences = {
   enabled: false,
+  gpuPreference: "high-performance",
   speed: 1,
   voiceId: "af_heart",
 };
+
+/** Persisted values are untrusted: anything outside the closed set falls back
+ * to the default instead of reaching `requestAdapter`. */
+export function normalizeVoiceGpuPreference(
+  value: unknown
+): VoiceGpuPreference {
+  return typeof value === "string" &&
+    (VOICE_GPU_PREFERENCES as readonly string[]).includes(value)
+    ? (value as VoiceGpuPreference)
+    : DEFAULT_VOICE_PREFERENCES.gpuPreference;
+}
 
 export function readVoicePreferences(): VoicePreferences {
   if (typeof window === "undefined") {
@@ -40,6 +71,7 @@ export function readVoicePreferences(): VoicePreferences {
     const candidate = parsed as Partial<VoicePreferences> | null;
     return {
       enabled: candidate?.enabled === true,
+      gpuPreference: normalizeVoiceGpuPreference(candidate?.gpuPreference),
       speed:
         typeof candidate?.speed === "number" && candidate.speed > 0
           ? candidate.speed
@@ -66,9 +98,7 @@ export function saveVoicePreferences(preferences: VoicePreferences): void {
   }
 }
 
-export function subscribeToVoicePreferences(
-  listener: () => void
-): () => void {
+export function subscribeToVoicePreferences(listener: () => void): () => void {
   preferenceListeners.add(listener);
   return () => {
     preferenceListeners.delete(listener);
@@ -177,8 +207,7 @@ function cacheTransaction(transaction: IDBTransaction): Promise<void> {
           resume(
             Effect.fail(
               new VoiceCacheFailedError({
-                message:
-                  transaction.error?.message ?? "cache operation failed",
+                message: transaction.error?.message ?? "cache operation failed",
               })
             )
           );

@@ -13,6 +13,7 @@ import { toSpokenNarration } from "./narration-text";
 import type { VoicePreferences } from "./voice-cache";
 import {
   readCachedUtterance,
+  readVoicePreferences,
   utteranceCacheKey,
   writeCachedUtterance,
 } from "./voice-cache";
@@ -24,7 +25,7 @@ import type {
   VoiceWorkerResponse,
 } from "./voice-worker-protocol";
 
-export type { VoicePreferences } from "./voice-cache";
+export type { VoiceGpuPreference, VoicePreferences } from "./voice-cache";
 export type { VoiceCatalogEntry } from "./voice-worker-protocol";
 
 export class VoiceSynthesisFailedError extends Error {
@@ -109,6 +110,15 @@ const pendingRequests = new Map<
   }
 >();
 
+/** Reject every in-flight request after the worker went away, so callers do
+ * not hang forever waiting for a worker that will never answer. */
+function rejectPendingRequests(failure: VoiceSynthesisFailedError): void {
+  for (const pending of pendingRequests.values()) {
+    pending.reject(failure);
+  }
+  pendingRequests.clear();
+}
+
 function ensureWorker(): Worker {
   if (workerInstance !== null) {
     return workerInstance;
@@ -158,13 +168,63 @@ function ensureWorker(): Worker {
     }
     workerInstance = null;
     setStatus({ kind: "voice-failed", message: failure.message });
-    for (const pending of pendingRequests.values()) {
-      pending.reject(failure);
-    }
-    pendingRequests.clear();
+    rejectPendingRequests(failure);
   });
+  // Configuration must reach the worker before its first synthesis (message
+  // order is preserved), so the chosen GPU is used for the initial load.
+  const configureMessage: VoiceWorkerRequest = {
+    gpuPreference: readVoicePreferences().gpuPreference,
+    type: "configure",
+  };
+  // oxlint-disable-next-line unicorn/require-post-message-target-origin
+  worker.postMessage(configureMessage);
   workerInstance = worker;
   return worker;
+}
+
+function terminateWorker(reason: string): void {
+  const worker = workerInstance;
+  workerInstance = null;
+  if (worker !== null) {
+    try {
+      worker.terminate();
+    } catch {
+      // noop guard: a worker that already crashed is already gone
+    }
+  }
+  rejectPendingRequests(
+    new VoiceSynthesisFailedError({
+      message: `voice worker stopped: ${reason}`,
+    })
+  );
+  setStatus({ kind: "idle" });
+}
+
+/** Starts the worker (and therefore the model download) without speaking,
+ * so narration is ready before the learner opens a lesson. The auth layout
+ * calls this for the whole logged-in session. */
+export function warmVoiceWorker(): void {
+  try {
+    // oxlint-disable-next-line unicorn/require-post-message-target-origin
+    ensureWorker().postMessage({ type: "warm" });
+  } catch (error: unknown) {
+    setStatus({
+      kind: "voice-failed",
+      message: error instanceof Error ? error.message : "voice worker failed",
+    });
+  }
+}
+
+/** The GPU setting is applied when a worker boots, so changing it needs a
+ * fresh worker (model files stay cached by the browser). */
+export function restartVoiceWorker(reason = "gpu preference changed"): void {
+  terminateWorker(reason);
+}
+
+/** Used when the authenticated shell unmounts (logout) so background
+ * synthesis does not keep running for a signed-out user. */
+export function stopVoiceWorker(reason = "signed out"): void {
+  terminateWorker(reason);
 }
 
 function postSynthesizeRequest(
