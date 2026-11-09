@@ -2,7 +2,6 @@ import type {
   GuidedExplanationLessonContent,
   GuidedExplanationStep,
 } from "@curio/api/domain/course";
-import { MessageResponse } from "@curio/ui/components/ai-elements/message";
 import { Button } from "@curio/ui/components/button";
 import {
   ArrowLeftIcon,
@@ -13,7 +12,7 @@ import {
   SkipForwardIcon,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import type { CSSProperties, ReactElement } from "react";
+import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -641,19 +640,6 @@ export function GuidedExplanationPlayer(props: {
     <div className="flex min-h-0 flex-1 flex-col lg:overflow-hidden">
       <div className="flex min-h-0 flex-1 [scrollbar-width:none] flex-col overflow-y-auto overscroll-contain p-6 [&::-webkit-scrollbar]:hidden">
         <div className={stageContentClass}>
-          {props.content.intro !== undefined && stepIndex === 0 && (
-            <div
-              className="text-muted-foreground mx-auto mt-2 mb-4 w-full max-w-5xl text-sm leading-relaxed"
-              style={
-                {
-                  animationDelay: "60ms",
-                } as CSSProperties
-              }
-            >
-              <MessageResponse>{props.content.intro}</MessageResponse>
-            </div>
-          )}
-
           <AnimatePresence custom={stepDirection} initial={false} mode="wait">
             <motion.div
               animate="center"
