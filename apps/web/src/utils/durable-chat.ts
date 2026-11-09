@@ -114,7 +114,7 @@ function isStaleRun(run: ChatRunRecord): boolean {
  * Reassembles a text-only assistant message from committed stream chunks,
  * matching how aborted runs persist partials.
  */
-function extractPartialAssistantMessage(
+export function extractPartialAssistantMessage(
   chunks: readonly ChatRunRecordChunk[]
 ): { id: string; parts: UIMessage["parts"]; role: "assistant" } | null {
   const textParts = new Map<string, { text: string; type: "text" }>();
@@ -313,16 +313,20 @@ export function resolveRunEndStatus(
  */
 export const commitChatRunChunks = Effect.fn("durable-chat.commitChunks")(
   function* commitChunks({
+    chatId,
     chunkStream,
     hasPersistenceFailure,
     runId,
+    userId,
   }: {
-    runId: string;
+    chatId: string;
     chunkStream: ReadableStream<UIMessageChunk>;
     /** The transcript persist hook runs in the stream's `onEnd`; a failure
      * there must make the run terminal status `error`, not `done`. */
     hasPersistenceFailure?: () => boolean;
-  }): Effect.fn.Return<ChatRunExitStatus, never, ChatRunStore> {
+    runId: string;
+    userId: string;
+  }): Effect.fn.Return<ChatRunExitStatus, never, ChatRunStore | ChatStore> {
     const chatRunStore = yield* ChatRunStore;
     let commitOutcome: CommitOutcome = { _tag: "ok" };
 
@@ -368,6 +372,21 @@ export const commitChatRunChunks = Effect.fn("durable-chat.commitChunks")(
       yield* Effect.sleep(STOP_LABEL_SETTLE);
     }
     const wasAborted = abortedRunIds.has(runId);
+    if (wasAborted) {
+      // The writer consumed the stream, so every committed delta (including
+      // the step that was in flight when the user stopped) is in the chunk
+      // log. Persist the text before the run leaves `running` so a reload
+      // after the stop does not lose what the user already saw.
+      yield* persistCommittedPartial(runId, chatId, userId).pipe(
+        Effect.catch((partialError) =>
+          Effect.logError(
+            "Failed to persist the stopped run's committed partial",
+            runId,
+            partialError
+          )
+        )
+      );
+    }
     const endStatus = resolveRunEndStatus(commitOutcome, wasAborted);
 
     yield* chatRunStore
