@@ -47,20 +47,6 @@ export interface CourseCreatedView {
   readonly title: string;
 }
 
-export interface GeneratedArtifactResponseView {
-  readonly brief: {
-    readonly content: string;
-    readonly mediaType: string;
-    readonly summary: string;
-    readonly title: string;
-  };
-  readonly links: {
-    readonly review: string;
-  };
-  /** Id of the persisted chat message carrying the inline artifact card. */
-  readonly messageId: string;
-}
-
 const PendingQuestionsPayload = Schema.Struct({
   intro: Schema.String,
   questions: Schema.Array(
@@ -89,23 +75,6 @@ const LessonChunkOutputPayload = Schema.Struct({
 const ArtifactHeightProbePayload = Schema.Struct({
   height: Schema.Number,
   type: Schema.Literal("curio-artifact-height"),
-});
-
-const GeneratedArtifactResponsePayload = Schema.Struct({
-  brief: Schema.Struct({
-    content: Schema.String,
-    mediaType: Schema.String,
-    summary: Schema.String,
-    title: Schema.String,
-  }),
-  links: Schema.Struct({
-    review: Schema.String,
-  }),
-  messageId: Schema.String,
-});
-
-const GeneratedArtifactErrorPayload = Schema.Struct({
-  error: Schema.String,
 });
 
 const ArtifactToolInputPayload = Schema.Struct({
@@ -198,24 +167,6 @@ export function decodeArtifactHeight(input: unknown): Option.Option<number> {
     decodeHeightProbePayload(input),
     (decoded) => decoded.height
   );
-}
-
-const decodeGeneratedResponse = toOptionalDecode(
-  GeneratedArtifactResponsePayload
-);
-
-export function toGeneratedArtifactResponse(
-  input: unknown
-): Option.Option<GeneratedArtifactResponseView> {
-  return decodeGeneratedResponse(input);
-}
-
-const decodeGeneratedError = toOptionalDecode(GeneratedArtifactErrorPayload);
-
-export function decodeGeneratedArtifactError(
-  input: unknown
-): Option.Option<string> {
-  return Option.map(decodeGeneratedError(input), (decoded) => decoded.error);
 }
 
 const decodeArtifactToolInput = toOptionalDecode(ArtifactToolInputPayload);
