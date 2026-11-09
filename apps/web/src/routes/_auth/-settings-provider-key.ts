@@ -7,6 +7,15 @@ export type ProviderKeyUpdate =
 export type ProviderChoice = "openai" | "openai-compatible";
 
 /**
+ * A custom endpoint cannot be saved without a key, so the explicit clear
+ * action only makes sense for the fixed OpenAI provider. Removing a custom
+ * provider goes through "Use default", which deletes the whole settings row.
+ */
+export function canRemoveProviderKey(provider: ProviderChoice): boolean {
+  return provider === "openai";
+}
+
+/**
  * A custom endpoint cannot rely on the deployment key. Save stays disabled
  * until the user supplies a key or a compatible key is already stored. Blank
  * still means "keep" when that saved key exists (plan 011), so editing just the

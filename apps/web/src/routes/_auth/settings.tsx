@@ -39,6 +39,7 @@ import type { VoicePreferences } from "@/utils/voice/voice-manager";
 import type { VoiceCatalogEntry } from "@/utils/voice/voice-worker-protocol";
 
 import {
+  canRemoveProviderKey,
   customProviderNeedsKey,
   providerKeyUpdateToInput,
   resolveProviderKeyUpdate,
@@ -339,12 +340,27 @@ function ProviderFormFields({
 function ProviderKeyStatus({
   clearRequested,
   hasSavedKey,
+  provider,
   typedKey,
 }: {
   clearRequested: boolean;
   hasSavedKey: boolean;
+  provider: ProviderChoice;
   typedKey: string;
 }): ReactElement | null {
+  if (provider === "openai-compatible" && hasSavedKey) {
+    return (
+      <div className="space-y-1">
+        {typedKey.trim() === "" ? (
+          <p className="text-muted-foreground text-xs">Saved key in use</p>
+        ) : null}
+        <p className="text-muted-foreground text-xs">
+          Custom endpoints require an API key. Use “Use default” to remove this
+          provider and its saved key.
+        </p>
+      </div>
+    );
+  }
   if (clearRequested) {
     return (
       <p className="text-muted-foreground text-xs">
@@ -359,6 +375,7 @@ function ProviderKeyStatus({
 }
 
 function ProviderActions({
+  canRemoveKey,
   hasSavedKey,
   isBusy,
   isUsingSavedProvider,
@@ -367,6 +384,7 @@ function ProviderActions({
   onSave,
   saveDisabled,
 }: {
+  canRemoveKey: boolean;
   hasSavedKey: boolean;
   isBusy: boolean;
   isUsingSavedProvider: boolean;
@@ -377,7 +395,7 @@ function ProviderActions({
 }): ReactElement {
   return (
     <div className="flex items-center justify-end gap-2">
-      {hasSavedKey ? (
+      {hasSavedKey && canRemoveKey ? (
         <Button
           disabled={saveDisabled}
           onClick={onRemoveKey}
@@ -418,7 +436,7 @@ function ModelProviderSection(): ReactElement {
   const [clearRequested, setClearRequested] = useState(false);
 
   function updateForm(next: ProviderFormState): void {
-    if (next.apiKey !== form.apiKey) {
+    if (next.apiKey !== form.apiKey || next.provider !== form.provider) {
       setClearRequested(false);
     }
     setForm(next);
@@ -590,7 +608,7 @@ function ModelProviderSection(): ReactElement {
       <SegmentedControl
         ariaLabel="Provider"
         onSelect={(value) => {
-          setForm({ ...form, provider: value as ProviderChoice });
+          updateForm({ ...form, provider: value as ProviderChoice });
         }}
         options={[
           { label: "OpenAI", value: "openai" },
@@ -604,10 +622,12 @@ function ModelProviderSection(): ReactElement {
       <ProviderKeyStatus
         clearRequested={clearRequested}
         hasSavedKey={hasSavedKey}
+        provider={form.provider}
         typedKey={form.apiKey}
       />
 
       <ProviderActions
+        canRemoveKey={canRemoveProviderKey(form.provider)}
         hasSavedKey={hasSavedKey}
         isBusy={isBusy}
         isUsingSavedProvider={isUsingSavedProvider}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canRemoveProviderKey,
   customProviderNeedsKey,
   providerKeyUpdateToInput,
   resolveProviderKeyUpdate,
@@ -172,5 +173,15 @@ describe("customProviderNeedsKey", () => {
         typedKey: "",
       })
     ).toBe(false);
+  });
+});
+
+describe("canRemoveProviderKey", () => {
+  it("allows removing a key from the fixed OpenAI provider", () => {
+    expect(canRemoveProviderKey("openai")).toBe(true);
+  });
+
+  it("does not offer remove for a custom endpoint", () => {
+    expect(canRemoveProviderKey("openai-compatible")).toBe(false);
   });
 });
