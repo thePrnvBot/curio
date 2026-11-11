@@ -70,6 +70,9 @@ import {
   PendingQuestionsPanel,
 } from "@/components/chat/chat-questions";
 import { WebToolView } from "@/components/chat/chat-web-tools";
+import { RabbitHoleHost } from "@/components/rabbit-hole/rabbit-hole-host";
+import { RabbitHolePromptNote } from "@/components/rabbit-hole/rabbit-hole-prompt-note";
+import { RabbitHoleToolCard } from "@/components/rabbit-hole/rabbit-hole-tool-card";
 import {
   CHAT_ATTACHMENT_ACCEPT,
   describeUnsupportedAttachment,
@@ -94,6 +97,7 @@ import { playInteractionCue } from "@/utils/sound";
 import { useTRPC } from "@/utils/trpc";
 import type { ArtifactUIData } from "@/utils/ui-messages";
 import { restoreUIMessages } from "@/utils/ui-messages";
+import { parseRabbitHoleUserPrompt } from "@/utils/rabbit-hole-prompt";
 
 export { ChatSkeleton } from "@/components/chat/chat-notes";
 
@@ -105,6 +109,7 @@ export interface PersistedChatMessageRecord {
 
 const TOOL_WEB_SEARCH = "tool-web_search";
 const TOOL_WEB_READ = "tool-web_read";
+const TOOL_RABBIT_HOLE = "tool-start_rabbit_hole";
 
 const CHAT_STARTER_SUGGESTIONS = [
   "Build a landing page artifact and publish it for review",
@@ -269,6 +274,9 @@ function renderStructuralPart(part: MessagePart, partIndex: number): ReactNode {
     // Director searches, completed once committed.
     return <WebToolView key={structuralKey} part={part} />;
   }
+  if (part.type === TOOL_RABBIT_HOLE) {
+    return <RabbitHoleToolCard key={structuralKey} part={part} />;
+  }
   if (part.type !== "tool-create_artifact") {
     return null;
   }
@@ -309,6 +317,15 @@ export function renderUserMessageParts(
         hasFileParts &&
         part.text.trim().toLowerCase() === "sent with attachments"
       ) {
+        continue;
+      }
+      const rabbitHolePrompt = parseRabbitHoleUserPrompt(part.text);
+      if (rabbitHolePrompt !== null) {
+        rendered.push(
+          <div className="ml-auto w-full" key={`user-rabbit-${partIndex}`}>
+            <RabbitHolePromptNote prompt={rabbitHolePrompt} />
+          </div>
+        );
         continue;
       }
       rendered.push(
@@ -823,6 +840,12 @@ function ChatConversation({
         mobileOpen={isSessionPanelOpen}
         onCloseMobile={() => {
           setIsSessionPanelOpen(false);
+        }}
+      />
+      <RabbitHoleHost
+        chatId={chatId}
+        onSendPrompt={(prompt) => {
+          void sendTextMessage(prompt);
         }}
       />
     </div>

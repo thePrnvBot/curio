@@ -389,3 +389,38 @@ export function toArtifactRenderPlan(mediaType: string): ArtifactRenderPlan {
     kind: "plain",
   }));
 }
+
+/* ------------------------------------------------------------------------
+ * Rabbit Hole tool output
+ *
+ * `start_rabbit_hole` either returns a live session id or explains why the
+ * browser could not start. The card decodes the committed output; anything
+ * malformed degrades to no card body rather than a crash.
+ * ---------------------------------------------------------------------- */
+
+const StartRabbitHoleOutputPayload = Schema.Struct({
+  message: Schema.String,
+  sessionId: Schema.NullOr(Schema.String),
+  status: Schema.Literals(["ready", "unavailable"]),
+  topic: Schema.optional(Schema.NullOr(Schema.String)),
+});
+
+export interface StartRabbitHoleOutputView {
+  readonly message: string;
+  readonly sessionId: Option.Option<string>;
+  readonly status: "ready" | "unavailable";
+}
+
+const decodeStartRabbitHoleOutput = toOptionalDecode(
+  StartRabbitHoleOutputPayload
+);
+
+export function toStartRabbitHoleOutput(
+  input: unknown
+): Option.Option<StartRabbitHoleOutputView> {
+  return Option.map(decodeStartRabbitHoleOutput(input), (decoded) => ({
+    message: decoded.message,
+    sessionId: Option.fromNullishOr(decoded.sessionId),
+    status: decoded.status,
+  }));
+}

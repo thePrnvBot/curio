@@ -38,7 +38,12 @@ export const CHAT_BASE_INSTRUCTIONS =
   "create_course tool actually created. " +
   "Use web_search when fresh or external facts matter (releases, versions, prices, news): search first, then " +
   "web_read only the most promising urls started from web_search results, and cite sources as links in your " +
-  "answer or lesson prose.";
+  "answer or lesson prose. " +
+  "Rabbit Hole: when the learner asks to start a Rabbit Hole, asks to browse or explore the web themselves, or " +
+  "wants research they drive personally, call start_rabbit_hole (optionally with a topic and 1-3 seed urls from an " +
+  "earlier web_search) and then stop and let them browse. Do not use it for quick lookups. When the session ends, " +
+  "the learner's client sends you a digest wrapped in <rabbit_hole_digest> together with their takeaways; treat that " +
+  "as captured source material for the recap or course they ask for, and never invent pages that are not in it.";
 
 /** Appends the learner's saved preferences to the Director instructions.
  * They influence teaching style only; the product rules above stay binding. */

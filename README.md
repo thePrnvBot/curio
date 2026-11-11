@@ -7,6 +7,7 @@ Curio is an AI-powered learning app. A conversational agent called **the Directo
 ## Features
 
 - **Director chat** — streaming agent chat with visible tool calls, web search, web page reading, follow-up questions and a detached/durable run model that survives a dropped connection.
+- **Rabbit Hole** — a disposable, proxied browser the learner drives themselves, with per-page capture and Director notes, digested into recap notes or a course on exit.
 - **Courses** — AI-generated courses with video, card, animation, recap/quiz and guided-explanation lessons.
 - **Artifacts** — publish generated HTML, Markdown, SVG or text documents to an optional Artifact Server and review them in a sandboxed iframe.
 - **Guided explanations** — step-by-step narrated explanations with code focus, a moving cursor and optional local text-to-speech.
@@ -143,21 +144,21 @@ Per-user model settings are stored in the `user_model_settings` table. API keys 
 
 ## Available scripts
 
-| Command              | What it does                                 |
-| -------------------- | -------------------------------------------- |
-| `pnpm dev`           | Start all workspaces in development mode.    |
-| `pnpm dev:web`       | Start only the web app.                      |
-| `pnpm build`         | Build all workspaces.                        |
-| `pnpm check-types`   | Type-check every package.                    |
+| Command              | What it does                                        |
+| -------------------- | --------------------------------------------------- |
+| `pnpm dev`           | Start all workspaces in development mode.           |
+| `pnpm dev:web`       | Start only the web app.                             |
+| `pnpm build`         | Build all workspaces.                               |
+| `pnpm check-types`   | Type-check every package.                           |
 | `pnpm check`         | Ultracite checks, workspace type checks, and tests. |
-| `pnpm lint`          | Run Oxlint.                                  |
-| `pnpm format`        | Run Oxfmt.                                   |
-| `pnpm fix`           | Apply Ultracite fixes and formatting.        |
-| `pnpm db:push`       | Push the Drizzle schema to the database.     |
-| `pnpm db:generate`   | Generate a migration from schema changes.    |
-| `pnpm db:migrate`    | Apply checked-in migrations.                 |
-| `pnpm db:studio`     | Open Drizzle Studio.                         |
-| `pnpm auth:generate` | Regenerate the Better Auth Drizzle schema.   |
+| `pnpm lint`          | Run Oxlint.                                         |
+| `pnpm format`        | Run Oxfmt.                                          |
+| `pnpm fix`           | Apply Ultracite fixes and formatting.               |
+| `pnpm db:push`       | Push the Drizzle schema to the database.            |
+| `pnpm db:generate`   | Generate a migration from schema changes.           |
+| `pnpm db:migrate`    | Apply checked-in migrations.                        |
+| `pnpm db:studio`     | Open Drizzle Studio.                                |
+| `pnpm auth:generate` | Regenerate the Better Auth Drizzle schema.          |
 
 ## Deployment notes
 

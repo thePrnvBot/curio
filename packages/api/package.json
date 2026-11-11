@@ -21,6 +21,7 @@
     "ai": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
+    "parse5": "^8.0.1",
     "zod": "catalog:"
   },
   "devDependencies": {

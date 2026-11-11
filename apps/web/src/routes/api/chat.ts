@@ -10,6 +10,7 @@ import {
   CREATE_LESSON_TOOL_NAME,
   createCourseTool,
 } from "@curio/api/infrastructure/course-create-tool";
+import { createRabbitHoleTool } from "@curio/api/infrastructure/rabbit-hole/start-tool";
 import { createWebTools } from "@curio/api/infrastructure/web-tools";
 import { ChatRunStore } from "@curio/api/services/chat-run-store";
 import { ChatStore } from "@curio/api/services/chat-store";
@@ -618,6 +619,7 @@ export const Route = createFileRoute("/api/chat")({
         });
         const questionTools = createAskUserTool();
         const webTools = createWebTools();
+        const rabbitHoleTools = createRabbitHoleTool({ chatId, userId });
 
         const sanitizedConversation =
           sanitizePendingQuestionTools(conversation);
@@ -730,6 +732,7 @@ export const Route = createFileRoute("/api/chat")({
             ...questionTools,
             ...artifactTools,
             ...webTools,
+            ...rabbitHoleTools,
           },
           userId,
         });
