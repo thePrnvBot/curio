@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" width="1200" height="300" role="img" aria-label="The five lesson kinds Curio can build: video, cards, animation, recap quiz and guided explanation">
+  <rect width="1200" height="300" fill="#0b0b0c"/>
+
+  <g font-family="Cascadia Mono, Consolas, Menlo, monospace">
+    <text x="32" y="42" fill="#a2a29e" font-size="11" letter-spacing="1.5" font-weight="600">COURSE <tspan fill="#62625f">·</tspan> ONE LESSON AT A TIME</text>
+    <text x="32" y="66" fill="#e9e9e6" font-size="17" font-weight="600">Five ways a lesson can teach.</text>
+    <text x="32" y="90" fill="#a2a29e" font-size="12">The Director picks the format that fits the idea, then fills it in while you watch.</text>
+
+    <!-- video -->
+    <rect x="32" y="122" width="216" height="142" rx="6" fill="#0b0b0c" stroke="#52524e"/>
+    <g fill="none" stroke="#62625f" stroke-width="1.3">
+      <rect x="52" y="144" width="42" height="28" rx="3"/>
+      <path d="M68 151l10 7-10 7z" fill="#62625f" stroke="none"/>
+    </g>
+    <text x="52" y="196" fill="#e9e9e6" font-size="13" font-weight="600">video</text>
+    <text x="52" y="216" fill="#a2a29e" font-size="10.5">media embed + prose</text>
+    <text x="52" y="232" fill="#62625f" font-size="10.5">watch first, read after</text>
+
+    <!-- cards -->
+    <rect x="264" y="122" width="216" height="142" rx="6" fill="#0b0b0c" stroke="#52524e"/>
+    <g fill="none" stroke="#62625f" stroke-width="1.3">
+      <rect x="284" y="146" width="26" height="24" rx="3"/>
+      <rect x="300" y="140" width="26" height="24" rx="3"/>
+    </g>
+    <text x="284" y="196" fill="#e9e9e6" font-size="13" font-weight="600">cards</text>
+    <text x="284" y="216" fill="#a2a29e" font-size="10.5">key ideas, one per card</text>
+    <text x="284" y="232" fill="#62625f" font-size="10.5">scan, then revisit</text>
+
+    <!-- animation -->
+    <rect x="496" y="122" width="216" height="142" rx="6" fill="#0b0b0c" stroke="#52524e"/>
+    <g fill="none" stroke="#62625f" stroke-width="1.3">
+      <circle cx="520" cy="158" r="9"/>
+      <path d="M538 152h24M538 158h18M538 164h22"/>
+    </g>
+    <text x="516" y="196" fill="#e9e9e6" font-size="13" font-weight="600">animation</text>
+    <text x="516" y="216" fill="#a2a29e" font-size="10.5">sandboxed interactive HTML</text>
+    <text x="516" y="232" fill="#62625f" font-size="10.5">see the mechanism move</text>
+
+    <!-- recap -->
+    <rect x="728" y="122" width="216" height="142" rx="6" fill="#0b0b0c" stroke="#52524e"/>
+    <g font-size="9" font-family="Cascadia Mono, Consolas, Menlo, monospace">
+      <rect x="748" y="144" width="13" height="13" rx="2.5" fill="none" stroke="#62625f" stroke-width="1.3"/>
+      <rect x="748" y="164" width="13" height="13" rx="2.5" fill="#15251c" stroke="#72d19a" stroke-width="1.3"/>
+      <path d="M751.5 170.5l2 2 4-4.5" fill="none" stroke="#72d19a" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="767" y="146" width="44" height="3" rx="1.5" fill="#3a3a37"/>
+      <rect x="767" y="166" width="52" height="3" rx="1.5" fill="#3a3a37"/>
+    </g>
+    <text x="748" y="196" fill="#e9e9e6" font-size="13" font-weight="600">recap</text>
+    <text x="748" y="216" fill="#a2a29e" font-size="10.5">multiple choice, graded</text>
+    <text x="748" y="232" fill="#62625f" font-size="10.5">retry until it sticks</text>
+
+    <!-- guided -->
+    <rect x="960" y="122" width="216" height="142" rx="6" fill="#0b0b0c" stroke="#52524e"/>
+    <g font-family="Cascadia Mono, Consolas, Menlo, monospace" font-size="8.5">
+      <text x="980" y="152" fill="#62625f">01</text>
+      <rect x="994" y="147" width="46" height="3" rx="1.5" fill="#3a3a37"/>
+      <text x="980" y="166" fill="#62625f">02</text>
+      <rect x="994" y="161" width="60" height="3" rx="1.5" fill="#72d19a"/>
+      <path d="M994 172l-5 5 5 5" fill="none" stroke="#72d19a" stroke-width="1.2"/>
+      <text x="980" y="180" fill="#62625f">03</text>
+      <rect x="994" y="175" width="38" height="3" rx="1.5" fill="#3a3a37"/>
+    </g>
+    <text x="980" y="196" fill="#e9e9e6" font-size="13" font-weight="600">guided explanation</text>
+    <text x="980" y="216" fill="#a2a29e" font-size="10.5">narrated steps, code focus</text>
+    <text x="980" y="232" fill="#62625f" font-size="10.5">cursor walks the excerpt</text>
+  </g>
+</svg>

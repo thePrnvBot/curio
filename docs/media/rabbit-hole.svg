@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 520" width="1200" height="520" role="img" aria-label="Rabbit Hole flow: the Director opens a proxied browser, captures the trail in memory, then turns it into recap notes or a course">
+  <defs>
+    <marker id="rh-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#e9b45a"/>
+    </marker>
+    <marker id="rh-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#8f8f8a"/>
+    </marker>
+    <marker id="rh-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#72d19a"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="520" fill="#0b0b0c"/>
+
+  <g font-family="Cascadia Mono, Consolas, Menlo, monospace">
+    <!-- header -->
+    <text x="32" y="42" fill="#a2a29e" font-size="11" letter-spacing="1.5" font-weight="600">FLOW <tspan fill="#62625f">·</tspan> RABBIT HOLE</text>
+    <text x="32" y="66" fill="#e9e9e6" font-size="17" font-weight="600">A real browser the Director can watch.</text>
+    <text x="32" y="90" fill="#a2a29e" font-size="12">No remote Chromium, no frame stream. The page runs in a proxied iframe; the learner drives, the tracker records.</text>
+
+    <!-- top machines -->
+    <g>
+      <rect x="34" y="150" width="192" height="76" rx="6" fill="#0b0b0c" stroke="#52524e"/>
+      <text x="34" y="140" fill="#e9e9e6" font-size="12.5" font-weight="600">director chat</text>
+      <path d="M60 176h38a6 6 0 0 1 6 6v14a6 6 0 0 1-6 6H72l-9 8v-8h-3a6 6 0 0 1-6-6v-14a6 6 0 0 1 6-6z" fill="none" stroke="#62625f" stroke-width="1.3"/>
+      <text x="34" y="246" fill="#a2a29e" font-size="10.5">start_rabbit_hole tool</text>
+      <text x="34" y="262" fill="#62625f" font-size="10.5">opens the overlay</text>
+
+      <rect x="284" y="150" width="236" height="76" rx="6" fill="#0b0b0c" stroke="#52524e"/>
+      <text x="284" y="140" fill="#e9e9e6" font-size="12.5" font-weight="600">local proxy</text>
+      <g stroke="#62625f" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M312 180h56"/>
+        <path d="M362 175l6 5-6 5"/>
+        <path d="M368 200h-56"/>
+        <path d="M318 195l-6 5 6 5"/>
+      </g>
+      <text x="284" y="246" fill="#a2a29e" font-size="10.5">rewrites HTML + CSS</text>
+      <text x="284" y="262" fill="#62625f" font-size="10.5">namespaced target cookies</text>
+
+      <rect x="576" y="150" width="250" height="76" rx="6" fill="#0b0b0c" stroke="#52524e"/>
+      <text x="576" y="140" fill="#e9e9e6" font-size="12.5" font-weight="600">iframe</text>
+      <g stroke="#62625f" stroke-width="1.3" fill="none">
+        <rect x="604" y="170" width="58" height="38" rx="3"/>
+        <line x1="604" y1="181" x2="662" y2="181"/>
+        <circle cx="612" cy="175.5" r="1.6" fill="#62625f"/>
+        <circle cx="619" cy="175.5" r="1.6" fill="#62625f"/>
+      </g>
+      <text x="576" y="246" fill="#a2a29e" font-size="10.5">scroll, links, forms, media</text>
+      <text x="576" y="262" fill="#62625f" font-size="10.5">sandbox &#183; no same-origin</text>
+
+      <rect x="882" y="150" width="286" height="76" rx="6" fill="#0b0b0c" stroke="#52524e"/>
+      <text x="882" y="140" fill="#e9e9e6" font-size="12.5" font-weight="600">trail</text>
+      <g fill="#62625f">
+        <circle cx="910" cy="188" r="4"/>
+        <circle cx="934" cy="188" r="4"/>
+        <circle cx="958" cy="188" r="4"/>
+      </g>
+      <line x1="914" y1="188" x2="930" y2="188" stroke="#62625f" stroke-width="1.2"/>
+      <line x1="938" y1="188" x2="954" y2="188" stroke="#62625f" stroke-width="1.2"/>
+      <text x="882" y="246" fill="#a2a29e" font-size="10.5">pages &#183; dwell &#183; scroll depth</text>
+      <text x="882" y="262" fill="#62625f" font-size="10.5">notes &#183; highlights &#183; media</text>
+    </g>
+
+    <!-- top wires -->
+    <line x1="230" y1="188" x2="278" y2="188" stroke="#e9b45a" stroke-width="1.2" marker-end="url(#rh-amber)"/>
+    <text x="232" y="180" fill="#e9b45a" font-size="10">start</text>
+
+    <line x1="524" y1="188" x2="570" y2="188" stroke="#e9b45a" stroke-width="1.2" marker-end="url(#rh-amber)"/>
+    <text x="534" y="180" fill="#e9b45a" font-size="10">load</text>
+
+    <line x1="830" y1="188" x2="876" y2="188" stroke="#8f8f8a" stroke-width="1.2" stroke-dasharray="5 4" marker-end="url(#rh-ink)"/>
+    <text x="836" y="180" fill="#a2a29e" font-size="10">track</text>
+
+    <!-- trail -> wrap-up -->
+    <line x1="1150" y1="226" x2="1150" y2="316" stroke="#72d19a" stroke-width="1.2" marker-end="url(#rh-green)"/>
+    <text x="1142" y="276" fill="#72d19a" font-size="10" text-anchor="end">end session</text>
+
+    <!-- wrap-up -->
+    <rect x="882" y="322" width="286" height="94" rx="6" fill="#0b0b0c" stroke="#52524e"/>
+    <text x="882" y="312" fill="#e9e9e6" font-size="12.5" font-weight="600">wrap-up</text>
+    <text x="896" y="348" fill="#a2a29e" font-size="10.5">digest frozen in memory</text>
+    <rect x="896" y="360" width="116" height="24" rx="4" fill="#0b0b0c" stroke="#52524e"/>
+    <text x="954" y="376" fill="#e9e9e6" font-size="10.5" text-anchor="middle">recap notes</text>
+    <rect x="1024" y="360" width="130" height="24" rx="4" fill="#0b0b0c" stroke="#52524e"/>
+    <text x="1089" y="376" fill="#e9e9e6" font-size="10.5" text-anchor="middle">build a course</text>
+    <text x="896" y="402" fill="#62625f" font-size="10">optional takeaways, then send</text>
+
+    <!-- reuse loop: wrap-up -> chat as a normal turn -->
+    <path d="M1030 416 L1030 482 Q1030 492 1020 492 L26 492 Q16 492 16 482 L16 130 Q16 120 26 120 L200 120 Q210 120 210 130 L210 146" fill="none" stroke="#e9b45a" stroke-width="1.2" stroke-dasharray="5 4" marker-end="url(#rh-amber)"/>
+    <rect x="430" y="476" width="456" height="16" fill="#0b0b0c"/>
+    <text x="430" y="488" fill="#e9b45a" font-size="10.5">trail + takeaways return as a normal chat turn</text>
+
+    <!-- retention -->
+    <text x="34" y="318" fill="#a2a29e" font-size="11" letter-spacing="1.4" font-weight="600">RETENTION</text>
+    <text x="34" y="344" fill="#62625f" font-size="10.5">45 min</text>
+    <text x="132" y="344" fill="#a2a29e" font-size="10.5">watchdog ends the session</text>
+    <text x="34" y="366" fill="#62625f" font-size="10.5">30 min after end</text>
+    <text x="192" y="366" fill="#a2a29e" font-size="10.5">raw trail purged</text>
+    <text x="34" y="388" fill="#72d19a" font-size="10.5">0 rows</text>
+    <text x="132" y="388" fill="#a2a29e" font-size="10.5">trail never written to Postgres</text>
+    <text x="34" y="420" fill="#ec6a5c" font-size="10.5">restart</text>
+    <text x="132" y="420" fill="#ec6a5c" font-size="10.5">sessions live in memory, so they are lost</text>
+  </g>
+</svg>

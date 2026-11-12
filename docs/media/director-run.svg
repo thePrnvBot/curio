@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 640" width="1200" height="640" role="img" aria-label="Sequence of one detached Director run: message, run claim, streaming tool calls, committed transcript chunks, replay on reconnect, crash recovery">
+  <defs>
+    <marker id="seq-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#e9b45a"/>
+    </marker>
+    <marker id="seq-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#72d19a"/>
+    </marker>
+    <marker id="seq-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#8f8f8a"/>
+    </marker>
+    <marker id="seq-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#ec6a5c"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="640" fill="#0b0b0c"/>
+
+  <g font-family="Cascadia Mono, Consolas, Menlo, monospace">
+    <!-- header -->
+    <text x="32" y="42" fill="#a2a29e" font-size="11" letter-spacing="1.5" font-weight="600">SEQUENCE <tspan fill="#62625f">·</tspan> ONE DIRECTOR RUN</text>
+    <text x="32" y="66" fill="#e9e9e6" font-size="17" font-weight="600">The stream is disposable. The run is not.</text>
+    <text x="32" y="90" fill="#a2a29e" font-size="12">A turn is claimed once, streamed to whichever tab is watching, and committed chunk by chunk.</text>
+
+    <!-- lifelines -->
+    <line x1="100" y1="150" x2="100" y2="612" stroke="#ffffff" stroke-opacity=".1" stroke-dasharray="3 5"/>
+    <line x1="340" y1="150" x2="340" y2="612" stroke="#ffffff" stroke-opacity=".1" stroke-dasharray="3 5"/>
+    <line x1="580" y1="150" x2="580" y2="612" stroke="#ffffff" stroke-opacity=".1" stroke-dasharray="3 5"/>
+    <line x1="820" y1="150" x2="820" y2="612" stroke="#ffffff" stroke-opacity=".1" stroke-dasharray="3 5"/>
+    <line x1="1060" y1="150" x2="1060" y2="612" stroke="#ffffff" stroke-opacity=".1" stroke-dasharray="3 5"/>
+
+    <!-- actors -->
+    <g fill="#e9e9e6" font-size="13" font-weight="600" text-anchor="middle">
+      <text x="100" y="126">learner</text>
+      <text x="340" y="126">web routes</text>
+      <text x="580" y="126">director</text>
+      <text x="820" y="126">tools &#183; model</text>
+      <text x="1060" y="126">postgres</text>
+    </g>
+    <g fill="#62625f" font-size="10.5" text-anchor="middle">
+      <text x="100" y="143">browser tab</text>
+      <text x="340" y="143">TanStack Start</text>
+      <text x="580" y="143">AI SDK agent</text>
+      <text x="820" y="143">ask_user &#183; create_*</text>
+      <text x="1060" y="143">chats &#183; courses &#183; runs</text>
+    </g>
+
+    <!-- 01 learner -> web -->
+    <line x1="100" y1="186" x2="334" y2="186" stroke="#e9b45a" stroke-width="1.2" marker-end="url(#seq-amber)"/>
+    <rect x="112" y="165" width="210" height="16" fill="#0b0b0c"/>
+    <text x="112" y="177" fill="#e9b45a" font-size="11">01 send message</text>
+    <text x="118" y="204" fill="#62625f" font-size="10">POST /api/chat</text>
+
+    <!-- 02 web -> postgres claim -->
+    <line x1="346" y1="240" x2="1054" y2="240" stroke="#72d19a" stroke-width="1.2" marker-end="url(#seq-green)"/>
+    <rect x="352" y="219" width="304" height="16" fill="#0b0b0c"/>
+    <text x="352" y="231" fill="#72d19a" font-size="11">02 claim the run <tspan fill="#62625f">&#183; one per chat</tspan></text>
+    <text x="358" y="258" fill="#62625f" font-size="10">409 if another tab is already streaming</text>
+
+    <!-- 03 web -> director -->
+    <line x1="346" y1="300" x2="574" y2="300" stroke="#e9b45a" stroke-width="1.2" marker-end="url(#seq-amber)"/>
+    <rect x="352" y="279" width="216" height="16" fill="#0b0b0c"/>
+    <text x="352" y="291" fill="#e9b45a" font-size="11">03 dispatch detached run</text>
+
+    <!-- 04 director -> tools -->
+    <line x1="586" y1="360" x2="814" y2="360" stroke="#e9b45a" stroke-width="1.2" marker-end="url(#seq-amber)"/>
+    <rect x="592" y="339" width="216" height="16" fill="#0b0b0c"/>
+    <text x="592" y="351" fill="#e9b45a" font-size="11">04 stream + call tools</text>
+    <text x="598" y="378" fill="#62625f" font-size="10">tokens reach the open tab as they land</text>
+
+    <!-- 05 director -> postgres commit -->
+    <line x1="586" y1="420" x2="1054" y2="420" stroke="#72d19a" stroke-width="1.2" marker-end="url(#seq-green)"/>
+    <rect x="592" y="399" width="356" height="16" fill="#0b0b0c"/>
+    <text x="592" y="411" fill="#72d19a" font-size="11">05 append transcript chunk <tspan fill="#62625f">&#183; repeat per chunk</tspan></text>
+
+    <!-- 06 postgres -> web replay -->
+    <line x1="1054" y1="480" x2="346" y2="480" stroke="#8f8f8a" stroke-width="1.2" stroke-dasharray="5 4" marker-end="url(#seq-ink)"/>
+    <rect x="700" y="459" width="356" height="16" fill="#0b0b0c"/>
+    <text x="700" y="471" fill="#a2a29e" font-size="11">06 reconnect replays committed parts</text>
+    <text x="704" y="498" fill="#62625f" font-size="10">GET /api/chat/:id/stream</text>
+
+    <!-- 07 done -->
+    <line x1="586" y1="540" x2="1054" y2="540" stroke="#72d19a" stroke-width="1.2" marker-end="url(#seq-green)"/>
+    <rect x="592" y="519" width="392" height="16" fill="#0b0b0c"/>
+    <text x="592" y="531" fill="#72d19a" font-size="11">07 mark done <tspan fill="#62625f">&#183; transcript already persisted</tspan></text>
+
+    <!-- crash path -->
+    <line x1="1054" y1="590" x2="346" y2="590" stroke="#ec6a5c" stroke-width="1.2" stroke-dasharray="5 4" marker-end="url(#seq-red)"/>
+    <rect x="662" y="569" width="392" height="16" fill="#0b0b0c"/>
+    <text x="662" y="581" fill="#ec6a5c" font-size="11">crash &#8594; next load replays the last committed text</text>
+  </g>
+</svg>
