@@ -8,6 +8,33 @@ function renderUserMessage(message: UIMessage): string {
   return renderToStaticMarkup(<div>{renderUserMessageParts(message)}</div>);
 }
 
+describe("user message GitHub links", () => {
+  it("renders a pasted repository link as an owner/repo chip", () => {
+    const markup = renderUserMessage({
+      id: "user-github",
+      parts: [
+        { text: "https://github.com/vercel/next.js", type: "text" },
+      ],
+      role: "user",
+    });
+
+    expect(markup).toContain('data-github-repo="vercel/next.js"');
+    expect(markup).toContain(">vercel/next.js<");
+    expect(markup).toContain('href="https://github.com/vercel/next.js"');
+  });
+
+  it("keeps non-repository links as links", () => {
+    const markup = renderUserMessage({
+      id: "user-link",
+      parts: [{ text: "https://example.com/docs", type: "text" }],
+      role: "user",
+    });
+
+    expect(markup).not.toContain("data-github-repo");
+    expect(markup).toContain("https://example.com/docs");
+  });
+});
+
 describe("user message attachments", () => {
   it("renders media on the user side without placeholder text", () => {
     const markup = renderUserMessage({

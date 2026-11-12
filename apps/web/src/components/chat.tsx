@@ -17,6 +17,7 @@ import {
   MessageContent,
   MessageResponse,
 } from "@curio/ui/components/ai-elements/message";
+import type { MessageResponseProps } from "@curio/ui/components/ai-elements/message";
 import {
   PromptInput,
   PromptInputActionAddAttachments,
@@ -28,7 +29,6 @@ import {
   PromptInputFooter,
   PromptInputProvider,
   PromptInputSubmit,
-  PromptInputTextarea,
   PromptInputTools,
 } from "@curio/ui/components/ai-elements/prompt-input";
 import type { PromptInputMessage } from "@curio/ui/components/ai-elements/prompt-input";
@@ -61,6 +61,11 @@ import { ArtifactToolView } from "@/components/chat/chat-artifact-tool-card";
 import { InlineFilePartView } from "@/components/chat/chat-file-media";
 import { PromptInputAttachmentsDisplay } from "@/components/chat/chat-input-attachments";
 import {
+  PromptInputReposDisplay,
+  PromptInputTextareaWithGitHubRepos,
+} from "@/components/chat/chat-input-repos";
+import { GitHubRepoLink } from "@/components/chat/github-repo-chip";
+import {
   ChatSkeleton,
   CourseCreatedNote,
   LessonChunkNote,
@@ -92,6 +97,8 @@ import {
   toCourseCreatedData,
   toLessonChunkData,
 } from "@/utils/chat-schemas";
+import { appendGitHubRepoRefs } from "@/utils/github-repos";
+import type { GitHubRepoRef } from "@/utils/github-repos";
 import { logger } from "@/utils/logger";
 import { playInteractionCue } from "@/utils/sound";
 import { useTRPC } from "@/utils/trpc";
@@ -110,6 +117,11 @@ export interface PersistedChatMessageRecord {
 const TOOL_WEB_SEARCH = "tool-web_search";
 const TOOL_WEB_READ = "tool-web_read";
 const TOOL_RABBIT_HOLE = "tool-start_rabbit_hole";
+
+/** GitHub repository links in user messages render as repo chips. */
+const USER_MESSAGE_COMPONENTS = {
+  a: GitHubRepoLink,
+} as NonNullable<MessageResponseProps["components"]>;
 
 const CHAT_STARTER_SUGGESTIONS = [
   "Build a landing page artifact and publish it for review",
@@ -330,7 +342,9 @@ export function renderUserMessageParts(
       }
       rendered.push(
         <MessageContent key={`user-text-${partIndex}`}>
-          <MessageResponse>{part.text}</MessageResponse>
+          <MessageResponse components={USER_MESSAGE_COMPONENTS}>
+            {part.text}
+          </MessageResponse>
         </MessageContent>
       );
       continue;
@@ -494,6 +508,28 @@ function ChatConversation({
   useEffect(() => {
     isStreamingRef.current = isStreaming;
   }, [isStreaming]);
+  // GitHub links pasted into the composer become chips; the URL is appended
+  // to the outgoing message so the Director still receives the full link.
+  const [stagedRepos, setStagedRepos] = useState<readonly GitHubRepoRef[]>([]);
+  const stageRepos = useCallback((repos: readonly GitHubRepoRef[]) => {
+    setStagedRepos((previous) => {
+      const staged = new Set(
+        previous.map((repo) => repo.slug.toLowerCase())
+      );
+      const additions = repos.filter(
+        (repo) => !staged.has(repo.slug.toLowerCase())
+      );
+      return additions.length === 0 ? previous : [...previous, ...additions];
+    });
+  }, []);
+  const removeStagedRepo = useCallback((repo: GitHubRepoRef) => {
+    setStagedRepos((previous) =>
+      previous.filter(
+        (candidate) =>
+          candidate.slug.toLowerCase() !== repo.slug.toLowerCase()
+      )
+    );
+  }, []);
   const reportSendError = useCallback((sendError: unknown) => {
     logger.error("Failed to send chat message", sendError);
     playInteractionCue("error", { emphasis: "subtle" });
@@ -629,7 +665,8 @@ function ChatConversation({
       return;
     }
 
-    const hasText = message.text.trim().length > 0;
+    const messageText = appendGitHubRepoRefs(message.text, stagedRepos);
+    const hasText = messageText.trim().length > 0;
 
     if (!hasText && message.files.length === 0) {
       toast.error("Write a message first");
@@ -647,6 +684,7 @@ function ChatConversation({
     stopSequenceRef.current += 1;
     clearChatStopped(chatId);
     playInteractionCue("tap");
+    setStagedRepos([]);
 
     // `sendMessage` resolves only once the whole response stream finishes.
     // Returning that promise would keep the submitted text in the input until
@@ -656,7 +694,7 @@ function ChatConversation({
       try {
         // Attachments-only messages carry no placeholder text.
         await (hasText
-          ? sendMessage({ files: message.files, text: message.text })
+          ? sendMessage({ files: message.files, text: messageText })
           : sendMessage({ files: message.files }));
       } catch (sendError: unknown) {
         reportSendError(sendError);
@@ -797,8 +835,15 @@ function ChatConversation({
                 ) : (
                   <>
                     <PromptInputAttachmentsDisplay />
+                    <PromptInputReposDisplay
+                      onRemove={removeStagedRepo}
+                      repos={stagedRepos}
+                    />
                     <PromptInputBody>
-                      <PromptInputTextarea placeholder="Ask Curio anything..." />
+                      <PromptInputTextareaWithGitHubRepos
+                        onStageRepos={stageRepos}
+                        placeholder="Ask Curio anything..."
+                      />
                     </PromptInputBody>
                     <PromptInputFooter>
                       <PromptInputTools>

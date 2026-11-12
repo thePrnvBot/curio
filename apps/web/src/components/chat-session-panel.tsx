@@ -20,6 +20,7 @@ import {
   toWebReadToolUrl,
   toWebSearchToolOutput,
 } from "@/utils/chat-schemas";
+import { trimUrlPunctuation } from "@/utils/links";
 
 type SessionEntryKind =
   | "artifact"
@@ -117,20 +118,6 @@ function pushInlineDataArtifactEntry(
 }
 
 const HTTP_URL_PATTERN = /\bhttps?:\/\/[^\s<>"'`]+/giu;
-
-/** Trims sentence punctuation and unmatched closing parentheses off a match. */
-function trimUrlPunctuation(candidate: string): string {
-  let url = candidate.replace(/[.,;:!?]+$/u, "");
-  while (url.endsWith(")")) {
-    const opens = url.match(/\(/gu)?.length ?? 0;
-    const closes = url.match(/\)/gu)?.length ?? 0;
-    if (closes <= opens) {
-      break;
-    }
-    url = url.slice(0, -1);
-  }
-  return url;
-}
 
 /** Every http(s) URL in a message part, including markdown links. */
 function extractUrls(text: string): readonly string[] {

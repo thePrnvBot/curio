@@ -28,6 +28,7 @@ import {
   useState,
 } from "react";
 import { Streamdown } from "streamdown";
+import type { Components } from "streamdown";
 
 import { streamdownCodePlugin } from "./streamdown-code-plugin";
 
@@ -351,13 +352,17 @@ export function SafeMarkdownImage({
 const streamdownComponents = { img: SafeMarkdownImage };
 
 export const MessageResponse = memo(
-  ({ className, ...props }: MessageResponseProps) => (
+  ({ className, components, ...props }: MessageResponseProps) => (
     <Streamdown
       className={cn(
         "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
         className
       )}
-      components={streamdownComponents}
+      // Callers can swap individual renderers while the image-safety default
+      // stays in place for everything else.
+      components={
+        { ...streamdownComponents, ...components } as Components
+      }
       plugins={streamdownPlugins}
       {...props}
     />
