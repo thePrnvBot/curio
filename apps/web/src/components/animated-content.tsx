@@ -55,6 +55,19 @@ const AnimatedContent: React.FC<AnimatedContentProps> = ({
       return;
     }
 
+    const reduceMotion =
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    if (reduceMotion) {
+      gsap.set(el, {
+        opacity: 1,
+        scale: 1,
+        visibility: "visible",
+        x: 0,
+        y: 0,
+      });
+      return;
+    }
+
     let scrollerTarget: Element | string | null =
       container || document.querySelector("#snap-main-container") || null;
 

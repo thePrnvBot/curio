@@ -20,8 +20,8 @@ export function LessonContentSkeleton(): ReactElement {
 
 export function CoursePageSkeleton(): ReactElement {
   return (
-    <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] md:grid-cols-[300px_1fr]">
-      <div className="space-y-6 border-r px-5 py-6">
+    <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] md:grid-cols-[280px_1fr]">
+      <div className="bg-sidebar border-border/70 space-y-7 border-r px-4 py-5">
         <Skeleton className="h-4 w-24" />
         <div className="space-y-2">
           <Skeleton className="h-6 w-40" />
@@ -35,7 +35,7 @@ export function CoursePageSkeleton(): ReactElement {
         </div>
       </div>
       <div>
-        <div className="mx-auto max-w-5xl px-6 py-10">
+        <div className="mx-auto max-w-3xl px-6 py-10 lg:py-12">
           <LessonContentSkeleton />
         </div>
       </div>
@@ -50,12 +50,14 @@ export function MissingCourseNotice(props: {
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center px-6">
       <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold">{props.title}</h1>
+        <h1 className="text-[22px] font-semibold tracking-[-0.02em]">
+          {props.title}
+        </h1>
         <p className="text-muted-foreground mt-2 text-sm">
           {props.description}
         </p>
         <Link
-          className="text-primary mt-4 inline-block text-sm font-medium underline"
+          className="text-foreground hover:text-brand mt-4 inline-block text-[13px] font-medium underline underline-offset-4 transition-colors"
           to="/courses"
         >
           Back to courses

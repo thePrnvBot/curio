@@ -27,9 +27,10 @@ function chatRowClass({
   isActive: boolean;
   isStreamingRow: boolean;
 }): string {
-  const base = "hover:bg-muted min-w-0 flex-1 truncate px-2 py-1.5 text-xs";
+  const base =
+    "hover:bg-muted min-w-0 flex-1 truncate rounded-md px-2 py-1.5 text-[13px] transition-colors duration-150";
   if (isActive) {
-    return `${base} bg-muted font-medium`;
+    return `${base} bg-muted text-foreground font-medium`;
   }
   if (isStreamingRow) {
     return `${base} text-foreground`;
@@ -110,7 +111,7 @@ export default function ChatSidebar() {
 
   if (isCollapsed) {
     return (
-      <aside className="bg-sidebar hidden h-full w-10 shrink-0 flex-col items-center border-r py-2 md:flex">
+      <aside className="bg-sidebar border-border/70 hidden h-full w-11 shrink-0 flex-col items-center border-r py-2 md:flex">
         {collapseToggle}
         <Button
           className="mt-2"
@@ -126,7 +127,7 @@ export default function ChatSidebar() {
             className="bg-muted relative mx-auto mt-auto h-1 w-6 overflow-hidden rounded-full"
             title={`${streamingChats.length} chat${streamingChats.length === 1 ? "" : "s"} working`}
           >
-            <div className="animate-chat-activity-sweep via-primary absolute inset-y-0 left-0 h-full w-1/3 rounded-full bg-gradient-to-r from-transparent to-transparent" />
+            <div className="animate-chat-activity-sweep via-brand absolute inset-y-0 left-0 h-full w-1/3 rounded-full bg-gradient-to-r from-transparent to-transparent" />
           </div>
         )}
       </aside>
@@ -157,9 +158,9 @@ export default function ChatSidebar() {
         />
       )}
       <aside
-        className={`bg-sidebar h-full w-64 shrink-0 flex-col border-r max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:w-72 max-md:shadow-xl ${isMobileOpen ? "max-md:flex" : "max-md:hidden"} md:flex`}
+        className={`bg-sidebar border-border/70 h-full w-64 shrink-0 flex-col border-r max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:w-72 max-md:shadow-xl ${isMobileOpen ? "max-md:flex" : "max-md:hidden"} md:flex`}
       >
-        <div className="flex items-center justify-between px-3 py-3">
+        <div className="flex items-center justify-between px-3 py-2.5">
           <Button
             aria-label="Close chats"
             className="md:hidden"
@@ -171,7 +172,7 @@ export default function ChatSidebar() {
           >
             <XIcon />
           </Button>
-          <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+          <span className="text-muted-foreground text-[11px] font-medium tracking-[0.08em] uppercase">
             Chats
           </span>
           <div className="flex items-center gap-1">
@@ -189,7 +190,7 @@ export default function ChatSidebar() {
             {collapseToggle}
           </div>
         </div>
-        <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-2">
+        <nav className="flex-1 space-y-0.5 overflow-y-auto overscroll-none px-2 pb-2">
           {chatsQuery.isLoading && (
             <div aria-busy="true" className="space-y-0.5 p-2">
               {[0, 1, 2, 3].map((chatRow) => (
@@ -204,7 +205,7 @@ export default function ChatSidebar() {
             <div className="text-muted-foreground space-y-2 p-2 text-xs">
               <p>Could not load chats.</p>
               <button
-                className="border-border hover:bg-accent focus-visible:ring-ring rounded-md border px-2 py-1 font-medium focus-visible:ring-2 focus-visible:outline-none"
+                className="border-border hover:bg-muted focus-visible:ring-ring rounded-md border px-2 py-1 font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
                 onClick={() => {
                   void chatsQuery.refetch();
                 }}
@@ -225,14 +226,14 @@ export default function ChatSidebar() {
               <div
                 className={
                   isStreamingRow
-                    ? "border-primary/20 bg-primary/5 group/link relative flex items-center overflow-hidden border-b"
+                    ? "border-brand/20 bg-brand/5 group/link relative flex items-center overflow-hidden rounded-md border-b"
                     : "group/link flex items-center"
                 }
                 key={chat.id}
               >
                 {isStreamingRow && (
                   <div className="bg-muted/50 absolute inset-x-0 bottom-0 h-0.5 overflow-hidden rounded-full">
-                    <div className="animate-chat-activity-sweep via-primary absolute inset-y-0 left-0 h-full w-1/3 bg-gradient-to-r from-transparent to-transparent" />
+                    <div className="animate-chat-activity-sweep via-brand absolute inset-y-0 left-0 h-full w-1/3 bg-gradient-to-r from-transparent to-transparent" />
                   </div>
                 )}
                 <Link

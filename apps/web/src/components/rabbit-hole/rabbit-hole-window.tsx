@@ -648,7 +648,7 @@ export function RabbitHoleWindow({
         aria-label="Rabbit Hole"
         aria-modal="true"
         className={cn(
-          "bg-background text-foreground static m-0 flex w-full flex-col overflow-hidden border p-0 shadow-2xl transition-[max-width,max-height,border-radius] duration-200",
+          "bg-background text-foreground border-border/80 static m-0 flex w-full flex-col overflow-hidden border p-0 shadow-2xl shadow-black/20 transition-[max-width,max-height,border-radius] duration-200",
           expanded
             ? "h-full max-h-screen max-w-none rounded-none"
             : "h-[88vh] max-h-[980px] max-w-[1540px] rounded-2xl"
@@ -656,14 +656,16 @@ export function RabbitHoleWindow({
         open
       >
         {/* Top bar */}
-        <header className="flex shrink-0 items-center gap-2 border-b px-3 py-2">
+        <header className="border-border/70 flex shrink-0 items-center gap-2 border-b px-3.5 py-2">
           <div className="flex min-w-0 items-center gap-2">
-            <span className="bg-primary/10 text-primary flex size-7 shrink-0 items-center justify-center rounded-full">
+            <span className="bg-muted text-foreground flex size-7 shrink-0 items-center justify-center rounded-lg">
               <RabbitIcon className="size-4" />
             </span>
             <div className="hidden min-w-0 sm:block">
-              <p className="text-xs leading-tight font-semibold">Rabbit Hole</p>
-              <p className="text-muted-foreground max-w-[220px] truncate text-[10px] leading-tight">
+              <p className="text-[13px] leading-tight font-medium">
+                Rabbit Hole
+              </p>
+              <p className="text-muted-foreground max-w-[220px] truncate text-[11px] leading-tight">
                 {browser?.topic ?? "Open exploration"}
               </p>
             </div>
@@ -704,7 +706,7 @@ export function RabbitHoleWindow({
               <form className="min-w-0 flex-1" onSubmit={submitAddress}>
                 <Input
                   aria-label="Address"
-                  className="bg-muted/40 h-7 w-full font-mono text-[11px]"
+                  className="bg-muted/40 h-8 w-full font-mono text-[11px]"
                   onBlur={() => {
                     setAddressDraft(null);
                   }}
@@ -767,14 +769,16 @@ export function RabbitHoleWindow({
         </header>
 
         {phase === "wrapup" && endPayload !== null ? (
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-none">
             <div className="mx-auto w-full max-w-3xl space-y-5 p-5 sm:p-8">
               <div className="space-y-1">
-                <p className="text-muted-foreground flex items-center gap-1.5 text-[10px] font-medium tracking-[0.14em] uppercase">
+                <p className="section-label flex items-center gap-1.5">
                   <RabbitIcon className="size-3.5" />
                   Session digested
                 </p>
-                <h2 className="text-xl font-semibold">{endedState}</h2>
+                <h2 className="text-[24px] leading-tight font-semibold tracking-[-0.025em]">
+                  {endedState}
+                </h2>
                 {stats !== undefined && (
                   <p className="text-muted-foreground text-xs">
                     {stats.pages} pages ·{" "}
@@ -784,7 +788,7 @@ export function RabbitHoleWindow({
                 )}
               </div>
 
-              <div className="bg-card rounded-xl border p-4 text-sm sm:p-5">
+              <div className="surface-card p-4 text-[14px] leading-7 sm:p-5">
                 <MessageResponse>{endPayload.digest}</MessageResponse>
               </div>
 
@@ -916,7 +920,7 @@ export function RabbitHoleWindow({
             {/* Director sidebar */}
             <aside className="border-border flex max-h-[42%] w-full shrink-0 flex-col border-t lg:max-h-none lg:w-[336px] lg:border-t-0 lg:border-l">
               <div className="flex shrink-0 items-center justify-between px-3 pt-3 pb-1">
-                <p className="text-[10px] font-medium tracking-[0.14em] uppercase">
+                <p className="text-[11px] font-medium tracking-[0.08em] uppercase">
                   Director notes
                 </p>
                 <span className="text-muted-foreground text-[10px]">
@@ -955,7 +959,7 @@ export function RabbitHoleWindow({
                 </Button>
               </div>
 
-              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 pb-2">
+              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-none px-3 pb-2">
                 {notes.length === 0 ? (
                   <p className="text-muted-foreground text-[11px] leading-relaxed">
                     Notes are pinned to the page you are looking at and weighted
@@ -986,14 +990,14 @@ export function RabbitHoleWindow({
 
               <div className="border-border shrink-0 border-t">
                 <div className="flex items-center justify-between px-3 pt-2 pb-1">
-                  <p className="text-[10px] font-medium tracking-[0.14em] uppercase">
+                  <p className="text-[11px] font-medium tracking-[0.08em] uppercase">
                     Trail
                   </p>
                   <span className="text-muted-foreground text-[10px]">
                     {visits.length}
                   </span>
                 </div>
-                <div className="max-h-44 overflow-y-auto px-2 pb-2">
+                <div className="max-h-44 overflow-y-auto overscroll-none px-2 pb-2">
                   {visits.length === 0 ? (
                     <p className="text-muted-foreground px-1 pb-1 text-[11px]">
                       Pages appear here as you browse.
@@ -1031,8 +1035,8 @@ export function RabbitHoleWindow({
               </div>
 
               {highlights.length > 0 && (
-                <div className="border-border max-h-40 shrink-0 overflow-y-auto border-t px-3 py-2">
-                  <p className="text-muted-foreground mb-1 text-[10px] font-medium tracking-[0.14em] uppercase">
+                <div className="border-border max-h-40 shrink-0 overflow-y-auto overscroll-none border-t px-3 py-2">
+                  <p className="text-muted-foreground mb-1 text-[11px] font-medium tracking-[0.08em] uppercase">
                     Highlights
                   </p>
                   <ul className="space-y-1.5">

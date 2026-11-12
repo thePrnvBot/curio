@@ -731,14 +731,14 @@ function ChatConversation({
     <div className="flex size-full">
       <div className="flex min-w-0 flex-1 flex-col">
         <Conversation className="flex-1">
-          <ConversationContent className="mx-auto flex w-full max-w-3xl flex-col px-4 py-6">
+          <ConversationContent className="mx-auto flex w-full max-w-3xl flex-col px-5 py-8">
             {messages.length === 0 && (
               <>
                 <ConversationEmptyState
                   className="min-h-[50vh] flex-1"
                   description="Type a message below to get started."
                   icon={<SparklesIcon className="size-6" />}
-                  title="What can I help you with?"
+                  title="What do you want to learn?"
                 />
                 {!isStreaming && (
                   <Suggestions className="mx-auto max-w-2xl justify-center px-2">
@@ -770,7 +770,7 @@ function ChatConversation({
           <ConversationScrollButton />
         </Conversation>
 
-        <div className="shrink-0 px-4 pb-4">
+        <div className="shrink-0 px-5 pb-5">
           <div className="mx-auto w-full max-w-3xl space-y-3">
             {/* The provider keeps the draft text and staged attachments alive
               while the questionnaire panel temporarily replaces the input. */}

@@ -37,7 +37,7 @@ function progressDotClass(isAnswered: boolean, isCurrent: boolean): string {
     return "bg-foreground size-2 rounded-full";
   }
   if (isAnswered) {
-    return "bg-primary size-2 rounded-full";
+    return "bg-brand size-2 rounded-full";
   }
   return "bg-muted-foreground/40 size-2 rounded-full";
 }
@@ -93,7 +93,7 @@ export function PendingQuestionsPanel({
       data-align="block-start"
     >
       <div className="mb-3 flex items-start justify-between gap-3">
-        <p className="text-muted-foreground text-sm leading-relaxed">
+        <p className="text-muted-foreground text-[13.5px] leading-6">
           {pendingQuestions.intro}
         </p>
         <p className="text-muted-foreground shrink-0 text-xs tabular-nums">
@@ -104,7 +104,7 @@ export function PendingQuestionsPanel({
       {/* Fixed-size stage: the header and progress row stay put while
         stepping, and longer question/option sets scroll inside the reserved
         box instead of shifting the surrounding input. */}
-      <div className="min-h-[190px] w-full flex-1 [scrollbar-width:thin] overflow-y-auto pr-1">
+      <div className="min-h-[190px] w-full flex-1 [scrollbar-width:thin] overflow-y-auto overscroll-none pr-1">
         <p className="text-foreground w-full text-base font-medium">
           {currentQuestion.question}
         </p>
@@ -120,8 +120,8 @@ export function PendingQuestionsPanel({
                 className={`${
                   isPicked
                     ? "bg-primary text-primary-foreground border-primary/60"
-                    : "hover:bg-accent hover:text-accent-foreground text-muted-foreground transition-colors"
-                } focus-visible:ring-ring w-full rounded-lg border px-4 py-3 text-left text-[15px] font-medium focus-visible:ring-2 focus-visible:outline-none`}
+                    : "hover:bg-muted hover:text-foreground text-muted-foreground border-border transition-colors"
+                } focus-visible:ring-ring w-full rounded-lg border px-4 py-3 text-left text-[14px] font-medium focus-visible:ring-2 focus-visible:outline-none`}
                 disabled={busy}
                 key={`${optionIndex}-${option}`}
                 onClick={() => {

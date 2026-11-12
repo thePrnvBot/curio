@@ -59,7 +59,7 @@ interface TranscriptModule {
 /** Transcript sentence coloring past/current/upcoming reading position. */
 function transcriptSentenceClass(isPast: boolean, isActive: boolean): string {
   if (isActive) {
-    return "bg-primary/10 text-foreground cursor-pointer rounded-sm px-0.5 -mx-0.5 font-medium [box-decoration-break:clone] transition-colors duration-200";
+    return "bg-brand/10 text-foreground -mx-0.5 cursor-pointer rounded-sm px-0.5 font-medium [box-decoration-break:clone] transition-colors duration-200";
   }
   return isPast
     ? "text-foreground/55 cursor-pointer [box-decoration-break:clone] transition-colors duration-200 hover:text-foreground/80"
@@ -554,7 +554,7 @@ export function GuidedExplanationPlayer(props: {
     <aside className="border-border/70 w-full shrink-0 border-b lg:h-full lg:min-h-0 lg:w-[360px] lg:overflow-hidden lg:border-r lg:border-b-0">
       <div className="flex h-full flex-col">
         <div
-          className="min-h-0 flex-1 [scrollbar-width:none] overflow-y-auto overscroll-contain px-6 pt-5 pb-6 [&::-webkit-scrollbar]:hidden"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-none px-6 pt-5 pb-6"
           ref={transcriptRef}
         >
           {/* Only the active sub-lesson module is on the page; the rest are
@@ -642,7 +642,7 @@ export function GuidedExplanationPlayer(props: {
 
   const stageAndControls = (
     <div className="flex min-h-0 flex-1 flex-col lg:overflow-hidden">
-      <div className="flex min-h-0 flex-1 [scrollbar-width:none] flex-col overflow-y-auto overscroll-contain p-6 [&::-webkit-scrollbar]:hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-none p-6 scroll-smooth">
         <div className={stageContentClass}>
           <AnimatePresence custom={stepDirection} initial={false} mode="wait">
             <motion.div
@@ -689,7 +689,7 @@ export function GuidedExplanationPlayer(props: {
       <div className="border-border/70 border-t px-6 pt-4 pb-2">
         <div className="bg-muted mx-auto mb-3 h-1 w-full max-w-5xl overflow-hidden rounded-full">
           <div
-            className="bg-primary h-full rounded-full transition-[width] duration-150 ease-linear"
+            className="bg-brand h-full rounded-full transition-[width] duration-150 ease-linear"
             style={{ width: `${Math.min(stepProgress, 100)}%` }}
           />
         </div>
@@ -740,8 +740,8 @@ export function GuidedExplanationPlayer(props: {
             <span className="text-muted-foreground flex items-center gap-1.5 text-xs tabular-nums">
               {isPlaying && voicePreferences.enabled ? (
                 <span aria-hidden="true" className="relative flex size-2">
-                  <span className="bg-primary absolute inline-flex h-full w-full animate-ping rounded-full opacity-60" />
-                  <span className="bg-primary relative inline-flex size-2 rounded-full" />
+                  <span className="bg-brand absolute inline-flex h-full w-full animate-ping rounded-full opacity-60" />
+                  <span className="bg-brand relative inline-flex size-2 rounded-full" />
                 </span>
               ) : null}
               {playbackStatusLabel(isPlaying, isLastStep)} · {stepIndex + 1}/

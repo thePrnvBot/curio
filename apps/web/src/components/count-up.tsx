@@ -87,6 +87,12 @@ export default function CountUp({
         onStart();
       }
 
+      if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+        motionValue.set(direction === "down" ? from : to);
+        onEnd?.();
+        return;
+      }
+
       const timeoutId = setTimeout(() => {
         motionValue.set(direction === "down" ? from : to);
       }, delay * 1000);

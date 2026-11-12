@@ -111,7 +111,7 @@ function DesktopDock() {
 
   return (
     <nav
-      className="border-border/70 bg-card/80 pointer-events-auto relative hidden items-center rounded-full border p-1 shadow-lg backdrop-blur-md sm:flex"
+      className="border-border/80 bg-card/90 pointer-events-auto relative hidden items-center rounded-full border p-1 shadow-lg shadow-black/[0.04] backdrop-blur-md sm:flex"
       onPointerLeave={() => {
         setHoveredIndex(null);
       }}
@@ -145,8 +145,8 @@ function DesktopDock() {
           <Link
             className={
               isActive
-                ? "text-primary-foreground relative z-10 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors"
-                : "text-muted-foreground hover:text-foreground relative z-10 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors"
+                ? "text-primary-foreground relative z-10 rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors"
+                : "text-muted-foreground hover:text-foreground relative z-10 rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors"
             }
             data-cue="navigate"
             key={navLink.to}
@@ -162,7 +162,7 @@ function DesktopDock() {
           </Link>
         );
       })}
-      <div aria-hidden="true" className="bg-border/70 mx-1 h-6 w-px" />
+      <div aria-hidden="true" className="bg-border/80 mx-1 h-5 w-px" />
       <div className="flex items-center gap-1 px-1">
         <ThemeToggle />
         <UserMenu />
@@ -174,12 +174,11 @@ function DesktopDock() {
 /** Compact dock below sm (640px): hamburger menu with the four links,
  * plus quick access to theme and the account menu.
  *
- * Every element is a fixed 1.75rem box (hamburger, theme toggle, account
- * circle) with 1px gaps inside 0.25rem dock padding → exactly 6.25rem for
- * both the dock and the dropdown it opens. The dropdown therefore always
- * opens at exactly the dock's width, and its "start" alignment is shifted
- * back by the dock's 0.25rem padding so the two rectangles' top-left
- * corners coincide.
+ * Every element is a fixed 2rem box (hamburger, theme toggle, account
+ * circle) with 0.25rem gaps inside 0.25rem dock padding → exactly 7rem for both
+ * the dock and the dropdown it opens. The dropdown therefore always opens at
+ * exactly the dock's width, and its "start" alignment is shifted back by the
+ * dock's 0.25rem padding so the two rectangles' top-left corners coincide.
  *
  * The option list reproduces the desktop dock's hover treatment so both
  * docks animate identically: a soft translucent pill glides under the
@@ -242,7 +241,7 @@ function MobileDock() {
   const showHoverPill = hoveredIndex !== null && hoveredIndex !== activeIndex;
 
   return (
-    <nav className="border-border/70 bg-card/80 pointer-events-auto flex w-[6.25rem] items-center gap-1 rounded-full border p-1 shadow-lg backdrop-blur-md sm:hidden">
+    <nav className="border-border/80 bg-card/90 pointer-events-auto flex w-28 items-center gap-1 rounded-full border p-1 shadow-lg shadow-black/[0.04] backdrop-blur-md sm:hidden">
       <DropdownMenu
         onOpenChange={(open) => {
           setNavMenuOpen(open);
@@ -272,7 +271,7 @@ function MobileDock() {
           onMouseLeave={() => {
             setHoveredIndex(null);
           }}
-          style={{ width: "6.25rem", minWidth: "6.25rem" }}
+          style={{ width: "7rem", minWidth: "7rem" }}
         >
           {hoveredPill === null ? null : (
             <span

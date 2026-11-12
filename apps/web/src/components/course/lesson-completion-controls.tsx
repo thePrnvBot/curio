@@ -89,17 +89,17 @@ export function LessonCompletionControls(props: {
   const earnedBadgeLabel = state.kind === "completed" ? state.badgeLabel : null;
 
   return (
-    <div className={props.className ?? "mt-10"}>
+    <div className={props.className ?? "mt-12 border-t pt-5"}>
       {earnedBadgeLabel !== null && (
-        <div className="border-primary/30 bg-primary/10 mb-3 flex items-center gap-2 rounded-lg border px-4 py-3">
-          <Badge>New badge</Badge>
-          <p className="text-sm font-medium">{earnedBadgeLabel}</p>
+        <div className="border-brand/25 bg-brand/5 mb-4 flex items-center gap-2 rounded-lg border px-4 py-3">
+          <Badge variant="brand">New badge</Badge>
+          <p className="text-[13px] font-medium">{earnedBadgeLabel}</p>
         </div>
       )}
       <div className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-sm font-medium">{statusText}</p>
-          <p className="text-muted-foreground text-xs">
+          <p className="text-[13.5px] font-medium">{statusText}</p>
+          <p className="text-muted-foreground mt-0.5 text-xs">
             {props.nextLessonTitle ??
               (props.completed
                 ? "You've reached the end of this course"

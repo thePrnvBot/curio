@@ -1,26 +1,18 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { Share2, Sparkles, TrendingUp, Trophy } from "lucide-react";
+import {
+  ArrowRightIcon,
+  ArrowUpRightIcon,
+  Share2,
+  Sparkles,
+  TrendingUp,
+  Trophy,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useTheme } from "next-themes";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
 
 import AnimatedContent from "@/components/animated-content";
-import CountUp from "@/components/count-up";
-import {
-  DotField,
-  DoodleAtom,
-  DoodleBook,
-  DoodleBulb,
-  DoodleGlobe,
-  PlusMark,
-  Sparkle,
-  Squiggle,
-} from "@/components/doodles";
+import { DotField, Squiggle } from "@/components/doodles";
+import { LandingBackground } from "@/components/landing-background";
 import SplitText from "@/components/split-text";
-import StarBorder from "@/components/star-border";
-
-const Aurora = lazy(() => import("@/components/aurora"));
-const LandingShader = lazy(() => import("@/components/landing-shader"));
 
 const FEATURES: {
   icon: LucideIcon;
@@ -53,284 +45,241 @@ const FEATURES: {
   },
 ];
 
-const STATS: { value: number; suffix: string; label: string }[] = [
-  { value: 1, suffix: "", label: "prompt builds a whole course" },
-  { value: 24, suffix: "/7", label: "recaps waiting when you return" },
-  { value: 100, suffix: "%", label: "taught at your own pace" },
+const STEPS: { title: string; description: string }[] = [
+  {
+    title: "Ask for anything",
+    description:
+      "Name a topic, a question, or a skill. The Director turns it into a structured course.",
+  },
+  {
+    title: "Learn by doing",
+    description:
+      "Move through guided lessons, visuals, and exercises sized to the time you actually have.",
+  },
+  {
+    title: "Come back to a recap",
+    description:
+      "Your progress is kept, and the next recap is ready when you are.",
+  },
 ];
+
+const EXAMPLE_COURSES = [
+  "How ray tracing works",
+  "Photosynthesis, from the ground up",
+  "SQL joins, visually",
+  "Stoicism for everyday decisions",
+  "Music theory you can hear",
+  "Behavioral economics in practice",
+] as const;
 
 const CURRENT_YEAR = new Date().getFullYear();
 
-/**
- * Only runs expensive work (the WebGPU canvas) while its section is near the
- * screen. Starts `true` so the shader is part of the SSR output.
- *
- * `rootMargin` extends the zone on both sides, so the canvas mounts ~300px
- * before the hero enters the viewport and unmounts ~300px after it has fully
- * left - the element never flips states while it is actually visible.
- */
-function useSectionVisible() {
-  const ref = useRef<HTMLElement>(null);
-  const [isVisible, setIsVisible] = useState(true);
-
-  useEffect(() => {
-    const element = ref.current;
-    if (!element) {
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => setIsVisible(entry.isIntersecting),
-      { rootMargin: "300px 0px 300px 0px", threshold: 0 }
-    );
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-
-  return { ref, isVisible };
-}
-
-/**
- * Mounts when `mounted` flips true and fades opacity to 1, so shader
- * re-initialization is cross-faded instead of popping in.
- */
-function useSmoothMount(mounted: boolean) {
-  const [isShown, setIsShown] = useState(false);
-
-  useEffect(() => {
-    if (!mounted) {
-      return;
-    }
-    const frame = requestAnimationFrame(() => setIsShown(true));
-    return () => cancelAnimationFrame(frame);
-  }, [mounted]);
-
-  // When unmounted we want the shader hidden immediately; deriving this
-  // during render avoids a synchronous setState inside the effect.
-  if (!mounted) {
-    return false;
-  }
-  return isShown;
-}
-
 function HomeComponent() {
-  const { resolvedTheme } = useTheme();
-  const isLight = resolvedTheme === "light";
-  const { ref: heroRef, isVisible: heroIsVisible } = useSectionVisible();
-  const heroFadedIn = useSmoothMount(heroIsVisible);
-
   return (
     <div className="bg-background text-foreground">
       {/* Hero */}
-      <section
-        ref={heroRef}
-        className="relative flex min-h-[calc(100svh-4rem)] flex-col items-center justify-center overflow-hidden px-6"
-      >
-        {heroIsVisible && (
-          <div
-            className="pointer-events-none absolute inset-0"
-            style={{
-              opacity: heroFadedIn ? 1 : 0,
-              transition: "opacity 700ms ease",
-            }}
-            aria-hidden="true"
-          >
-            <Suspense fallback={null}>
-              <LandingShader isLight={isLight} />
-            </Suspense>
-          </div>
-        )}
-        {/* Scrim: flat tint + fades. No backdrop-blur - it repaints the canvas
-            underneath on every scroll frame and tanks scroll performance. */}
-        <div
-          className="from-background to-background pointer-events-none absolute inset-0 bg-gradient-to-b via-transparent"
-          aria-hidden="true"
-        />
-        <div
-          className="bg-background/45 pointer-events-none absolute inset-0"
-          aria-hidden="true"
-        />
+      <section className="relative -mt-14 flex min-h-svh flex-col items-center justify-center overflow-hidden px-6">
+        <LandingBackground />
 
-        {/* Chalk doodles floating over the scrim, under the headline */}
-        <div className="pointer-events-none absolute inset-0 z-[5] text-teal-600/30 dark:text-teal-200/25">
-          <DoodleAtom className="absolute top-[19%] left-[6%] hidden size-14 -rotate-12 motion-safe:animate-[spin_26s_linear_infinite] md:block" />
-          <DoodleBulb className="absolute bottom-[24%] left-[10%] hidden size-9 rotate-6 motion-safe:animate-pulse lg:block" />
-          <DoodleGlobe className="absolute right-[8%] bottom-[30%] hidden size-14 -rotate-3 md:block" />
-          <Sparkle className="absolute top-[24%] right-[14%] size-5 motion-safe:animate-pulse" />
-          <Sparkle className="absolute top-[13%] right-[27%] size-3" />
-          <Sparkle className="absolute bottom-[21%] left-[21%] size-4" />
-          <PlusMark className="absolute top-[34%] right-[33%] hidden size-4 rotate-12 sm:block" />
-          <PlusMark className="absolute bottom-[16%] left-[31%] hidden size-4 -rotate-6 lg:block" />
-        </div>
-
-        <div className="relative z-10 flex max-w-3xl flex-col items-center text-center">
-          <p className="text-muted-foreground mb-6 flex items-center gap-3 text-sm tracking-widest uppercase">
-            <Sparkle className="text-primary/60 size-3.5" />
-            Your learning companion
-            <Sparkle className="text-primary/60 size-3.5" />
-          </p>
+        <div className="relative z-10 flex w-full max-w-3xl flex-col items-center text-center">
           <SplitText
             tag="h1"
             text="Learn anything, your way."
-            className="text-5xl font-semibold tracking-tight text-balance sm:text-6xl md:text-7xl"
+            className="text-[clamp(2.75rem,7vw,5.25rem)] leading-[0.98] font-semibold tracking-[-0.045em] text-balance"
             delay={60}
             duration={0.9}
             threshold={0.2}
           />
           <AnimatedContent delay={0.4} distance={30} className="mt-6 max-w-xl">
-            <p className="text-muted-foreground text-lg text-balance">
+            <p className="text-muted-foreground text-[15px] leading-7 text-balance">
               Curio creates courses on anything you want to learn - with guided
               teaching, exercises on the go, and progress that keeps track of
               itself.
             </p>
           </AnimatedContent>
+
           <AnimatedContent
             delay={0.6}
             distance={24}
-            className="mt-10 flex flex-wrap items-center justify-center gap-3"
+            className="mt-10 w-full max-w-lg"
           >
-            <StarBorder
-              as={Link}
-              to="/chat"
-              theme={isLight ? "light" : "dark"}
-              color={isLight ? "#0f766e" : "#34d399"}
-              duration={6}
-              className="text-sm"
-            >
-              Start learning
-            </StarBorder>
             <Link
+              className="group border-border/80 bg-card/95 hover:border-foreground/20 flex items-center gap-3 rounded-2xl border p-1.5 pl-4 text-left shadow-lg shadow-black/[0.05] transition-[border-color,background-color] duration-200"
+              data-cue="navigate"
+              to="/chat"
+            >
+              <Sparkles className="text-brand size-4 shrink-0" />
+              <span className="text-muted-foreground group-hover:text-foreground min-w-0 flex-1 truncate text-[13.5px] transition-colors">
+                What do you want to learn?
+              </span>
+              <span className="bg-primary text-primary-foreground flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-3 text-[12px] font-medium">
+                Start
+                <ArrowRightIcon
+                  aria-hidden="true"
+                  className="size-3.5 transition-transform duration-200 group-hover:translate-x-0.5"
+                />
+              </span>
+            </Link>
+          </AnimatedContent>
+
+          <AnimatedContent delay={0.8} distance={16} className="mt-5">
+            <Link
+              className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-[12px] font-medium transition-colors"
               to="/courses"
-              className="hover:bg-accent hover:text-accent-foreground rounded-lg px-6 py-3 text-sm font-medium transition-colors"
             >
               Track your progress
+              <ArrowUpRightIcon aria-hidden="true" className="size-3" />
             </Link>
           </AnimatedContent>
         </div>
+      </section>
 
-        <div className="text-muted-foreground absolute bottom-8 flex flex-col items-center gap-1 text-xs">
-          <span>Scroll</span>
-          <div className="motion-safe:animate-bounce" aria-hidden="true">
-            ↓
+      {/* How it works */}
+      <section className="border-y" id="how-it-works">
+        <div className="mx-auto max-w-5xl px-6 py-20 sm:py-24">
+          <div className="grid gap-10 md:grid-cols-[240px_minmax(0,1fr)] md:gap-16">
+            <AnimatedContent distance={28} threshold={0.15}>
+              <h2 className="text-[26px] leading-[1.15] font-semibold tracking-[-0.03em] text-balance sm:text-[28px]">
+                From a prompt to a plan.
+              </h2>
+              <p className="text-muted-foreground mt-4 max-w-[220px] text-[13px] leading-6">
+                No syllabus to design. No blank page. Just tell Curio what you
+                want to understand.
+              </p>
+            </AnimatedContent>
+
+            <div className="grid gap-8 sm:grid-cols-3">
+              {STEPS.map((step, index) => (
+                <AnimatedContent
+                  className="border-border/80 border-t pt-5"
+                  delay={index * 0.1}
+                  distance={24}
+                  key={step.title}
+                  threshold={0.15}
+                >
+                  <h3 className="text-[15px] font-medium tracking-[-0.01em]">
+                    {step.title}
+                  </h3>
+                  <p className="text-muted-foreground mt-2 text-[13px] leading-6">
+                    {step.description}
+                  </p>
+                </AnimatedContent>
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Reveal statement */}
-      <section className="relative mx-auto max-w-4xl px-6 py-28">
-        <DotField className="absolute inset-0 [mask-image:radial-gradient(ellipse_at_center,black_25%,transparent_72%)] text-teal-700/[0.08] dark:text-teal-200/[0.07]" />
-        <AnimatedContent distance={40} className="relative">
-          <p className="text-muted-foreground mb-2 text-xs tracking-widest uppercase">
-            Why Curio
-          </p>
-          <Squiggle className="text-primary/40 mt-3 h-2.5 w-24" />
-        </AnimatedContent>
-        <AnimatedContent distance={32} className="relative max-w-3xl">
-          <p className="text-2xl leading-relaxed font-medium text-balance sm:text-3xl">
+      {/* Editorial statement */}
+      <section className="mx-auto max-w-4xl px-6 py-24 sm:py-28">
+        <AnimatedContent distance={32} threshold={0.15}>
+          <p className="text-[26px] leading-[1.45] font-medium tracking-[-0.025em] text-balance sm:text-[32px]">
             You choose what to learn and how; Curio does the rest - guided
             teaching, exercises that meet you where you are, and recaps that
             greet you when you come back.
           </p>
-        </AnimatedContent>{" "}
+          <p className="text-muted-foreground mt-6 max-w-xl text-[13.5px] leading-6">
+            The Director keeps the thread: what you have covered, what is still
+            shaky, and what to try next. You get a course that feels built for
+            the moment, not a generic track with your name on it.
+          </p>
+        </AnimatedContent>
       </section>
 
       {/* Features */}
-      <section className="relative mx-auto max-w-5xl px-6 pb-28">
+      <section className="relative mx-auto max-w-5xl px-6 pb-24">
         <DotField className="absolute inset-0 [mask-image:radial-gradient(ellipse_at_center,black_20%,transparent_70%)] text-teal-700/[0.06] dark:text-teal-200/[0.05]" />
-        <div className="relative grid gap-x-10 gap-y-14 sm:grid-cols-2">
+        <h2 className="relative mb-10 text-[26px] leading-[1.15] font-semibold tracking-[-0.03em] text-balance sm:text-[28px]">
+          Built around how you learn.
+        </h2>
+
+        <div className="relative grid gap-x-12 sm:grid-cols-2">
           {FEATURES.map(({ icon: FeatureIcon, title, description }, index) => (
             <AnimatedContent
+              className="border-border/80 border-t py-6"
+              delay={index * 0.08}
+              distance={24}
               key={title}
-              delay={index * 0.12}
-              distance={40}
               threshold={0.2}
             >
-              <div className="flex gap-4">
-                <div className="text-primary mt-1 shrink-0">
-                  <FeatureIcon className="size-5" aria-hidden="true" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-medium tracking-tight">
+              <div className="group hover:bg-muted/25 -mx-3 rounded-lg px-3 py-2 transition-colors duration-200">
+                <div className="flex items-center gap-3">
+                  <span className="bg-muted text-foreground flex size-8 shrink-0 items-center justify-center rounded-lg">
+                    <FeatureIcon aria-hidden="true" className="size-4" />
+                  </span>
+                  <h3 className="text-[14.5px] font-medium tracking-[-0.01em]">
                     {title}
                   </h3>
-                  <Squiggle className="text-primary/50 mt-1.5 h-2 w-20" />
-                  <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
-                    {description}
-                  </p>
                 </div>
+                <p className="text-muted-foreground mt-3 text-[13px] leading-6">
+                  {description}
+                </p>
               </div>
             </AnimatedContent>
           ))}
         </div>
       </section>
 
-      {/* Stats */}
+      {/* Course shelf */}
       <section className="border-y">
-        <div className="mx-auto grid max-w-5xl grid-cols-1 divide-y sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-          {STATS.map(({ value, suffix, label }) => (
-            <AnimatedContent
-              key={label}
-              distance={24}
-              className="px-6 py-10 text-center"
+        <div className="mx-auto max-w-5xl px-6 py-20 sm:py-24">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <h2 className="text-[26px] leading-[1.15] font-semibold tracking-[-0.03em] text-balance sm:text-[28px]">
+              Start with a question. Leave with a course.
+            </h2>
+            <Link
+              className="text-muted-foreground hover:text-foreground inline-flex shrink-0 items-center gap-1 text-[12px] font-medium transition-colors"
+              to="/chat"
             >
-              <div className="text-4xl font-semibold tracking-tight sm:text-5xl">
-                <CountUp to={value} duration={1.6} />
-                <span className="text-primary">{suffix}</span>
+              Ask for your own
+              <ArrowUpRightIcon aria-hidden="true" className="size-3" />
+            </Link>
+          </div>
+
+          <div className="mt-10 grid gap-x-12 sm:grid-cols-2">
+            {EXAMPLE_COURSES.map((course) => (
+              <div
+                className="border-border/80 hover:bg-muted/20 border-t py-4 text-[14px] font-medium tracking-[-0.01em] transition-colors duration-150"
+                key={course}
+              >
+                {course}
               </div>
-              <p className="text-muted-foreground mt-2 text-sm">{label}</p>
-            </AnimatedContent>
-          ))}
+            ))}
+          </div>
         </div>
       </section>
 
       {/* Final CTA */}
-      <section className="relative overflow-hidden px-6 py-32">
-        <Suspense fallback={null}>
-          <Aurora
-            className="pointer-events-none absolute inset-x-0 bottom-0 h-64"
-            colorStops={["#0f766e", "#34d399", "#0f766e"]}
-            amplitude={0.8}
-            height={0.6}
-            glow={0.4}
-            opacity={0.4}
-            lightMode={isLight}
-            mouseInteraction={false}
-          />
-        </Suspense>
-        <div className="pointer-events-none absolute inset-0 text-teal-600/30 dark:text-teal-200/25">
-          <DoodleBook className="absolute top-[26%] left-[9%] hidden size-12 -rotate-8 lg:block" />
-          <DoodleAtom className="absolute right-[7%] bottom-[16%] hidden size-12 motion-safe:animate-[spin_30s_linear_infinite] lg:block" />
-          <Sparkle className="absolute top-[22%] right-[13%] size-5 motion-safe:animate-pulse" />
-          <Sparkle className="absolute top-[38%] left-[18%] size-3.5" />
-          <PlusMark className="absolute right-[30%] bottom-[26%] hidden size-4 -rotate-6 sm:block" />
-          <PlusMark className="absolute bottom-[20%] left-[26%] hidden size-4 rotate-12 lg:block" />
-        </div>
+      <section className="relative overflow-hidden px-6 py-28 sm:py-36">
+        <LandingBackground variant="cta" />
         <AnimatedContent
           distance={40}
           className="relative z-10 mx-auto max-w-2xl text-center"
         >
-          <div className="relative mb-2 flex items-center justify-center gap-2 text-teal-600/40 dark:text-teal-200/40">
-            <Sparkle className="size-3" />
-            <Sparkle className="size-4" />
-            <Sparkle className="size-3" />
-          </div>
-          <h2 className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
+          <h2 className="text-[32px] leading-[1.12] font-semibold tracking-[-0.035em] text-balance sm:text-[40px]">
             Your next skill is one prompt away.
           </h2>
-          <Squiggle className="text-primary/50 mx-auto mt-5 h-2.5 w-28" />
-          <p className="text-muted-foreground mx-auto mt-4 max-w-md text-balance">
+          <Squiggle className="text-brand/40 mx-auto mt-5 h-2.5 w-24" />
+          <p className="text-muted-foreground mx-auto mt-4 max-w-md text-[13.5px] leading-6 text-balance">
             Create a course, work through guided lessons, and earn badges worth
             sharing. Curio keeps the streak alive while life does its thing.
           </p>
-          <div className="mt-10 flex justify-center">
+          <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Link
-              className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg px-5 py-3 text-sm font-medium transition-colors"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex h-10 items-center gap-1.5 rounded-lg px-5 text-[13px] font-medium transition-colors duration-150"
               to="/chat"
             >
               Create your first course
+              <ArrowRightIcon aria-hidden="true" className="size-3.5" />
+            </Link>
+            <Link
+              className="border-border hover:bg-muted/60 inline-flex h-10 items-center rounded-lg border px-5 text-[13px] font-medium transition-colors duration-150"
+              to="/courses"
+            >
+              See your courses
             </Link>
           </div>
-          <p className="text-muted-foreground mt-16 text-xs">
+          <p className="text-muted-foreground mt-16 text-[11px]">
             © {CURRENT_YEAR} Curio · Built with TanStack Start, Vercel AI SDK
             and React Bits
           </p>

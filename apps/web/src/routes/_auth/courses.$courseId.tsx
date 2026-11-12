@@ -100,8 +100,8 @@ function LessonListButton({
     <button
       className={
         isActive
-          ? "bg-accent text-foreground hover:bg-accent focus-visible:ring-ring w-full rounded-md px-2 py-1.5 text-left text-sm focus-visible:ring-2 focus-visible:outline-none"
-          : "hover:bg-accent text-muted-foreground hover:text-foreground focus-visible:ring-ring w-full rounded-md px-2 py-1.5 text-left text-sm focus-visible:ring-2 focus-visible:outline-none"
+          ? "bg-accent text-foreground hover:bg-accent focus-visible:ring-ring w-full rounded-md px-2 py-2 text-left text-[13px] transition-colors duration-150 focus-visible:ring-2 focus-visible:outline-none"
+          : "hover:bg-accent text-muted-foreground hover:text-foreground focus-visible:ring-ring w-full rounded-md px-2 py-2 text-left text-[13px] transition-colors duration-150 focus-visible:ring-2 focus-visible:outline-none"
       }
       onClick={() => {
         // Direction-aware cue: going up the course reads "back", going
@@ -128,7 +128,7 @@ function LessonListButton({
           aria-hidden="true"
           className={
             lesson.completed
-              ? "bg-primary/15 text-primary flex size-4 shrink-0 items-center justify-center rounded-full"
+              ? "bg-brand/15 text-brand flex size-4 shrink-0 items-center justify-center rounded-full"
               : "border-muted-foreground/50 flex size-4 shrink-0 items-center justify-center rounded-full border"
           }
         >
@@ -167,10 +167,10 @@ function CourseSidebar({
 }) {
   return (
     <aside
-      className="border-border/70 bg-sidebar [scrollbar-width:none] overscroll-contain md:h-full md:overflow-y-auto md:border-r [&::-webkit-scrollbar]:hidden"
+      className="border-border/70 bg-sidebar overscroll-none md:h-full md:overflow-y-auto md:border-r"
       id="course-outline"
     >
-      <div className="space-y-6 px-5 py-6">
+      <div className="space-y-7 px-4 py-5">
         <div className="flex items-center justify-between gap-2">
           <Link
             className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs font-medium"
@@ -193,10 +193,10 @@ function CourseSidebar({
           </Button>
         </div>
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">
+          <h1 className="text-[16px] leading-snug font-semibold tracking-[-0.015em]">
             {course.title}
           </h1>
-          <p className="text-muted-foreground mt-1 text-xs">
+          <p className="text-muted-foreground mt-1.5 text-xs">
             {`${course.completedLessonCount} of ${course.lessonCount} lessons`}
           </p>
           <ProgressFromZero
@@ -208,7 +208,7 @@ function CourseSidebar({
         <nav className="space-y-6">
           {sections.map((section) => (
             <div key={section.id ?? section.title}>
-              <p className="text-foreground pb-2 text-xs font-semibold tracking-widest uppercase">
+              <p className="text-muted-foreground pb-2 text-[11px] font-medium tracking-[0.08em] uppercase">
                 {section.title}
               </p>
               <ul className="space-y-0.5">
@@ -267,7 +267,7 @@ function LessonMainContent({
           The lesson may still be generating. Try again in a moment.
         </p>
         <button
-          className="border-border hover:bg-accent focus-visible:ring-ring rounded-md border px-3 py-1.5 text-xs font-medium focus-visible:ring-2 focus-visible:outline-none"
+          className="border-border hover:bg-muted focus-visible:ring-ring rounded-md border px-3 py-1.5 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
           onClick={onRetryLesson}
           type="button"
         >
@@ -291,7 +291,7 @@ function LessonMainContent({
 
   if (lessonIsPending || lessonData === undefined) {
     return (
-      <div className="mx-auto w-full max-w-5xl flex-1 px-6 py-10">
+      <div className="mx-auto w-full max-w-3xl flex-1 px-6 py-10 lg:py-12">
         <LessonContentSkeleton />
       </div>
     );
@@ -318,15 +318,15 @@ function LessonMainContent({
 
   return (
     <div
-      className="mx-auto w-full max-w-5xl flex-1 px-6 py-10"
+      className="mx-auto w-full max-w-3xl flex-1 px-6 py-10 lg:py-12"
       key={lessonData.id}
     >
       <article>
         <header className="mb-8">
-          <p className="text-muted-foreground mb-2 text-xs tracking-widest uppercase">
+          <p className="section-label mb-2.5">
             {lessonKindLabel(lessonData.kind)} · Lesson {lessonData.position}
           </p>
-          <h2 className="text-3xl font-semibold tracking-tight text-balance">
+          <h2 className="text-[30px] leading-[1.15] font-semibold tracking-[-0.03em] text-balance">
             {lessonData.title}
           </h2>
         </header>
@@ -534,7 +534,7 @@ function CoursePageRoute() {
         className={`grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] overflow-hidden transition-[grid-template-columns] duration-200 ease-out ${
           isSidebarCollapsed
             ? "md:grid-cols-[44px_minmax(0,1fr)]"
-            : "md:grid-cols-[300px_minmax(0,1fr)]"
+            : "md:grid-cols-[280px_minmax(0,1fr)]"
         }`}
       >
         {/* Sidebar: course, headings (sections), subheadings (lessons) */}
@@ -572,8 +572,8 @@ function CoursePageRoute() {
         )}
 
         {/* Center: lesson content — scrolls internally, never the page */}
-        <main className="flex min-h-0 flex-1 [scrollbar-width:none] flex-col overflow-y-auto overscroll-contain [&::-webkit-scrollbar]:hidden">
-          <details className="border-border/70 bg-sidebar mx-4 mt-4 rounded-lg border px-4 py-3 md:hidden">
+        <main className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-none scroll-smooth">
+          <details className="border-border/70 bg-sidebar mx-4 mt-4 rounded-xl border px-4 py-3 md:hidden">
             <summary className="cursor-pointer text-sm font-medium">
               Course lessons · {course.completedLessonCount}/
               {course.lessonCount}
@@ -581,7 +581,7 @@ function CoursePageRoute() {
             <nav className="mt-3 space-y-4">
               {sections.map((section) => (
                 <div key={section.id ?? section.title}>
-                  <p className="text-muted-foreground pb-1 text-[11px] font-semibold tracking-widest uppercase">
+                  <p className="text-muted-foreground pb-1.5 text-[11px] font-medium tracking-[0.08em] uppercase">
                     {section.title}
                   </p>
                   <ul className="space-y-0.5">

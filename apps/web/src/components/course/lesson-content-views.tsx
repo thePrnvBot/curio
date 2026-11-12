@@ -25,16 +25,16 @@ function optionClass({
 }): string {
   if (isChecked) {
     if (isAnswer) {
-      return "border-primary bg-primary/10 text-primary flex w-full items-center justify-between gap-3 rounded-lg px-3.5 py-2.5 text-left text-sm";
+      return "border-brand/40 bg-brand/10 text-foreground flex w-full items-center justify-between gap-3 rounded-lg px-3.5 py-3 text-left text-[13.5px]";
     }
     if (isPicked) {
-      return "border-destructive/60 bg-destructive/5 text-destructive flex w-full items-center justify-between gap-3 rounded-lg px-3.5 py-2.5 text-left text-sm";
+      return "border-destructive/50 bg-destructive/5 text-destructive flex w-full items-center justify-between gap-3 rounded-lg px-3.5 py-3 text-left text-[13.5px]";
     }
-    return "text-muted-foreground/60 w-full rounded-lg border px-3.5 py-2.5 text-left text-sm";
+    return "text-muted-foreground/60 w-full rounded-lg border px-3.5 py-3 text-left text-[13.5px]";
   }
   return isPicked
-    ? "border-primary bg-primary/10 text-primary w-full rounded-lg px-3.5 py-2.5 text-left text-sm"
-    : "hover:border-ring hover:bg-accent text-foreground w-full rounded-lg border px-3.5 py-2.5 text-left text-sm";
+    ? "border-brand/40 bg-brand/10 text-foreground w-full rounded-lg px-3.5 py-3 text-left text-[13.5px]"
+    : "hover:border-foreground/20 hover:bg-muted/50 text-foreground w-full rounded-lg border px-3.5 py-3 text-left text-[13.5px] transition-colors duration-150";
 }
 
 function recapStatusText({
@@ -105,7 +105,7 @@ function RecapExerciseView(props: {
         return (
           <section
             aria-labelledby={`recap-question-${questionIndex}`}
-            className="bg-card rounded-xl border p-5"
+            className="surface-card p-5"
             key={`${question.prompt}-${questionIndex}`}
           >
             <div className="flex items-start justify-between gap-3">
@@ -120,7 +120,7 @@ function RecapExerciseView(props: {
               </p>
               {checked &&
                 (isPickedCorrect ? (
-                  <span className="bg-primary/10 text-primary flex size-6 shrink-0 items-center justify-center rounded-full">
+                  <span className="bg-brand/10 text-brand flex size-6 shrink-0 items-center justify-center rounded-full">
                     <CheckIcon className="size-3.5" aria-hidden="true" />
                   </span>
                 ) : (
@@ -231,7 +231,7 @@ export function LessonContentView(props: {
 
   if (content === null) {
     return (
-      <div className="bg-card/50 rounded-xl border p-6 text-center">
+      <div className="surface-card p-6 text-center">
         <p className="font-medium">Content for this lesson is on its way</p>
         <p className="text-muted-foreground mt-1 text-sm">
           This lesson was created before the full course pages shipped. Ask the
@@ -245,7 +245,7 @@ export function LessonContentView(props: {
     case "animation": {
       return (
         <div className="space-y-6">
-          <div className="prose-sm">
+          <div className="text-[15px] leading-7 [&_p]:my-4">
             <MessageResponse>{content.body}</MessageResponse>
           </div>
           <iframe
@@ -262,15 +262,15 @@ export function LessonContentView(props: {
       return (
         <div className="space-y-6">
           {content.body !== undefined && (
-            <div className="prose-sm">
+            <div className="text-[15px] leading-7 [&_p]:my-4">
               <MessageResponse>{content.body}</MessageResponse>
             </div>
           )}
           <div className="grid gap-4 sm:grid-cols-2">
             {content.cards.map((card) => (
-              <div className="bg-card rounded-xl border p-5" key={card.title}>
-                <p className="font-medium">{card.title}</p>
-                <div className="text-muted-foreground mt-2 text-sm">
+              <div className="surface-card p-5" key={card.title}>
+                <p className="text-[13.5px] font-medium">{card.title}</p>
+                <div className="text-muted-foreground mt-2 text-[13px] leading-6">
                   <MessageResponse>{card.body}</MessageResponse>
                 </div>
               </div>
@@ -310,7 +310,7 @@ export function LessonContentView(props: {
               title="Lesson video"
             />
           )}
-          <div className="prose-sm">
+          <div className="text-[15px] leading-7 [&_p]:my-4">
             <MessageResponse>{content.body}</MessageResponse>
           </div>
         </div>

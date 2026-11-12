@@ -532,7 +532,7 @@ export function GuidedMarkdownStage(props: { source: string }): ReactElement {
     .filter((block) => block.length > 0);
 
   return (
-    <div className="space-y-4 text-sm leading-relaxed">
+    <div className="space-y-5 text-[16px] leading-8">
       {blocks.map((block, blockIndex) => (
         <div
           className="animate-guided-block-in"

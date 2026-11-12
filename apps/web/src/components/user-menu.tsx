@@ -127,7 +127,7 @@ export default function UserMenu({
       <DropdownMenuTrigger
         render={
           <Button
-            className="max-w-40 min-w-32 truncate rounded-full hover:-translate-y-0.5 hover:shadow-sm"
+            className="max-w-40 min-w-32 truncate rounded-full"
             variant="outline"
           />
         }

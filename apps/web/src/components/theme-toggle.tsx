@@ -12,7 +12,7 @@ export function ThemeToggle() {
   return (
     <Button
       aria-label="Toggle theme"
-      className="rounded-full hover:-translate-y-0.5"
+      className="rounded-full"
       onClick={() => {
         playInteractionCue("toggle", { emphasis: "subtle" });
         setTheme(nextTheme);

@@ -2,6 +2,8 @@
 
 import type { CourseStatus } from "@curio/api/domain/course";
 
+export { SectionHeader } from "@/components/page-layout";
+
 export interface CourseSummaryView {
   readonly completedLessonCount: number;
   readonly id: string;
@@ -13,27 +15,6 @@ export interface CourseSummaryView {
 export interface CourseBadgeView {
   readonly id: string;
   readonly label: string;
-}
-
-export function SectionHeader({
-  children,
-  className,
-  note,
-}: {
-  children: string;
-  className?: string;
-  note?: string;
-}) {
-  return (
-    <div
-      className={`mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1 ${className ?? ""}`}
-    >
-      <h2 className="text-muted-foreground text-sm font-medium tracking-widest uppercase">
-        {children}
-      </h2>
-      {note ? <p className="text-muted-foreground text-xs">{note}</p> : null}
-    </div>
-  );
 }
 
 export function progressPercent(course: CourseSummaryView): number {

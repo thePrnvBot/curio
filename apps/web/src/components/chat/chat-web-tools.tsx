@@ -58,12 +58,12 @@ function WebSearchResults({
     );
   }
   return (
-    <ul className="divide-border border-border bg-muted/30 divide-y overflow-hidden rounded-md border">
+    <ul className="divide-border border-border bg-muted/20 divide-y overflow-hidden rounded-lg border">
       {output.results
         .slice(0, WEB_MAX_RESULTS_SHOWN)
         .map((result, resultIndex) => (
           <li
-            className="min-w-0 space-y-0.5 p-2.5"
+            className="min-w-0 space-y-1 p-3"
             key={`${result.url}-${resultIndex}`}
           >
             <a

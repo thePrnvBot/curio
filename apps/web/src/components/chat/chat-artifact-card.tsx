@@ -11,17 +11,17 @@ import { ArtifactPreviewer } from "./chat-artifact-preview";
  */
 export function ArtifactInlineView({ data }: { data: ArtifactUIData }) {
   return (
-    <div className="bg-card mx-auto w-full max-w-xl overflow-hidden rounded-lg border">
+    <div className="surface-card mx-auto w-full max-w-2xl overflow-hidden">
       {Option.isSome(data.title) && (
-        <div className="bg-background/60 text-muted-foreground flex items-center justify-between gap-2 border-b px-3 py-1.5 text-xs font-medium">
+        <div className="bg-muted/40 text-muted-foreground flex items-center justify-between gap-2 border-b px-3.5 py-2 text-xs font-medium">
           <span className="min-w-0 truncate">{data.title.value}</span>
         </div>
       )}
-      <div className="p-2">
+      <div className="p-2.5">
         <ArtifactPreviewer data={data} />
       </div>
       {Option.isSome(data.summary) && (
-        <p className="text-muted-foreground border-t px-3 py-2 text-xs">
+        <p className="text-muted-foreground border-t px-3.5 py-2.5 text-xs leading-relaxed">
           {data.summary.value}
         </p>
       )}

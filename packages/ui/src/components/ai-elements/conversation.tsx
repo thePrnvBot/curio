@@ -12,7 +12,10 @@ export type ConversationProps = ComponentProps<typeof StickToBottom>;
 
 export const Conversation = ({ className, ...props }: ConversationProps) => (
   <StickToBottom
-    className={cn("relative flex-1 overflow-y-hidden", className)}
+    className={cn(
+      "relative flex-1 overflow-y-hidden overscroll-none",
+      className
+    )}
     initial="smooth"
     resize="smooth"
     role="log"
@@ -29,7 +32,7 @@ export const ConversationContent = ({
   ...props
 }: ConversationContentProps) => (
   <StickToBottom.Content
-    className={cn("flex flex-col gap-8 p-4", className)}
+    className={cn("flex flex-col gap-7 p-4", className)}
     {...props}
   />
 );
@@ -50,18 +53,26 @@ export const ConversationEmptyState = ({
 }: ConversationEmptyStateProps) => (
   <div
     className={cn(
-      "flex size-full flex-col items-center justify-center gap-3 p-8 text-center",
+      "flex size-full flex-col items-center justify-center gap-4 p-8 text-center",
       className
     )}
     {...props}
   >
     {children ?? (
       <>
-        {icon && <div className="text-muted-foreground">{icon}</div>}
-        <div className="space-y-1">
-          <h3 className="text-sm font-medium">{title}</h3>
+        {icon && (
+          <div className="bg-muted text-muted-foreground flex size-10 items-center justify-center rounded-full">
+            {icon}
+          </div>
+        )}
+        <div className="space-y-1.5">
+          <h3 className="text-[15px] font-medium tracking-[-0.01em]">
+            {title}
+          </h3>
           {description && (
-            <p className="text-muted-foreground text-sm">{description}</p>
+            <p className="text-muted-foreground text-[13px] leading-6">
+              {description}
+            </p>
           )}
         </div>
       </>

@@ -670,7 +670,9 @@ export const PromptInput = ({
         ref={formRef}
         {...props}
       >
-        <InputGroup className="overflow-hidden">{children}</InputGroup>
+        <InputGroup className="border-border/80 bg-card shadow-xs overflow-hidden">
+          {children}
+        </InputGroup>
       </form>
     </LocalAttachmentsContext.Provider>
   );

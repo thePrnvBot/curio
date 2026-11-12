@@ -50,14 +50,14 @@ export function BadgeShowcaseSection({
 
   const badgeContent: ReactNode =
     badges.length > 0 ? (
-      <div className="bg-card/50 rounded-xl border p-5 md:p-6">
+      <div className="surface-card p-5">
         <div className="flex flex-wrap gap-x-7 gap-y-5">
           {badges.map((badge) => (
             <div
               className="relative flex w-16 flex-col items-center gap-2 text-center"
               key={badge.id}
             >
-              <span className="ring-primary/20 bg-primary/10 text-primary flex size-14 items-center justify-center rounded-full ring-4">
+              <span className="ring-brand/15 bg-brand/10 text-brand flex size-14 items-center justify-center rounded-full ring-4">
                 <TrophyIcon className="size-5" aria-hidden="true" />
               </span>
               <span className="text-foreground text-xs leading-tight font-medium">
@@ -87,12 +87,12 @@ export function BadgeShowcaseSection({
 
   return (
     <section>
-      <div className="flex items-center justify-between gap-3">
+      <div className="mb-4 flex items-center justify-between gap-3">
         <SectionHeader className="mb-0">Badge showcase</SectionHeader>
         {canEdit ? (
           <button
             aria-pressed={isEditing}
-            className="text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-ring inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
+            className="text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
             onClick={() => {
               playInteractionCue("toggle");
               setIsEditing((currentlyEditing) => !currentlyEditing);

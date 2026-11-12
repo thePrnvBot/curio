@@ -80,6 +80,11 @@ const SplitText: React.FC<SplitTextProps> = ({
       if (animationCompletedRef.current) {
         return;
       }
+      if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+        animationCompletedRef.current = true;
+        gsap.set(ref.current, { opacity: 1, y: 0 });
+        return;
+      }
       const el = ref.current as HTMLElement & {
         _rbsplitInstance?: GSAPSplitText;
       };

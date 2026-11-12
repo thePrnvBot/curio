@@ -45,7 +45,7 @@ export function ProgressFromZero({
   return (
     <progress
       aria-label={label}
-      className={`bg-muted [&::-moz-progress-bar]:bg-primary [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:bg-primary overflow-hidden rounded-full [&::-moz-progress-bar]:min-w-0.5 [&::-moz-progress-bar]:rounded-full [&::-webkit-progress-bar]:rounded-full [&::-webkit-progress-value]:min-w-0.5 [&::-webkit-progress-value]:rounded-full [&::-webkit-progress-value]:transition-[width] [&::-webkit-progress-value]:duration-700 [&::-webkit-progress-value]:ease-out ${className}`}
+      className={`bg-muted [&::-moz-progress-bar]:bg-brand [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:bg-brand overflow-hidden rounded-full [&::-moz-progress-bar]:min-w-0.5 [&::-moz-progress-bar]:rounded-full [&::-webkit-progress-bar]:rounded-full [&::-webkit-progress-value]:min-w-0.5 [&::-webkit-progress-value]:rounded-full [&::-webkit-progress-value]:transition-[width] [&::-webkit-progress-value]:duration-700 [&::-webkit-progress-value]:ease-out ${className}`}
       max={100}
       value={renderedPercent}
     />

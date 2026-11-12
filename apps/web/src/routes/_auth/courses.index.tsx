@@ -13,6 +13,7 @@ import type {
   CourseBadgeView,
   CourseSummaryView,
 } from "@/components/courses-index/section-shared";
+import { PageContainer, PageHeader } from "@/components/page-layout";
 import { CoursesPageSkeleton } from "@/components/page-skeletons";
 import { useTRPC } from "@/utils/trpc";
 
@@ -42,26 +43,31 @@ function CoursesRoute() {
   if (coursesQuery.isError || badgesQuery.isError) {
     const failure = coursesQuery.error ?? badgesQuery.error;
     return (
-      <div className="mx-auto w-full max-w-5xl shrink-0 px-6 pt-8 pb-20">
-        <header className="mb-8">
-          <h1 className="text-2xl font-semibold tracking-tight">Courses</h1>
-        </header>
-        <div className="border-border bg-card flex flex-col items-start gap-3 rounded-xl border p-6">
-          <p className="text-sm font-medium">Could not load your courses</p>
-          <p className="text-muted-foreground text-xs">
-            {failure?.message ?? "The server did not answer. Try again."}
-          </p>
-          <button
-            className="border-border hover:bg-accent focus-visible:ring-ring rounded-md border px-3 py-1.5 text-xs font-medium focus-visible:ring-2 focus-visible:outline-none"
-            onClick={() => {
-              void coursesQuery.refetch();
-              void badgesQuery.refetch();
-            }}
-            type="button"
-          >
-            Retry
-          </button>
-        </div>
+      <div className="-mt-14 min-h-0 flex-1 overflow-y-auto overscroll-none">
+        <PageContainer className="pt-20">
+          <PageHeader
+            description="Courses the Director built for you, with progress that picks up where you left off."
+            title="Courses"
+          />
+          <div className="surface-card flex flex-col items-start gap-3 p-6">
+            <p className="text-[13.5px] font-medium">
+              Could not load your courses
+            </p>
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              {failure?.message ?? "The server did not answer. Try again."}
+            </p>
+            <button
+              className="border-border hover:bg-muted focus-visible:ring-ring rounded-md border px-3 py-1.5 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
+              onClick={() => {
+                void coursesQuery.refetch();
+                void badgesQuery.refetch();
+              }}
+              type="button"
+            >
+              Retry
+            </button>
+          </div>
+        </PageContainer>
       </div>
     );
   }
@@ -78,13 +84,12 @@ function CoursesRoute() {
     courses.find((course) => course.status === "active") ?? null;
 
   return (
-    <div className="min-h-0 flex-1 [scrollbar-width:none] overflow-y-auto overscroll-contain [&::-webkit-scrollbar]:hidden">
-      <div className="mx-auto w-full max-w-5xl px-6 pt-8 pb-20">
-        <div className="mb-8">
-          <header>
-            <h1 className="text-2xl font-semibold tracking-tight">Courses</h1>
-          </header>
-        </div>
+    <div className="-mt-14 min-h-0 flex-1 overflow-y-auto overscroll-none">
+      <PageContainer className="pt-20">
+        <PageHeader
+          description="Courses the Director built for you, with progress that picks up where you left off."
+          title="Courses"
+        />
 
         <div className="space-y-10">
           <CurrentCourseSection
@@ -101,7 +106,7 @@ function CoursesRoute() {
             empty={<EmptyBadgeShowcase />}
           />
         </div>
-      </div>
+      </PageContainer>
     </div>
   );
 }

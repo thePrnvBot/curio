@@ -1,6 +1,7 @@
 import { MAX_CUSTOM_INSTRUCTIONS_LENGTH } from "@curio/api/domain/learning-preferences";
 import { Badge } from "@curio/ui/components/badge";
 import { Button } from "@curio/ui/components/button";
+import { Input } from "@curio/ui/components/input";
 import { Skeleton } from "@curio/ui/components/skeleton";
 import { Textarea } from "@curio/ui/components/textarea";
 import {
@@ -23,6 +24,7 @@ import { useEffect, useReducer, useState } from "react";
 import type { ReactElement, ReactNode } from "react";
 import { toast } from "sonner";
 
+import { PageContainer, PageHeader } from "@/components/page-layout";
 import { getRuntimeSettings } from "@/functions/get-runtime-settings";
 import {
   disableInteractionSounds,
@@ -105,10 +107,10 @@ function SettingsRow({
   title: string;
 }): ReactElement {
   return (
-    <div className="grid gap-3 py-6 md:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] md:gap-10">
+    <div className="grid gap-3 py-7 md:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] md:gap-12">
       <div>
         <div className="flex items-center gap-1.5">
-          <h2 className="text-foreground text-sm font-medium">{title}</h2>
+          <h2 className="text-foreground text-[13px] font-medium">{title}</h2>
           <TooltipProvider delay={120}>
             <Tooltip>
               <TooltipTrigger
@@ -153,17 +155,17 @@ function SegmentedControl({
   return (
     <fieldset
       aria-label={ariaLabel}
-      className="border-border inline-flex h-9 items-stretch divide-x overflow-hidden rounded-lg border"
+      className="border-border bg-background inline-flex h-8 items-stretch divide-x overflow-hidden rounded-lg border"
     >
       {options.map((option) => {
         const isActive = value === option.value;
         return (
           <button
             aria-pressed={isActive}
-            className={`flex min-w-0 items-center justify-center gap-1.5 px-3 text-xs font-medium whitespace-nowrap transition-colors ${
+            className={`flex min-w-0 items-center justify-center gap-1.5 px-3 text-xs font-medium whitespace-nowrap transition-colors duration-150 ${
               isActive
                 ? "bg-muted text-foreground"
-                : "text-muted-foreground hover:text-foreground"
+                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
             }`}
             key={option.value}
             onClick={() => {
@@ -197,7 +199,7 @@ function SettingSwitch({
       aria-checked={checked}
       aria-label={ariaLabel}
       className={`focus-visible:ring-ring/40 relative h-5 w-9 shrink-0 rounded-full transition-colors outline-none focus-visible:ring-2 ${
-        checked ? "bg-primary" : "bg-input"
+        checked ? "bg-brand" : "bg-input"
       } ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
       disabled={disabled}
       onClick={onToggle}
@@ -213,6 +215,9 @@ function SettingSwitch({
   );
 }
 
+const selectClass =
+  "border-input bg-background text-foreground focus-visible:border-ring focus-visible:ring-ring/25 dark:bg-white/[0.03] h-8 rounded-md border px-2.5 text-[13px] transition-[border-color,box-shadow] duration-150 outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50";
+
 function ProviderField(props: {
   label: string;
   onChange: (value: string) => void;
@@ -222,11 +227,10 @@ function ProviderField(props: {
 }): ReactElement {
   return (
     <label className="block">
-      <span className="text-muted-foreground mb-1.5 block text-xs font-medium tracking-wide uppercase">
+      <span className="text-muted-foreground mb-1.5 block text-[11px] font-medium tracking-[0.06em] uppercase">
         {props.label}
       </span>
-      <input
-        className="bg-input/20 placeholder:text-muted-foreground/60 text-foreground focus-visible:ring-ring/40 h-9 w-full rounded-lg border px-3 text-sm outline-none focus-visible:ring-2"
+      <Input
         onChange={(inputEvent) => props.onChange(inputEvent.target.value)}
         placeholder={props.placeholder}
         type={props.type ?? "text"}
@@ -287,12 +291,10 @@ function ActiveModelStatus({
 }): ReactElement {
   return (
     <div>
-      <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-        Active model
-      </p>
+      <p className="section-label">Active model</p>
       <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-4">
         <div className="flex min-w-0 items-baseline gap-3">
-          <p className="truncate text-sm font-semibold tracking-tight">
+          <p className="truncate text-[13.5px] font-medium tracking-[-0.01em]">
             {activeModel}
           </p>
           <p className="text-muted-foreground truncate text-xs">
@@ -567,7 +569,7 @@ function ModelProviderSection(): ReactElement {
 
   if (settingsQuery.isError) {
     return (
-      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed px-4 py-3">
+      <div className="border-border flex flex-wrap items-center gap-3 rounded-lg border border-dashed px-4 py-3">
         <p className="text-muted-foreground text-xs">
           Could not load your saved provider settings.
         </p>
@@ -702,7 +704,7 @@ function LearningPreferencesSection(): ReactElement {
 
   if (preferencesQuery.isError) {
     return (
-      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed px-4 py-3">
+      <div className="border-border flex flex-wrap items-center gap-3 rounded-lg border border-dashed px-4 py-3">
         <p className="text-muted-foreground text-xs">
           Could not load your learning preferences.
         </p>
@@ -881,15 +883,14 @@ function SettingsRoute(): ReactElement {
     );
 
   return (
-    <div className="mx-auto w-full max-w-3xl shrink-0 px-6 pt-8 pb-20">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Your account, appearance, narration voice and model provider.
-        </p>
-      </header>
+    <div className="-mt-14 min-h-0 flex-1 overflow-y-auto overscroll-none">
+      <PageContainer className="pt-20" width="narrow">
+        <PageHeader
+          description="Your account, appearance, narration voice and model provider."
+          title="Settings"
+        />
 
-      <div className="divide-border mt-6 divide-y">
+        <div className="divide-border divide-y">
         {/* Profile */}
         <SettingsRow
           description="Your account details, used to greet you and attribute your work."
@@ -987,7 +988,7 @@ function SettingsRoute(): ReactElement {
               />
               <select
                 aria-label="Narration voice"
-                className="border-border bg-background focus-visible:ring-ring h-9 max-w-52 rounded-lg border px-2.5 text-sm focus-visible:ring-2 focus-visible:outline-none disabled:opacity-60"
+                className={`${selectClass} max-w-52`}
                 disabled={!isNarrationEnabled || voiceCatalogState !== "ready"}
                 onChange={(changeEvent) => {
                   playInteractionCue("select", { emphasis: "subtle" });
@@ -1044,7 +1045,7 @@ function SettingsRoute(): ReactElement {
               </select>
               <select
                 aria-label="Narration speed"
-                className="border-border bg-background focus-visible:ring-ring h-9 rounded-lg border px-2.5 text-sm focus-visible:ring-2 focus-visible:outline-none disabled:opacity-60"
+                className={selectClass}
                 disabled={!isNarrationEnabled}
                 onChange={(changeEvent) => {
                   playInteractionCue("select", { emphasis: "subtle" });
@@ -1073,7 +1074,7 @@ function SettingsRoute(): ReactElement {
           <div className="space-y-2">
             <select
               aria-label="Narration GPU"
-              className="border-border bg-background focus-visible:ring-ring h-9 w-full max-w-72 rounded-lg border px-2.5 text-sm focus-visible:ring-2 focus-visible:outline-none disabled:opacity-60"
+              className={`${selectClass} w-full max-w-72`}
               disabled={!isNarrationEnabled || gpuDetection === null}
               onChange={(changeEvent) => {
                 playInteractionCue("select", { emphasis: "subtle" });
@@ -1112,7 +1113,8 @@ function SettingsRoute(): ReactElement {
         >
           <ModelProviderSection />
         </SettingsRow>
-      </div>
+        </div>
+      </PageContainer>
     </div>
   );
 }

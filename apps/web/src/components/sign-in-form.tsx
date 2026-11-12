@@ -61,18 +61,20 @@ export default function SignInForm({
   }
 
   return (
-    <div className="mx-auto flex min-h-[calc(100svh-3.5rem)] w-full max-w-md flex-col justify-center p-6">
-      <div className="mb-6 flex flex-col items-center gap-1.5 text-center">
-        <span className="bg-primary/10 text-primary mb-1 flex size-10 items-center justify-center rounded-xl">
-          <SparklesIcon aria-hidden="true" className="size-5" />
+    <div className="mx-auto flex min-h-[calc(100svh-4rem)] w-full max-w-sm flex-col justify-center px-6 py-12">
+      <div className="mb-7 flex flex-col items-center gap-2 text-center">
+        <span className="bg-muted text-foreground mb-1 flex size-9 items-center justify-center rounded-lg border">
+          <SparklesIcon aria-hidden="true" className="size-4" />
         </span>
-        <h1 className="text-2xl font-semibold tracking-tight">Welcome back</h1>
-        <p className="text-muted-foreground text-sm">
+        <h1 className="text-[22px] leading-tight font-semibold tracking-[-0.025em]">
+          Welcome back
+        </h1>
+        <p className="text-muted-foreground text-[13px]">
           Sign in to keep learning.
         </p>
       </div>
 
-      <div className="bg-card rounded-xl border p-6 shadow-xs">
+      <div className="surface-card p-6">
         <form
           className="space-y-4"
           onSubmit={(event) => {
@@ -168,8 +170,9 @@ export default function SignInForm({
         </form>
       </div>
 
-      <div className="mt-4 text-center">
+      <div className="mt-5 text-center">
         <Button
+          size="sm"
           variant="link"
           onClick={() => {
             playInteractionCue("tap", { emphasis: "subtle" });

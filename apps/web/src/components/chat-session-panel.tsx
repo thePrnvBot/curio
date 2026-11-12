@@ -404,7 +404,7 @@ function scrollToSessionMessage(messageId: string): void {
 function SessionEntryRow({ entry }: { entry: ChatSessionEntry }) {
   const rowContent = (
     <>
-      <span className="bg-muted flex size-6 shrink-0 items-center justify-center">
+      <span className="bg-muted flex size-6 shrink-0 items-center justify-center rounded-md">
         <SessionEntryIcon entry={entry} />
       </span>
       <span className="min-w-0 flex-1 truncate">{entry.title}</span>
@@ -417,7 +417,7 @@ function SessionEntryRow({ entry }: { entry: ChatSessionEntry }) {
     </>
   );
   const rowClassName =
-    "hover:bg-muted focus-visible:ring-ring flex w-full items-center gap-2 rounded-none px-2 py-1.5 text-left text-xs focus-visible:ring-2 focus-visible:outline-none";
+    "hover:bg-muted focus-visible:ring-ring flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors duration-150 focus-visible:ring-2 focus-visible:outline-none";
 
   if (entry.url !== undefined) {
     return (
@@ -484,7 +484,7 @@ function SessionKindFilterBar({
           <button
             aria-label={`${ENTRY_KIND_LABELS[entryKind]} (${kindCount})`}
             aria-pressed={isActive}
-            className={`border-border text-muted-foreground focus-visible:ring-ring flex size-7 items-center justify-center border focus-visible:ring-2 focus-visible:outline-none ${stateClass}`}
+            className={`border-border text-muted-foreground focus-visible:ring-ring flex size-7 items-center justify-center rounded-md border transition-colors duration-150 focus-visible:ring-2 focus-visible:outline-none ${stateClass}`}
             disabled={isDisabled}
             key={entryKind}
             onClick={() => {
@@ -541,15 +541,15 @@ export default function ChatSessionPanel({
         />
       )}
       <aside
-        className={`bg-sidebar w-64 shrink-0 flex-col border-l max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-50 max-lg:shadow-xl ${
+        className={`bg-sidebar border-border/70 w-64 shrink-0 flex-col border-l max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-50 max-lg:shadow-xl ${
           mobileOpen ? "max-lg:flex" : "hidden lg:flex"
         }`}
       >
-        <div className="text-muted-foreground flex items-center justify-between px-3 pt-3 pb-2 text-xs font-medium tracking-wide uppercase">
-          <span>Session Files</span>
+        <div className="text-muted-foreground flex items-center justify-between px-3 pt-3 pb-2 text-[11px] font-medium tracking-[0.08em] uppercase">
+          <span>Session files</span>
           <button
             aria-label="Close session files"
-            className="hover:bg-accent hover:text-foreground focus-visible:ring-ring rounded-md p-1 focus-visible:ring-2 focus-visible:outline-none lg:hidden"
+            className="hover:bg-muted hover:text-foreground focus-visible:ring-ring rounded-md p-1 transition-colors focus-visible:ring-2 focus-visible:outline-none lg:hidden"
             onClick={onCloseMobile}
             type="button"
           >
@@ -561,7 +561,7 @@ export default function ChatSessionPanel({
           onSelectKind={setSelectedKind}
           selectedKind={selectedKind}
         />
-        <div className="flex-1 space-y-3 overflow-y-auto px-2 pb-2">
+        <div className="flex-1 space-y-4 overflow-y-auto overscroll-none px-2 pb-2 scroll-smooth">
           {visibleKindOrder.map((entryKind) => {
             const kindEntries = visibleEntries.filter(
               (entry) => entry.kind === entryKind
@@ -571,7 +571,7 @@ export default function ChatSessionPanel({
             }
             return (
               <section key={entryKind}>
-                <div className="text-muted-foreground px-2 pb-1 text-[10px] tracking-wide uppercase">
+                <div className="text-muted-foreground px-2 pb-1.5 text-[11px] font-medium tracking-[0.08em] uppercase">
                   {ENTRY_KIND_LABELS[entryKind]} · {kindEntries.length}
                 </div>
                 <div className="space-y-0.5">

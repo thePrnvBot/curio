@@ -3,6 +3,7 @@ import type {
   ErrorComponentProps,
   NotFoundRouteProps,
 } from "@tanstack/react-router";
+import { CompassIcon } from "lucide-react";
 import { useEffect } from "react";
 
 import { logger } from "@/utils/logger";
@@ -19,16 +20,18 @@ function FallbackCard(props: {
 }) {
   return (
     <div className="bg-background flex min-h-0 flex-1 items-center justify-center px-6 py-16">
-      <div className="border-border bg-card w-full max-w-md rounded-xl border p-8 text-center shadow-sm">
-        <p className="text-4xl">🧭</p>
-        <h1 className="text-foreground mt-4 text-lg font-semibold">
+      <div className="surface-card w-full max-w-sm p-8 text-center">
+        <span className="bg-muted text-foreground mx-auto flex size-10 items-center justify-center rounded-full">
+          <CompassIcon aria-hidden="true" className="size-5" />
+        </span>
+        <h1 className="mt-5 text-[18px] font-semibold tracking-[-0.02em]">
           {props.heading}
         </h1>
-        <p className="text-muted-foreground mt-2 text-sm">
+        <p className="text-muted-foreground mt-2 text-[13px] leading-6">
           {props.explanation}
         </p>
         <Link
-          className="bg-primary text-primary-foreground hover:bg-primary/90 mt-6 inline-flex items-center justify-center rounded-full px-5 py-2 text-sm font-medium transition-colors"
+          className="bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:ring-ring mt-6 inline-flex h-8 items-center justify-center rounded-md px-3.5 text-[13px] font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
           to="/"
         >
           Take me home
