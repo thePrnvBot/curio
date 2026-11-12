@@ -14,6 +14,9 @@ interface RecapQuestion {
   readonly prompt: string;
 }
 
+const OPTION_BASE_CLASS =
+  "flex w-full min-w-0 items-start justify-between gap-3 rounded-lg border px-3.5 py-3 text-left text-[13.5px] leading-6 transition-colors duration-150";
+
 function optionClass({
   checked: isChecked,
   isPicked,
@@ -25,16 +28,16 @@ function optionClass({
 }): string {
   if (isChecked) {
     if (isAnswer) {
-      return "border-brand/40 bg-brand/10 text-foreground flex w-full items-center justify-between gap-3 rounded-lg px-3.5 py-3 text-left text-[13.5px]";
+      return `${OPTION_BASE_CLASS} border-brand/40 bg-brand/10 text-foreground`;
     }
     if (isPicked) {
-      return "border-destructive/50 bg-destructive/5 text-destructive flex w-full items-center justify-between gap-3 rounded-lg px-3.5 py-3 text-left text-[13.5px]";
+      return `${OPTION_BASE_CLASS} border-destructive/50 bg-destructive/5 text-destructive`;
     }
-    return "text-muted-foreground/60 w-full rounded-lg border px-3.5 py-3 text-left text-[13.5px]";
+    return `${OPTION_BASE_CLASS} text-muted-foreground/60`;
   }
   return isPicked
-    ? "border-brand/40 bg-brand/10 text-foreground w-full rounded-lg px-3.5 py-3 text-left text-[13.5px]"
-    : "hover:border-foreground/20 hover:bg-muted/50 text-foreground w-full rounded-lg border px-3.5 py-3 text-left text-[13.5px] transition-colors duration-150";
+    ? `${OPTION_BASE_CLASS} border-brand/40 bg-brand/10 text-foreground`
+    : `${OPTION_BASE_CLASS} text-foreground hover:border-foreground/20 hover:bg-muted/50`;
 }
 
 function recapStatusText({
@@ -110,7 +113,7 @@ function RecapExerciseView(props: {
           >
             <div className="flex items-start justify-between gap-3">
               <p
-                className="text-sm font-medium"
+                className="min-w-0 flex-1 text-sm font-medium wrap-anywhere"
                 id={`recap-question-${questionIndex}`}
               >
                 <span className="text-muted-foreground mr-2">
@@ -156,16 +159,18 @@ function RecapExerciseView(props: {
                     }}
                     type="radio"
                   />
-                  <span>{option}</span>
+                  <span className="min-w-0 flex-1 whitespace-pre-wrap wrap-anywhere">
+                    {option}
+                  </span>
                   {checked && optionIndex === question.answerIndex && (
-                    <span className="text-xs font-medium opacity-70">
+                    <span className="shrink-0 pt-0.5 text-xs font-medium opacity-70">
                       correct
                     </span>
                   )}
                   {checked &&
                     pickedOption === optionIndex &&
                     !isPickedCorrect && (
-                      <span className="text-xs font-medium opacity-70">
+                      <span className="shrink-0 pt-0.5 text-xs font-medium opacity-70">
                         your answer
                       </span>
                     )}
@@ -180,7 +185,7 @@ function RecapExerciseView(props: {
                     ? "Why not"
                     : "Not quite"}
                 </p>
-                <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
+                <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed wrap-anywhere">
                   {question.explanation ??
                     "Revisit the lesson above and try a fresh take."}
                 </p>
