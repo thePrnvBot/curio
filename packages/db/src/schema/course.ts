@@ -16,7 +16,7 @@ export interface VideoLessonContent {
   readonly kind: "video";
   /** Teaching prose shown alongside the video slot. */
   readonly body: string;
-  /** Optional embeddable video URL (YouTube link or direct video file). */
+  /** Embeddable video URL (video lessons embed a verified YouTube watch link). */
   readonly videoUrl?: string;
 }
 

@@ -147,6 +147,9 @@ export function createCourseTool(chunks: {
         "fallbacks). For a walkthrough that reuses one code excerpt, set " +
         "content.code once and omit visual.source from each step; steps then " +
         "only need narration and visual.focus, which keeps the tool call small. " +
+        "Video lessons are never shipped without a video: call find_video first, " +
+        "verify the chosen candidate with verify_video, then pass its watch URL " +
+        "as content.videoUrl. Never invent or guess a YouTube id. " +
         "Write narration as plain spoken sentences without markdown, backticks " +
         "or literal operator symbols.",
       execute: (input) => chunks.createScopedCourseLesson(input),

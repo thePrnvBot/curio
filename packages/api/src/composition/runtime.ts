@@ -6,6 +6,7 @@ import { createCourseStoreLessonGenerator } from "../infrastructure/course-store
 import { createGenerateTextArtifactGenerator } from "../infrastructure/generate-text-artifact-generator";
 import { createGenerateTextChatTitleComposer } from "../infrastructure/generate-text-chat-title-composer";
 import { createGenerateTextLessonContent } from "../infrastructure/generate-text-lesson-generator";
+import { searchLessonVideosEffect } from "../infrastructure/lesson-video-search";
 import { ArtifactGenerator } from "../services/artifact-generator";
 import type { ArtifactPublisherContract } from "../services/artifact-publisher";
 import { ArtifactPublisher } from "../services/artifact-publisher";
@@ -111,6 +112,10 @@ function buildCurioLayer(dependencies: CurioApiDependencies) {
         return createCourseStoreLessonGenerator({
           courseStore,
           generateLessonContent: createGenerateTextLessonContent({
+            findVerifiedVideo: (query) =>
+              searchLessonVideosEffect(query).pipe(
+                Effect.map((videos) => videos[0] ?? null)
+              ),
             resolveChatModel: modelProvider.getChatModel(
               LESSON_GENERATION_MODEL_SCOPE_ID
             ),

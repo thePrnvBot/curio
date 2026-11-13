@@ -1,3 +1,4 @@
+// oxlint-disable react/iframe-missing-sandbox -- the lesson video is a cross-origin YouTube frame, which requires allow-scripts + allow-same-origin to play and still cannot reach our origin
 import type { LessonContent } from "@curio/api/domain/course";
 import { MessageResponse } from "@curio/ui/components/ai-elements/message";
 import { Button } from "@curio/ui/components/button";
@@ -306,11 +307,11 @@ export function LessonContentView(props: {
           )}
           {video?.kind === "iframe" && (
             <iframe
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
               allowFullScreen
               className="aspect-video w-full rounded-xl border"
               referrerPolicy="strict-origin-when-cross-origin"
-              sandbox="allow-scripts allow-presentation allow-popups"
+              sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"
               src={video.url}
               title="Lesson video"
             />

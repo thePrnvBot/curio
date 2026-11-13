@@ -22,7 +22,9 @@ const videoContent = z.object({
     .min(1)
     .max(2000)
     .optional()
-    .describe("Optional embeddable video URL (YouTube link or direct video)"),
+    .describe(
+      "Embedded lesson video. REQUIRED for video lessons: a real YouTube watch URL found with find_video and verified with verify_video (popular, on-topic, factually current) - never a guessed id"
+    ),
 });
 
 const cardsContent = z.object({

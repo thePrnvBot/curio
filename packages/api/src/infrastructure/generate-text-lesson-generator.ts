@@ -7,8 +7,13 @@ import type { LessonContentToolPayload } from "../domain/lesson-content";
 import { LessonGenerationFailed } from "../domain/lesson-generation";
 import type { LessonGenerationBrief } from "../domain/lesson-generation";
 import { CURIO_BASELINE_STYLE } from "./curio-baseline-style";
+import { lessonVideoQuery } from "./lesson-video-search";
+import type { LessonVideo } from "./lesson-video-search";
 
 export interface GenerateTextLessonContentConfig {
+  readonly findVerifiedVideo: (
+    query: string
+  ) => Effect.Effect<LessonVideo | null>;
   readonly resolveChatModel: Effect.Effect<LanguageModel>;
 }
 
@@ -18,8 +23,10 @@ const LESSON_GENERATOR_INSTRUCTIONS =
   "teaching content that matches the kind exactly, following the field " +
   "descriptions in the schema precisely.\n\n" +
   "Kind contracts:\n" +
-  "- video: teaching prose (body) that walks through the topic end to end. " +
-  "Include videoUrl only when a real, well-known URL is certain; otherwise omit it.\n" +
+  "- video: teaching prose (body) that walks through the topic end to end. When " +
+  "a verified video is supplied in the prompt, set videoUrl to EXACTLY that URL " +
+  "and keep the prose consistent with what the video teaches; never invent a " +
+  "video URL.\n" +
   "- cards: an optional short intro (body) plus 3-8 bite-sized cards, each a " +
   "short title and a 1-3 sentence body.\n" +
   "- animation: a short body plus ONE self-contained HTML document (inline " +
@@ -53,12 +60,34 @@ ${CURIO_BASELINE_STYLE}
   "never meta commentary about writing the lesson, no markdown fences around " +
   "code fields.";
 
-function renderPrompt(brief: LessonGenerationBrief): string {
+function renderPrompt(
+  brief: LessonGenerationBrief,
+  verifiedVideo: LessonVideo | null
+): string {
   const outline = brief.outlineLines.join("\n");
   const continuity =
     brief.previousLessonTitle === null
       ? "It is the first lesson of the course."
       : `It directly follows "${brief.previousLessonTitle}" — keep continuity, build on it, and avoid re-explaining it at length.`;
+  let videoLines: readonly string[] = [];
+  if (verifiedVideo !== null) {
+    videoLines = [
+      "Verified video for this lesson (already checked for popularity and topical fit):",
+      `- Title: ${verifiedVideo.title}`,
+      `- Channel: ${verifiedVideo.channel}`,
+      `- Views: ${verifiedVideo.views ?? "unknown"}`,
+      `- Published: ${verifiedVideo.publishedAt ?? "unknown"}`,
+      `- URL: ${verifiedVideo.videoUrl}`,
+      ...(verifiedVideo.description === null
+        ? []
+        : [`- Description: ${verifiedVideo.description.slice(0, 600)}`]),
+      "Set videoUrl to exactly this URL and keep the prose consistent with what this video teaches.",
+    ];
+  } else if (brief.targetKind === "video") {
+    videoLines = [
+      "No video could be verified for this lesson. Do not invent a URL; omit videoUrl.",
+    ];
+  }
   return [
     `Course: ${brief.courseTitle}`,
     brief.courseDescription,
@@ -70,6 +99,7 @@ function renderPrompt(brief: LessonGenerationBrief): string {
     `Title: "${brief.targetTitle}"`,
     `Kind: ${brief.targetKind}`,
     continuity,
+    ...(videoLines.length === 0 ? [] : ["", ...videoLines]),
   ].join("\n");
 }
 
@@ -81,6 +111,12 @@ export function createGenerateTextLessonContent(
   return (brief) =>
     Effect.gen(function* generateLessonContent() {
       const model = yield* config.resolveChatModel;
+      const verifiedVideo =
+        brief.targetKind === "video"
+          ? yield* config
+              .findVerifiedVideo(lessonVideoQuery(brief))
+              .pipe(Effect.catch(() => Effect.succeed(null)))
+          : null;
       const payload: LessonContentToolPayload = yield* Effect.tryPromise({
         catch: (cause: unknown) =>
           new LessonGenerationFailed({
@@ -96,7 +132,7 @@ export function createGenerateTextLessonContent(
               name: "LessonContent",
               schema: lessonContentSchema,
             }),
-            prompt: renderPrompt(brief),
+            prompt: renderPrompt(brief, verifiedVideo),
           });
           return generationResult.output;
         },
@@ -106,6 +142,15 @@ export function createGenerateTextLessonContent(
           cause: `generated kind "${payload.kind}" does not match the lesson kind "${brief.targetKind}"`,
           lessonTitle: brief.targetTitle,
         });
+      }
+      // The verified URL wins over anything the model typed: research happened
+      // before generation, so the embed is known to exist and be on-topic. A
+      // model-authored URL with no verification behind it is dropped instead of
+      // shipping an unverified video.
+      if (payload.kind === "video") {
+        return verifiedVideo === null
+          ? { body: payload.body, kind: "video" }
+          : { ...payload, videoUrl: verifiedVideo.videoUrl };
       }
       return payload;
     });

@@ -11,7 +11,16 @@ import {
   createCourseTool,
 } from "@curio/api/infrastructure/course-create-tool";
 import { createRabbitHoleTool } from "@curio/api/infrastructure/rabbit-hole/start-tool";
-import { createWebTools } from "@curio/api/infrastructure/web-tools";
+import {
+  FIND_VIDEO_TOOL_NAME,
+  VERIFY_VIDEO_TOOL_NAME,
+  createVideoTools,
+} from "@curio/api/infrastructure/video-tools";
+import {
+  WEB_READ_TOOL_NAME,
+  WEB_SEARCH_TOOL_NAME,
+  createWebTools,
+} from "@curio/api/infrastructure/web-tools";
 import { ChatRunStore } from "@curio/api/services/chat-run-store";
 import { ChatStore } from "@curio/api/services/chat-store";
 import { ChatTitleComposer } from "@curio/api/services/chat-title-composer";
@@ -102,7 +111,20 @@ function sanitizePendingQuestionTools(
   });
 }
 
-const MAX_STREAM_STEPS = 40;
+const MAX_STREAM_STEPS = 60;
+
+/**
+ * Tools the Director may call while it is still filling a course. Video
+ * lessons need research BEFORE their create_lesson call, so the step lock has
+ * to keep the video + web tools reachable instead of forcing create_lesson
+ * every single step.
+ */
+const COURSE_CHUNK_SIDE_TOOLS: readonly string[] = [
+  FIND_VIDEO_TOOL_NAME,
+  VERIFY_VIDEO_TOOL_NAME,
+  WEB_SEARCH_TOOL_NAME,
+  WEB_READ_TOOL_NAME,
+];
 
 /** One completed tool result inside a generation step (pre-decode). */
 interface CourseChunkToolResult {
@@ -117,9 +139,10 @@ interface CourseChunkStep {
 
 /**
  * Keeps the Director streaming the course without pause: once a scaffold
- * exists and lessons are still unfilled, every intermediate step is locked
- * to the `create_lesson` tool (no prose interludes, no early turn ends) so
- * the course page fills live while the model works. Returns undefined to
+ * exists and lessons are still unfilled, every intermediate step is locked to
+ * the lesson tools (no prose interludes, no early turn ends) so the course page
+ * fills live while the model works. Video research stays available so each
+ * video lesson can be verified before it is written. Returns undefined to
  * restore normal flow once every lesson is filled (or no course is being
  * built).
  */
@@ -129,7 +152,7 @@ function prepareCourseChunkStep({
 }: {
   stepNumber: number;
   steps: readonly CourseChunkStep[];
-}): { activeTools: [string]; toolChoice: "required" } | undefined {
+}): { activeTools: string[]; toolChoice: "required" } | undefined {
   if (stepNumber === 0) {
     return undefined;
   }
@@ -157,7 +180,7 @@ function prepareCourseChunkStep({
     return undefined;
   }
   return {
-    activeTools: [CREATE_LESSON_TOOL_NAME],
+    activeTools: [CREATE_LESSON_TOOL_NAME, ...COURSE_CHUNK_SIDE_TOOLS],
     toolChoice: "required",
   };
 }
@@ -619,6 +642,7 @@ export const Route = createFileRoute("/api/chat")({
         });
         const questionTools = createAskUserTool();
         const webTools = createWebTools();
+        const videoTools = createVideoTools();
         const rabbitHoleTools = createRabbitHoleTool({ chatId, userId });
 
         const sanitizedConversation =
@@ -732,6 +756,7 @@ export const Route = createFileRoute("/api/chat")({
             ...questionTools,
             ...artifactTools,
             ...webTools,
+            ...videoTools,
             ...rabbitHoleTools,
           },
           userId,
