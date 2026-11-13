@@ -1,3 +1,4 @@
+import { Button } from "@curio/ui/components/button";
 import type { UIMessage } from "ai";
 import { isToolUIPart } from "ai";
 import { Option } from "effect";
@@ -9,10 +10,13 @@ import {
   LinkIcon,
   MusicIcon,
   PackageIcon,
+  PanelRightCloseIcon,
+  PanelRightOpenIcon,
   XIcon,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { useChatSidebarLayout } from "@/components/chat-sidebar-layout";
 import {
   toArtifactToolEntry,
   toInlineDataArtifact,
@@ -21,6 +25,7 @@ import {
   toWebSearchToolOutput,
 } from "@/utils/chat-schemas";
 import { trimUrlPunctuation } from "@/utils/links";
+import { playInteractionCue } from "@/utils/sound";
 
 type SessionEntryKind =
   | "artifact"
@@ -502,6 +507,7 @@ export default function ChatSessionPanel({
   const [selectedKind, setSelectedKind] = useState<SessionEntryKind | null>(
     null
   );
+  const { isRightCollapsed: isCollapsed, toggleRight } = useChatSidebarLayout();
 
   const sessionEntries = useMemo(
     () => collectSessionEntries(messages),
@@ -517,8 +523,36 @@ export default function ChatSessionPanel({
   const visibleKindOrder: readonly SessionEntryKind[] =
     selectedKind === null ? ENTRY_KIND_ORDER : [selectedKind];
 
+  const collapseToggle = (
+    <Button
+      aria-label={
+        isCollapsed ? "Expand session files" : "Collapse session files"
+      }
+      className="hidden lg:inline-flex"
+      onClick={() => {
+        playInteractionCue("toggle", { emphasis: "subtle" });
+        toggleRight();
+      }}
+      size="icon-xs"
+      variant="ghost"
+    >
+      {isCollapsed ? <PanelRightOpenIcon /> : <PanelRightCloseIcon />}
+      <span className="sr-only">Toggle session files</span>
+    </Button>
+  );
+
+  let panelVisibilityClass = mobileOpen ? "max-lg:flex" : "hidden lg:flex";
+  if (isCollapsed) {
+    panelVisibilityClass = mobileOpen ? "max-lg:flex lg:hidden" : "hidden";
+  }
+
   return (
     <>
+      {isCollapsed && (
+        <aside className="bg-sidebar border-border/70 hidden w-11 shrink-0 flex-col items-center border-l py-2 lg:flex">
+          {collapseToggle}
+        </aside>
+      )}
       {mobileOpen && (
         <button
           aria-label="Close session files"
@@ -528,12 +562,13 @@ export default function ChatSessionPanel({
         />
       )}
       <aside
-        className={`bg-sidebar border-border/70 w-64 shrink-0 flex-col border-l max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-50 max-lg:shadow-xl ${
-          mobileOpen ? "max-lg:flex" : "hidden lg:flex"
-        }`}
+        className={`bg-sidebar border-border/70 w-64 shrink-0 flex-col border-l max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-50 max-lg:shadow-xl ${panelVisibilityClass}`}
       >
         <div className="text-muted-foreground flex items-center justify-between px-3 pt-3 pb-2 text-[11px] font-medium tracking-[0.08em] uppercase">
-          <span>Session files</span>
+          <div className="flex items-center gap-1">
+            {collapseToggle}
+            <span>Session files</span>
+          </div>
           <button
             aria-label="Close session files"
             className="hover:bg-muted hover:text-foreground focus-visible:ring-ring rounded-md p-1 transition-colors focus-visible:ring-2 focus-visible:outline-none lg:hidden"

@@ -52,10 +52,14 @@ import {
   SparklesIcon,
 } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { toast } from "sonner";
 
 import ChatSessionPanel from "@/components/chat-session-panel";
+import {
+  getChatSidebarGutters,
+  useChatSidebarLayout,
+} from "@/components/chat-sidebar-layout";
 import { ArtifactInlineView } from "@/components/chat/chat-artifact-card";
 import { ArtifactToolView } from "@/components/chat/chat-artifact-tool-card";
 import { InlineFilePartView } from "@/components/chat/chat-file-media";
@@ -568,6 +572,15 @@ function ChatConversation({
   );
   const stopSequenceRef = useRef(0);
   const [isSessionPanelOpen, setIsSessionPanelOpen] = useState(false);
+  const { isLeftCollapsed, isRightCollapsed } = useChatSidebarLayout();
+  const chatGutters = getChatSidebarGutters({
+    isLeftCollapsed,
+    isRightCollapsed,
+  });
+  const chatGutterStyle = {
+    "--chat-gutter-start": `${chatGutters.start}px`,
+    "--chat-gutter-end": `${chatGutters.end}px`,
+  } as CSSProperties;
   const pendingQuestions = useMemo(
     () => extractPendingQuestions(messages),
     [messages]
@@ -767,7 +780,10 @@ function ChatConversation({
 
   return (
     <div className="flex size-full">
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div
+        className="flex min-w-0 flex-1 flex-col lg:pr-[var(--chat-gutter-end)] lg:pl-[var(--chat-gutter-start)]"
+        style={chatGutterStyle}
+      >
         <Conversation className="flex-1">
           <ConversationContent className="mx-auto flex w-full max-w-3xl flex-col px-5 py-8">
             {messages.length === 0 && (

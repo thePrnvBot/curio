@@ -12,6 +12,7 @@ import {
 import { useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 
+import { useChatSidebarLayout } from "@/components/chat-sidebar-layout";
 import {
   getStreamingChatsSnapshot,
   requestNewChat,
@@ -44,8 +45,8 @@ export default function ChatSidebar() {
   const navigate = useNavigate();
   const params = useParams({ strict: false });
   const activeChatId = params.chatId ?? null;
-  const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const { isLeftCollapsed: isCollapsed, toggleLeft } = useChatSidebarLayout();
 
   function startNewChat(): void {
     setIsMobileOpen(false);
@@ -99,7 +100,7 @@ export default function ChatSidebar() {
       }
       onClick={() => {
         playInteractionCue("toggle", { emphasis: "subtle" });
-        setIsCollapsed((previous) => !previous);
+        toggleLeft();
       }}
       size="icon-xs"
       variant="ghost"
