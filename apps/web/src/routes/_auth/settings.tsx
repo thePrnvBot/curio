@@ -252,20 +252,20 @@ function providerLabel(provider: ProviderChoice | undefined): string {
   return "OpenAI-compatible";
 }
 
-function gpuStatusMessage(detection: VoiceGpuDetection | null): string {
+function gpuStatusMessage(detection: VoiceGpuDetection | null): string | null {
   if (detection === null) {
-    return "Looking for GPUs…";
+    return "Looking for graphics cards…";
   }
   if (!detection.webgpuAvailable) {
-    return "WebGPU is unavailable in this browser; narration runs on CPU (WASM).";
+    return "This browser can't use a graphics card for narration, so Curio will use the CPU instead. Lessons still play, but audio may take longer to start.";
   }
   if (detection.namesHidden) {
-    return "Firefox hides WebGPU adapter names for privacy. The options above are the distinct adapters Firefox exposed, chosen by power hint. ONNX Runtime's WebGPU backend is not officially supported on Firefox, so narration may fall back to CPU (WASM); choose CPU only for reliable playback.";
+    return null;
   }
   if (detection.adapters.length === 0) {
-    return "WebGPU is available but returned no adapter; narration runs on CPU (WASM).";
+    return "No graphics card was found for narration, so Curio will use the CPU. Lessons still play, but audio may take longer to start.";
   }
-  return "These are the GPUs WebGPU exposed to this page. Chrome on Windows shares one adapter with the whole browser; to force the discrete GPU, set Chrome to High performance under Windows Settings → System → Display → Graphics (or enable chrome://flags/#force-high-performance-gpu).";
+  return "These are the graphics cards this browser can use for narration. On Windows, Chrome uses a single card for the whole browser; to prefer your faster card, set Chrome to High performance under Windows Settings → System → Display → Graphics.";
 }
 
 function compareVoiceGrades(first: string, second: string): number {
@@ -345,8 +345,8 @@ function ProviderFormFields({
       <ProviderField
         label={
           form.provider === "openai"
-            ? "API key (optional - falls back to the server key)"
-            : "API key (required for custom endpoints)"
+            ? "API key (optional — uses Curio's shared key)"
+            : "API key (required for custom services)"
         }
         onChange={(value) => {
           setForm({ ...form, apiKey: value });
@@ -357,7 +357,7 @@ function ProviderFormFields({
       />
       {form.provider === "openai-compatible" ? (
         <p className="text-muted-foreground text-xs sm:col-span-2">
-          Custom endpoints require your own API key. The server key is never
+          Custom services need your own API key. Curio’s shared key is never
           sent to a host you choose.
         </p>
       ) : null}
@@ -380,10 +380,10 @@ function ProviderKeyStatus({
     return (
       <div className="space-y-1">
         {typedKey.trim() === "" ? (
-          <p className="text-muted-foreground text-xs">Saved key in use</p>
+          <p className="text-muted-foreground text-xs">Using your saved key</p>
         ) : null}
         <p className="text-muted-foreground text-xs">
-          Custom endpoints require an API key. Use “Use default” to remove this
+          Custom services need an API key. Choose “Use default” to remove this
           provider and its saved key.
         </p>
       </div>
@@ -392,12 +392,12 @@ function ProviderKeyStatus({
   if (clearRequested) {
     return (
       <p className="text-muted-foreground text-xs">
-        The saved key will be removed when you save.
+        Your saved key will be removed when you save.
       </p>
     );
   }
   if (hasSavedKey && typedKey.trim() === "") {
-    return <p className="text-muted-foreground text-xs">Saved key in use</p>;
+    return <p className="text-muted-foreground text-xs">Using your saved key</p>;
   }
   return null;
 }
@@ -876,6 +876,7 @@ function SettingsRoute(): ReactElement {
 
   const isNarrationEnabled = narrationPreferences.enabled;
   const gpuAdapters = gpuDetection?.adapters ?? [];
+  const gpuStatus = gpuStatusMessage(gpuDetection);
   const currentGpuIsListed =
     narrationPreferences.gpuPreference === "wasm" ||
     gpuAdapters.some(
@@ -886,14 +887,14 @@ function SettingsRoute(): ReactElement {
     <div className="-mt-14 min-h-0 flex-1 overflow-y-auto overscroll-none">
       <PageContainer className="pt-20" width="narrow">
         <PageHeader
-          description="Your account, appearance, narration voice and model provider."
+          description="Your profile, appearance, narration, and the model that powers the Director."
           title="Settings"
         />
 
         <div className="divide-border divide-y">
         {/* Profile */}
         <SettingsRow
-          description="Your account details, used to greet you and attribute your work."
+          description="Your account details. Curio uses them to greet you and credit your work."
           title="Profile"
         >
           <div className="flex items-center gap-3">
@@ -914,7 +915,7 @@ function SettingsRoute(): ReactElement {
 
         {/* Appearance */}
         <SettingsRow
-          description="Choose whether Curio follows your device theme or stays light or dark here."
+          description="Follow your device's theme, or keep Curio light or dark."
           title="Appearance"
         >
           {soundState.kind === "uninitialized" ? (
@@ -941,7 +942,7 @@ function SettingsRoute(): ReactElement {
 
         {/* Interaction sounds */}
         <SettingsRow
-          description="Play soft audio cues when you act across Curio. No audio plays until the browser allows it."
+          description="Soft sounds as you click, select, and save. Browsers only allow audio after a click, so turning this on is all that's needed."
           title="Interaction sounds"
         >
           {soundState.kind === "uninitialized" ? (
@@ -960,7 +961,7 @@ function SettingsRoute(): ReactElement {
 
         {/* Learning preferences */}
         <SettingsRow
-          description="Tell the Director how you learn best. These instructions are added to the agent's system prompt for every chat: pace, depth, tone, examples, and study strategies."
+          description="Tell the Director how you learn best. These notes shape every lesson: pace, depth, tone, examples, and study strategies."
           title="Learning preferences"
         >
           <LearningPreferencesSection />
@@ -968,7 +969,7 @@ function SettingsRoute(): ReactElement {
 
         {/* Lesson narration */}
         <SettingsRow
-          description="Read guided lessons aloud. Pick the voice and the playback speed."
+          description="Have guided lessons read aloud in the voice and at the speed you choose."
           title="Lesson narration"
         >
           {soundState.kind === "uninitialized" ? (
@@ -1068,7 +1069,7 @@ function SettingsRoute(): ReactElement {
 
         {/* Narration GPU */}
         <SettingsRow
-          description="Pick the GPU Kokoro should run on. WebGPU only exposes adapters by power hint, so this lists the actual GPU names the browser returns and pins the worker to the selected one. Changing it restarts the background worker; generated lines stay cached."
+          description="Choose the graphics card (GPU) that creates narration audio. A faster card gets lessons speaking sooner; the CPU option works everywhere but is slower. Changes apply right away, and audio you've already generated is kept."
           title="Narration GPU"
         >
           <div className="space-y-2">
@@ -1086,7 +1087,7 @@ function SettingsRoute(): ReactElement {
               value={narrationPreferences.gpuPreference}
             >
               {gpuDetection === null ? (
-                <option value="">Looking for GPUs…</option>
+                <option value="">Looking for graphics cards…</option>
               ) : null}
               {gpuAdapters.map((adapter) => (
                 <option key={adapter.id} value={adapter.id}>
@@ -1098,17 +1099,17 @@ function SettingsRoute(): ReactElement {
                   {voiceGpuFallbackLabel(narrationPreferences.gpuPreference)}
                 </option>
               )}
-              <option value="wasm">CPU only (WASM)</option>
+              <option value="wasm">CPU only (slower)</option>
             </select>
-            <p className="text-muted-foreground text-xs">
-              {gpuStatusMessage(gpuDetection)}
-            </p>
+            {gpuStatus === null ? null : (
+              <p className="text-muted-foreground text-xs">{gpuStatus}</p>
+            )}
           </div>
         </SettingsRow>
 
         {/* Model provider */}
         <SettingsRow
-          description="The AI model behind the Director. Use OpenAI directly, or point at any OpenAI-compatible endpoint."
+          description="The AI model that powers the Director. Use OpenAI, or connect any service that supports the same API."
           title="Model provider"
         >
           <ModelProviderSection />
