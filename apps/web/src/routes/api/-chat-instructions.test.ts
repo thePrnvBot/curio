@@ -1,4 +1,5 @@
 import { MAX_CUSTOM_INSTRUCTIONS_LENGTH } from "@curio/api/domain/learning-preferences";
+import { CURIO_ARTIFACT_DESIGN_RULES } from "@curio/api/infrastructure/curio-baseline-style";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -18,6 +19,10 @@ describe("buildChatInstructions", () => {
     expect(result).toContain(
       "<learner_preferences>\nUse analogies.   Quiz me often.\n</learner_preferences>"
     );
+  });
+
+  it("gives the Director the artifact design contract", () => {
+    expect(CHAT_BASE_INSTRUCTIONS).toContain(CURIO_ARTIFACT_DESIGN_RULES);
   });
 
   it("caps preferences at the settings limit", () => {

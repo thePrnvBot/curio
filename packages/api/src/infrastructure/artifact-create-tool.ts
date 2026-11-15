@@ -7,6 +7,7 @@ import type {
   ArtifactPublicationResult,
 } from "../domain/artifact";
 import { guessMediaTypeFromFilename } from "../domain/artifact";
+import { withCurioArtifactBaseline } from "./curio-baseline-style";
 
 export const CREATE_ARTIFACT_TOOL_NAME = "create_artifact";
 
@@ -30,7 +31,10 @@ export function createArtifactTool(
           mediaType ?? guessMediaTypeFromFilename(filename) ?? "text/plain";
 
         return await publishArtifact.publish({
-          content,
+          content:
+            resolvedMediaType === "text/html"
+              ? withCurioArtifactBaseline(content)
+              : content,
           entryFilename: filename,
           mediaType: resolvedMediaType,
           title,

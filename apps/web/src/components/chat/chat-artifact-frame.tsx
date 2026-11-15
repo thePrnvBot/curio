@@ -1,3 +1,5 @@
+import { withCurioArtifactBaseline } from "@curio/api/infrastructure/curio-baseline-style";
+import { useTheme } from "next-themes";
 import { Option } from "effect";
 import { useEffect, useRef, useState } from "react";
 
@@ -41,6 +43,7 @@ export function ArtifactHtmlFrame({
   title: Option.Option<string>;
 }) {
   const htmlFrameRef = useRef<HTMLIFrameElement>(null);
+  const { resolvedTheme } = useTheme();
   const [reportedFrameHeight, setReportedFrameHeight] =
     useState(MIN_FRAME_HEIGHT_PX);
   const [measuredContent, setMeasuredContent] = useState(htmlContent);
@@ -92,6 +95,16 @@ export function ArtifactHtmlFrame({
     frameHeight = MIN_FRAME_HEIGHT_PX;
   }
 
+  // The app's theme is a class, not the OS preference, so the frame tells the
+  // artifact which scheme to render instead of relying on prefers-color-scheme.
+  const artifactScheme =
+    resolvedTheme === "dark" || resolvedTheme === "light"
+      ? resolvedTheme
+      : undefined;
+  const framedContent = injectSandboxedHeightProbe(
+    withCurioArtifactBaseline(htmlContent, artifactScheme)
+  );
+
   return (
     <iframe
       className="bg-background w-full rounded-md border-x border-b"
@@ -101,7 +114,7 @@ export function ArtifactHtmlFrame({
       // any httpOnly session cookie, no same-origin reads, and no top-level
       // navigation out of the artifact.
       sandbox="allow-scripts allow-forms"
-      srcDoc={injectSandboxedHeightProbe(htmlContent)}
+      srcDoc={framedContent}
       style={{ height: `${frameHeight}px` }}
       title={Option.getOrElse(title, () => "Artifact preview")}
     />

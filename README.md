@@ -51,7 +51,7 @@ Everything is self-hosted and open source. You can run it with your own model ke
 - **Durable runs** — each turn is claimed once, streamed to whichever tab is watching, and persisted before it is marked done. Reopening a chat replays the run; a second tab gets `409` instead of starting a duplicate generation.
 - **Courses** — sections and lessons in five formats, with progress that picks up where you left off, per-lesson completion and completion badges on the Courses page.
 - **Rabbit Hole** — a disposable, proxied browser the learner drives themselves, with per-page capture and Director notes, digested into recap notes or a course on exit.
-- **Artifacts** — publish generated HTML, Markdown, SVG or text documents to an optional Artifact Server and review them in a sandboxed iframe.
+- **Artifacts** — publish generated HTML, Markdown, SVG or text documents to an optional Artifact Server and review them in a sandboxed iframe. Every artifact follows one design contract, and HTML gets Curio's baseline stylesheet injected at publish and preview time, so generated pages match the app instead of inventing their own palette.
 - **Guided explanations** — step-by-step narrated explanations with code focus, a moving cursor and optional local text-to-speech.
 - **Bring your own model** — use the server default or save a per-user OpenAI or OpenAI-compatible provider from Settings.
 - **Learning preferences** — free-text guidance for how the Director should teach you — pace, depth, tone, examples, study strategies — saved per user and added to the chat instructions.
