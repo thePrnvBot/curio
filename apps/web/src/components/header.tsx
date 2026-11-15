@@ -37,15 +37,6 @@ const NAV_LINKS = [
   },
 ] as const;
 
-/** Rect of one nav option inside the mobile dropdown, used to position its
- * gliding pills (vertical counterpart of the desktop dock's pill rects). */
-interface MenuPill {
-  readonly height: number;
-  readonly left: number;
-  readonly top: number;
-  readonly width: number;
-}
-
 /** Full labelled dock, sm (640px) and up. */
 function DesktopDock() {
   const pathname = useRouterState({
@@ -180,75 +171,22 @@ function DesktopDock() {
  * exactly the dock's width, and its "start" alignment is shifted back by the
  * dock's 0.25rem padding so the two rectangles' top-left corners coincide.
  *
- * The option list reproduces the desktop dock's hover treatment so both
- * docks animate identically: a soft translucent pill glides under the
- * hovered option while the solid primary pill marks the current route,
- * with the same durations and easings as the desktop version. */
+ * The active option carries its own primary background instead of sitting on
+ * an absolutely-positioned pill: the pill needed measured offsets inside a
+ * portalled, animating popup, and when that measurement failed the active
+ * label was left in primary-foreground on the card colour — invisible. */
 function MobileDock() {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
   const activeIndex = NAV_LINKS.findIndex((navLink) => navLink.match(pathname));
 
-  const [navMenuOpen, setNavMenuOpen] = useState(false);
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  const itemRefs = useRef<Record<string, HTMLAnchorElement | null>>({});
-  const [activePill, setActivePill] = useState<MenuPill | null>(null);
-  const [hoveredPill, setHoveredPill] = useState<MenuPill | null>(null);
-
-  // Measure the active option so the primary pill can glide to it, plus the
-  // hovered option for the softer hover pill — vertically stacked, mirroring
-  // the desktop dock's left-to-right glide. Re-measured on route changes and
-  // whenever the pointer moves to another option; only measured while the
-  // menu is open (the options are otherwise not mounted). Only this dock
-  // attaches item refs — the hidden desktop dock above sm must not
-  // overwrite them with zero-width measurements.
-  useLayoutEffect(() => {
-    if (!navMenuOpen) {
-      return;
-    }
-    function measurePills(): void {
-      const activeItem = itemRefs.current[String(activeIndex)];
-      if (activeItem !== null && activeItem !== undefined) {
-        setActivePill({
-          height: activeItem.offsetHeight,
-          left: activeItem.offsetLeft,
-          top: activeItem.offsetTop,
-          width: activeItem.offsetWidth,
-        });
-      } else {
-        setActivePill(null);
-      }
-      if (hoveredIndex === null) {
-        setHoveredPill(null);
-        return;
-      }
-      const hoveredItem = itemRefs.current[String(hoveredIndex)];
-      if (hoveredItem === null || hoveredItem === undefined) {
-        setHoveredPill(null);
-        return;
-      }
-      setHoveredPill({
-        height: hoveredItem.offsetHeight,
-        left: hoveredItem.offsetLeft,
-        top: hoveredItem.offsetTop,
-        width: hoveredItem.offsetWidth,
-      });
-    }
-    measurePills();
-  }, [navMenuOpen, activeIndex, hoveredIndex]);
-
-  const showHoverPill = hoveredIndex !== null && hoveredIndex !== activeIndex;
-
   return (
     <nav className="border-border/80 bg-card/90 pointer-events-auto flex w-28 items-center gap-1 rounded-full border p-1 shadow-lg shadow-black/[0.04] backdrop-blur-md sm:hidden">
       <DropdownMenu
         onOpenChange={(open) => {
-          setNavMenuOpen(open);
           if (open) {
             playInteractionCue("toggle", { emphasis: "subtle" });
-          } else {
-            setHoveredIndex(null);
           }
         }}
       >
@@ -268,46 +206,17 @@ function MobileDock() {
           align="start"
           alignOffset={-4}
           className="bg-card"
-          onMouseLeave={() => {
-            setHoveredIndex(null);
-          }}
           style={{ width: "7rem", minWidth: "7rem" }}
         >
-          {hoveredPill === null ? null : (
-            <span
-              aria-hidden="true"
-              className={`bg-foreground/[0.06] absolute rounded-full transition-[left,top,width,height,opacity,scale] duration-200 ease-out ${
-                showHoverPill ? "scale-100 opacity-100" : "scale-90 opacity-0"
-              }`}
-              style={{
-                height: hoveredPill.height,
-                left: hoveredPill.left,
-                top: hoveredPill.top,
-                width: hoveredPill.width,
-              }}
-            />
-          )}
-          {activePill === null ? null : (
-            <span
-              aria-hidden="true"
-              className="bg-primary absolute rounded-full shadow-xs transition-[left,top,width,height,opacity] duration-300 ease-out"
-              style={{
-                height: activePill.height,
-                left: activePill.left,
-                top: activePill.top,
-                width: activePill.width,
-              }}
-            />
-          )}
           <DropdownMenuGroup>
             {NAV_LINKS.map((navLink, navLinkIndex) => {
               const isActive = navLinkIndex === activeIndex;
-              // The pill layers live in this menu, so the item's own hover
-              // background is suppressed and the active option sits in
-              // primary fg on its pill.
+              // The active option is a solid pill of its own, so its label
+              // always contrasts with the menu surface; the item keeps that
+              // fill while highlighted instead of swapping in the hover tint.
               const itemClassName = isActive
-                ? "text-primary-foreground! relative z-10 data-[highlighted]:bg-transparent!"
-                : "text-muted-foreground data-[highlighted]:text-foreground relative z-10 data-[highlighted]:bg-transparent!";
+                ? "bg-primary! text-primary-foreground! data-[highlighted]:bg-primary!"
+                : "text-muted-foreground data-[highlighted]:text-foreground data-[highlighted]:bg-foreground/[0.06]!";
               return (
                 <DropdownMenuItem
                   key={navLink.to}
@@ -315,12 +224,6 @@ function MobileDock() {
                     <Link
                       className={itemClassName}
                       data-cue="navigate"
-                      onMouseEnter={() => {
-                        setHoveredIndex(navLinkIndex);
-                      }}
-                      ref={(anchor) => {
-                        itemRefs.current[String(navLinkIndex)] = anchor;
-                      }}
                       to={navLink.to}
                     />
                   }
