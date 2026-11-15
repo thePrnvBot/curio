@@ -157,7 +157,7 @@ export function MarkdownTable({
                 </Button>
               </div>
             </header>
-            <div className="min-h-0 overflow-auto overscroll-contain">
+            <div className="min-h-0 overflow-auto overscroll-contain p-3">
               <table
                 className="w-full border-collapse text-sm"
                 ref={windowTableRef}
