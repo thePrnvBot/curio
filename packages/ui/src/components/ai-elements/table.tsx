@@ -144,21 +144,14 @@ export function MarkdownTable({
             data-streamdown="table-wrapper"
             open
           >
-            <header className="border-border/70 flex shrink-0 items-center gap-2 border-b px-3.5 py-2">
-              <div className="flex min-w-0 items-center gap-2">
-                <span className="bg-muted text-foreground flex size-7 shrink-0 items-center justify-center rounded-lg">
-                  <TableIcon className="size-4" />
-                </span>
-                <div className="min-w-0">
-                  <p className="text-[13px] leading-tight font-medium">Table</p>
-                  <p className="text-muted-foreground truncate text-[11px] leading-tight">
-                    {size === null
-                      ? "Expanded view"
-                      : `${size.columns} columns · ${size.rows} rows`}
-                  </p>
-                </div>
-              </div>
-              <div className="ml-auto flex shrink-0 items-center gap-1">
+            <header className="border-border/70 flex shrink-0 items-center gap-1.5 border-b px-2 py-1">
+              <TableIcon className="text-muted-foreground size-3.5 shrink-0" />
+              {size !== null && (
+                <p className="text-muted-foreground truncate text-[11px] leading-none">
+                  {size.columns} columns · {size.rows} rows
+                </p>
+              )}
+              <div className="ml-auto flex shrink-0 items-center gap-0.5">
                 <TableCopyDropdown />
                 <TableDownloadButton />
                 <Button
@@ -168,7 +161,7 @@ export function MarkdownTable({
                   onClick={() => {
                     setMaximized((current) => !current);
                   }}
-                  size="icon-sm"
+                  size="icon-xs"
                   variant="ghost"
                 >
                   {maximized ? <Minimize2Icon /> : <Maximize2Icon />}
@@ -176,7 +169,7 @@ export function MarkdownTable({
                 <Button
                   aria-label="Close table"
                   onClick={closeWindow}
-                  size="icon-sm"
+                  size="icon-xs"
                   variant="ghost"
                 >
                   <XIcon />
