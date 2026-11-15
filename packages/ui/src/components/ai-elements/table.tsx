@@ -2,7 +2,7 @@
 
 import { Button } from "@curio/ui/components/button";
 import { cn } from "@curio/ui/lib/utils";
-import { Maximize2Icon, Minimize2Icon, TableIcon, XIcon } from "lucide-react";
+import { Maximize2Icon, TableIcon, XIcon } from "lucide-react";
 import {
   useCallback,
   useContext,
@@ -65,7 +65,6 @@ export function MarkdownTable({
     | StreamdownContextType
     | undefined;
   const [openWindow, setOpenWindow] = useState(false);
-  const [maximized, setMaximized] = useState(false);
   const [size, setSize] = useState<TableSize | null>(null);
   const windowTableRef = useRef<HTMLTableElement>(null);
 
@@ -75,7 +74,6 @@ export function MarkdownTable({
 
   const closeWindow = useCallback(() => {
     setOpenWindow(false);
-    setMaximized(false);
   }, []);
 
   useEffect(() => {
@@ -135,16 +133,11 @@ export function MarkdownTable({
           <dialog
             aria-label="Expanded table"
             aria-modal="true"
-            className={cn(
-              "bg-background text-foreground border-border/80 static m-0 flex w-full flex-col overflow-hidden border p-0 shadow-2xl shadow-black/20 transition-[max-width,max-height,border-radius] duration-200",
-              maximized
-                ? "h-full max-h-screen max-w-none rounded-none"
-                : "h-[88vh] max-h-[980px] max-w-[1540px] rounded-2xl"
-            )}
+            className="bg-background text-foreground border-border/80 static m-0 flex max-h-[88vh] w-fit max-w-full flex-col overflow-hidden rounded-2xl border p-0 shadow-2xl shadow-black/20"
             data-streamdown="table-wrapper"
             open
           >
-            <header className="border-border/70 flex shrink-0 items-center gap-1.5 border-b px-2 py-1">
+            <header className="border-border/70 flex shrink-0 items-center gap-2 border-b px-4 py-1.5">
               <TableIcon className="text-muted-foreground size-3.5 shrink-0" />
               {size !== null && (
                 <p className="text-muted-foreground truncate text-[11px] leading-none">
@@ -155,18 +148,6 @@ export function MarkdownTable({
                 <TableCopyDropdown />
                 <TableDownloadButton />
                 <Button
-                  aria-label={
-                    maximized ? "Restore window size" : "Expand window"
-                  }
-                  onClick={() => {
-                    setMaximized((current) => !current);
-                  }}
-                  size="icon-xs"
-                  variant="ghost"
-                >
-                  {maximized ? <Minimize2Icon /> : <Maximize2Icon />}
-                </Button>
-                <Button
                   aria-label="Close table"
                   onClick={closeWindow}
                   size="icon-xs"
@@ -176,7 +157,7 @@ export function MarkdownTable({
                 </Button>
               </div>
             </header>
-            <div className="min-h-0 flex-1 overflow-auto overscroll-contain p-4">
+            <div className="min-h-0 overflow-auto overscroll-contain">
               <table
                 className="w-full border-collapse text-sm"
                 ref={windowTableRef}
