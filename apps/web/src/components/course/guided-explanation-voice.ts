@@ -1,4 +1,5 @@
 import type { VoiceUtterance } from "@/utils/voice/voice-manager";
+import { beginForegroundNarration } from "@/utils/voice/voice-manager";
 import { narrationLog } from "@/utils/voice/voice-playback";
 
 import { NARRATION_SENTENCE_GAP_MS, sleep } from "./guided-explanation-timing";
@@ -19,65 +20,91 @@ export interface SpeakStepOptions {
 }
 
 /** Speaks one step's lines in order, in full; resolves when the step's last
- * line ends (or immediately once cancelled). Lines are synthesized one at a
- * time, so a first pass may pause briefly per line while the engine renders —
- * each line is cached afterwards and replays instantly. */
+ * line ends (or immediately once cancelled). Only the first line can wait on
+ * synthesis: the next line starts rendering while the current one plays, and
+ * every line is cached afterwards. */
 // oxlint-disable-next-line promise(avoid-new) -- none used; annotation anchor
 export async function speakStepLines(options: SpeakStepOptions): Promise<void> {
+  // Hold the foreground lane for the whole step (synthesis + playback) so the
+  // site-wide prefetch sweep yields between lines instead of competing for the
+  // single synthesis engine.
+  const releaseNarration = beginForegroundNarration();
   const progress = { completedLines: 0 };
   const totalLines = Math.max(options.sentences.length, 1);
-  for (let index = 0; index < options.sentences.length; index += 1) {
-    if (options.isCancelled()) {
-      return;
-    }
-    const globalSentenceIndex = options.firstSentenceIndex + index;
-    options.onSentenceLit(globalSentenceIndex);
-    // Lines are spoken in order; parallelizing would overlap the voices.
-    // oxlint-disable-next-line no-await-in-loop
-    const utterance = await options.synthesize(options.sentences[index] ?? "");
-    if (options.isCancelled()) {
-      return;
-    }
-    if (utterance !== null) {
-      options.onUtteranceReady(globalSentenceIndex, utterance.durationMs);
-    }
-    const spokenMs = utterance?.durationMs ?? options.speakFallbackMs;
-    const sentenceStartedAt = performance.now();
-    let rafId = requestAnimationFrame(function tick() {
+  let lookahead: Promise<VoiceUtterance | null> | null = null;
+  try {
+    for (let index = 0; index < options.sentences.length; index += 1) {
       if (options.isCancelled()) {
         return;
       }
-      const lineFraction = Math.min(
-        (performance.now() - sentenceStartedAt) / spokenMs,
-        1
-      );
-      options.onProgress(
-        ((progress.completedLines + lineFraction) / totalLines) * 100
-      );
-      rafId = requestAnimationFrame(tick);
-    });
-    if (utterance === null) {
-      narrationLog(
-        `sentence ${globalSentenceIndex + 1}: synthesis failed, holding estimated window`
-      );
+      const globalSentenceIndex = options.firstSentenceIndex + index;
+      options.onSentenceLit(globalSentenceIndex);
+      // Lines are spoken in order; parallelizing would overlap the voices.
+      // The lookahead only synthesizes the NEXT line while the current one
+      // plays, so there is no silence between sentences of one step.
       // oxlint-disable-next-line no-await-in-loop
-      await sleep(spokenMs);
-    } else {
-      narrationLog(
-        `speaking sentence ${globalSentenceIndex + 1}:`,
-        `bytes=${utterance.wav.byteLength}`,
-        `durationMs=${utterance.durationMs}`
-      );
+      const utterance = await (lookahead ??
+        options.synthesize(options.sentences[index] ?? ""));
+      lookahead = null;
+      if (options.isCancelled()) {
+        return;
+      }
+      if (utterance !== null) {
+        options.onUtteranceReady(globalSentenceIndex, utterance.durationMs);
+      }
+      const nextSentence = options.sentences[index + 1];
+      if (nextSentence !== undefined && !options.isCancelled()) {
+        // Rejections surface on the next await (the manager resolves null on
+        // failure); catching here so an early cancel cannot raise an unhandled
+        // rejection for a request we no longer need.
+        lookahead = (async (): Promise<VoiceUtterance | null> => {
+          try {
+            return await options.synthesize(nextSentence);
+          } catch {
+            return null;
+          }
+        })();
+      }
+      const spokenMs = utterance?.durationMs ?? options.speakFallbackMs;
+      const sentenceStartedAt = performance.now();
+      let rafId = requestAnimationFrame(function tick() {
+        if (options.isCancelled()) {
+          return;
+        }
+        const lineFraction = Math.min(
+          (performance.now() - sentenceStartedAt) / spokenMs,
+          1
+        );
+        options.onProgress(
+          ((progress.completedLines + lineFraction) / totalLines) * 100
+        );
+        rafId = requestAnimationFrame(tick);
+      });
+      if (utterance === null) {
+        narrationLog(
+          `sentence ${globalSentenceIndex + 1}: synthesis failed, holding estimated window`
+        );
+        // oxlint-disable-next-line no-await-in-loop
+        await sleep(spokenMs);
+      } else {
+        narrationLog(
+          `speaking sentence ${globalSentenceIndex + 1}:`,
+          `bytes=${utterance.wav.byteLength}`,
+          `durationMs=${utterance.durationMs}`
+        );
+        // oxlint-disable-next-line no-await-in-loop
+        await options.play(utterance);
+      }
+      cancelAnimationFrame(rafId);
+      if (options.isCancelled()) {
+        return;
+      }
+      progress.completedLines += 1;
+      options.onProgress((progress.completedLines / totalLines) * 100);
       // oxlint-disable-next-line no-await-in-loop
-      await options.play(utterance);
+      await sleep(NARRATION_SENTENCE_GAP_MS);
     }
-    cancelAnimationFrame(rafId);
-    if (options.isCancelled()) {
-      return;
-    }
-    progress.completedLines += 1;
-    options.onProgress((progress.completedLines / totalLines) * 100);
-    // oxlint-disable-next-line no-await-in-loop
-    await sleep(NARRATION_SENTENCE_GAP_MS);
+  } finally {
+    releaseNarration();
   }
 }

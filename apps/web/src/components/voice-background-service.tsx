@@ -4,6 +4,7 @@ import { useTRPCClient } from "@/utils/trpc";
 import { runVoiceBackgroundSweep } from "@/utils/voice/voice-background";
 import {
   getOrSynthesizeUtterance,
+  isForegroundNarrationActive,
   readVoicePreferences,
   restartVoiceWorker,
   stopVoiceWorker,
@@ -77,6 +78,12 @@ export function VoiceBackgroundService(): null {
       if (sweepRunning || cancelled) {
         return;
       }
+      // Never start a background pass while a lesson is being spoken: the
+      // first prefetch request would otherwise queue ahead of the next line.
+      if (isForegroundNarrationActive()) {
+        narrationLog("background sweep deferred: narration playing");
+        return;
+      }
       sweepRunning = true;
       try {
         const result = await runVoiceBackgroundSweep({
@@ -86,6 +93,7 @@ export function VoiceBackgroundService(): null {
             await trpcClient.courses.getLesson.query({ courseId, lessonId }),
           isCancelled: () => cancelled,
           listCourses: async () => await trpcClient.courses.list.query(),
+          shouldYield: isForegroundNarrationActive,
           synthesize: (text) =>
             getOrSynthesizeUtterance(text, readVoicePreferences()),
         });

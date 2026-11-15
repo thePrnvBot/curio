@@ -199,4 +199,56 @@ describe("runVoiceBackgroundSweep", () => {
     expect(calls).toBe(1);
     expect(result.cancelled).toBe(true);
   });
+
+  it("pauses while playback owns the engine, then finishes the lesson", async () => {
+    const synthesized: string[] = [];
+    let pausesLeft = 2;
+    const result = await runVoiceBackgroundSweep({
+      getCourse: () =>
+        Promise.resolve(
+          detail([{ id: "guided-1", kind: "guided-explanation" }])
+        ),
+      getLesson: () =>
+        Promise.resolve(guidedLesson("guided-1", ["One.", "Two."])),
+      listCourses: () => Promise.resolve([summary("course-1")]),
+      shouldYield: () => {
+        if (pausesLeft <= 0) {
+          return false;
+        }
+        pausesLeft -= 1;
+        return true;
+      },
+      synthesize: (text) => {
+        synthesized.push(text);
+        return Promise.resolve({});
+      },
+      yieldPollMs: 0,
+    });
+
+    expect(synthesized).toEqual(["One.", "Two."]);
+    expect(result.linesQueued).toBe(2);
+    expect(result.cancelled).toBe(false);
+  });
+
+  it("leaves a pause when cancellation lands mid-wait", async () => {
+    let polls = 0;
+    const result = await runVoiceBackgroundSweep({
+      getCourse: () =>
+        Promise.resolve(
+          detail([{ id: "guided-1", kind: "guided-explanation" }])
+        ),
+      getLesson: () => Promise.resolve(guidedLesson("guided-1", ["One."])),
+      isCancelled: () => polls > 2,
+      listCourses: () => Promise.resolve([summary("course-1")]),
+      shouldYield: () => {
+        polls += 1;
+        return true;
+      },
+      synthesize: () => Promise.reject(new Error("should not synthesize")),
+      yieldPollMs: 0,
+    });
+
+    expect(result.cancelled).toBe(true);
+    expect(result.linesQueued).toBe(0);
+  });
 });

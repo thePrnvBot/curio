@@ -59,6 +59,58 @@ const PCM16_MAX_AMPLITUDE = 32_767;
 /** Per-session blacklist of plan indexes; a bad WebGPU runtime only costs one download. */
 const rejectedPlanIndexes = new Set<number>();
 
+/* ------------------------------- wasm setup ------------------------------- */
+
+/** WASM inference scales with threads, but only a few help on these small
+ * graphs; more than 4 mostly adds scheduling overhead. */
+const WASM_THREAD_CAP = 4;
+
+interface OnnxWasmEnvironment {
+  numThreads?: number;
+  proxy?: boolean;
+  simd?: boolean | "fixed" | "relaxed";
+}
+
+/**
+ * Configure ONNX Runtime's WASM backend before any session is created.
+ *
+ * Multi-threaded WASM needs `SharedArrayBuffer`, which the browser only
+ * exposes when the page is cross-origin isolated (COOP + COEP). Without those
+ * headers ORT silently runs single-threaded, so the thread count is clamped
+ * here rather than left to fail. Start the dev server with
+ * `CURIO_CROSS_ORIGIN_ISOLATION=1` to opt in locally, and send the same two
+ * headers in production.
+ */
+function configureWasmBackend(): void {
+  const onnxBackend = env.backends.onnx as unknown as
+    | { wasm?: OnnxWasmEnvironment }
+    | undefined;
+  const wasm = onnxBackend?.wasm;
+  if (wasm === undefined) {
+    return;
+  }
+  const isolated =
+    typeof crossOriginIsolated === "boolean" && crossOriginIsolated;
+  const cores =
+    typeof navigator === "undefined" ? 1 : (navigator.hardwareConcurrency ?? 1);
+  const threads = isolated
+    ? Math.max(1, Math.min(WASM_THREAD_CAP, cores - 1))
+    : 1;
+  wasm.numThreads = threads;
+  // The engine already runs inside this worker; an extra ORT proxy worker
+  // would only add a message hop per inference.
+  wasm.proxy = false;
+  wasm.simd = true;
+  narrationLog(
+    "wasm backend:",
+    `threads=${threads}`,
+    `cores=${cores}`,
+    `crossOriginIsolated=${isolated}`
+  );
+}
+
+configureWasmBackend();
+
 /* -------------------------------- engine --------------------------------- */
 
 interface LoadedEngine {
@@ -158,6 +210,7 @@ async function loadEnginePlan(plan: EnginePlan): Promise<KokoroTTS> {
     bindAdapterToOnnxRuntime(adapter);
     logSelectedAdapter(adapter);
   }
+  const loadStartedAt = performance.now();
   const pendingLoad = KokoroTTS.from_pretrained(modelId, {
     // Model download is sizeable (~330MB fp32 on GPU, ~80MB q8 on WASM):
     // stream progress back so the UI keeps a "downloading narration model"
@@ -173,7 +226,13 @@ async function loadEnginePlan(plan: EnginePlan): Promise<KokoroTTS> {
     device: plan.device,
     dtype: plan.dtype,
   });
-  return pendingLoad;
+  const tts = await pendingLoad;
+  narrationLog(
+    "Kokoro model ready:",
+    `${plan.device} ${plan.dtype}`,
+    `${Math.round(performance.now() - loadStartedAt)}ms`
+  );
+  return tts;
 }
 
 /** Loads the first surviving plan; clears itself on rejection for retry. */
@@ -326,7 +385,11 @@ const workerScope = self as unknown as DedicatedWorkerGlobalScope;
  */
 async function renderRequest(
   request: VoiceWorkerRequest & { type: "synthesize" }
-): Promise<{ audio: Float32Array; sampleRate: number }> {
+): Promise<{
+  audio: Float32Array;
+  device: EnginePlan["device"];
+  sampleRate: number;
+}> {
   let loadedEngine = await getEngine();
   let synthesis = await synthesizeOnEngine(loadedEngine, request);
 
@@ -346,7 +409,7 @@ async function renderRequest(
     loadedEngine = await getEngine();
     synthesis = await synthesizeOnEngine(loadedEngine, request);
   }
-  return synthesis;
+  return { ...synthesis, device: loadedEngine.plan.device };
 }
 
 // oxlint-disable-next-line unicorn/prefer-add-event-listener -- the worker owns exactly one message protocol; the on* handler states that single-subscriber intent
@@ -376,10 +439,19 @@ workerScope.onmessage = async (event: MessageEvent<VoiceWorkerRequest>) => {
     return;
   }
   try {
-    const { audio, sampleRate } = await renderRequest(request);
+    const synthesisStartedAt = performance.now();
+    const { audio, device, sampleRate } = await renderRequest(request);
+    const inferenceMs = Math.max(
+      0,
+      Math.round(performance.now() - synthesisStartedAt)
+    );
     const stats = probeAudioSamples(audio);
     narrationLog(
-      "worker samples:",
+      "worker synth:",
+      device,
+      `${inferenceMs}ms`,
+      `${request.text.length} chars`,
+      `${((request.text.length / Math.max(inferenceMs, 1)) * 1000).toFixed(1)} chars/s`,
       audio.constructor.name,
       `len=${audio.length}`,
       `min=${stats.min.toFixed(3)}`,

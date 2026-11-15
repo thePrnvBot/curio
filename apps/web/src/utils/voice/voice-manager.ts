@@ -13,6 +13,7 @@ import { toSpokenNarration } from "./narration-text";
 import type { VoicePreferences } from "./voice-cache";
 import {
   readCachedUtterance,
+  readCachedUtteranceKeys,
   readVoicePreferences,
   utteranceCacheKey,
   writeCachedUtterance,
@@ -94,6 +95,33 @@ export function subscribeToVoiceStatus(
   return () => {
     statusListeners.delete(listener);
   };
+}
+
+/* --------------------------- foreground priority --------------------------- */
+
+/**
+ * Number of user-facing narration sessions (a lesson step being spoken). The
+ * background prefill sweep polls `isForegroundNarrationActive()` between lines
+ * and steps aside, so pressing Play never queues behind site-wide prefetch
+ * work. Inference cannot be preempted once running, but the next line can.
+ */
+let activeForegroundSessions = 0;
+
+/** Marks narration as user-facing until the returned release is called. */
+export function beginForegroundNarration(): () => void {
+  activeForegroundSessions += 1;
+  let released = false;
+  return () => {
+    if (released) {
+      return;
+    }
+    released = true;
+    activeForegroundSessions = Math.max(0, activeForegroundSessions - 1);
+  };
+}
+
+export function isForegroundNarrationActive(): boolean {
+  return activeForegroundSessions > 0;
 }
 
 /* ------------------------------ worker plumbing ------------------------------ */
@@ -355,11 +383,13 @@ export async function hasCachedUtterance(
       speed: preferences.speed,
       voiceId: preferences.voiceId,
     });
-    const cached = await Effect.runPromise(
+    const cachedKeys = await Effect.runPromise(
       // oxlint-disable-next-line promise/valid-params
-      Effect.catch(readCachedUtterance(key), () => Effect.succeed(null))
+      Effect.catch(readCachedUtteranceKeys([key]), () =>
+        Effect.succeed(new Set<string>())
+      )
     );
-    return cached !== null;
+    return cachedKeys.has(key);
   } catch {
     return false;
   }
@@ -378,11 +408,23 @@ const inFlightUtterances = new Map<string, Promise<VoiceUtterance | null>>();
 let cacheWriteVersion = 0;
 const cacheWriteListeners = new Set<() => void>();
 
+/** Prefills persist dozens of lines in a row; notifying per write made the
+ * player recount every sentence dozens of times a second. Notifications are
+ * coalesced so listeners see the latest state at most a few times per second. */
+const CACHE_WRITE_NOTIFY_MS = 150;
+let cacheWriteNotifyTimer: ReturnType<typeof setTimeout> | null = null;
+
 function bumpCacheWriteVersion(): void {
   cacheWriteVersion += 1;
-  for (const listener of cacheWriteListeners) {
-    listener();
+  if (cacheWriteNotifyTimer !== null) {
+    return;
   }
+  cacheWriteNotifyTimer = setTimeout(() => {
+    cacheWriteNotifyTimer = null;
+    for (const listener of cacheWriteListeners) {
+      listener();
+    }
+  }, CACHE_WRITE_NOTIFY_MS);
 }
 
 /** Fires on every fresh utterance persisted (player, background sweep, etc.),
@@ -398,13 +440,36 @@ export async function countCachedUtterances(
   texts: readonly string[],
   preferences: VoicePreferences
 ): Promise<number> {
-  if (!preferences.enabled) {
+  if (!preferences.enabled || texts.length === 0) {
     return 0;
   }
-  const results = await Promise.all(
-    texts.map((text) => hasCachedUtterance(text, preferences))
-  );
-  return results.filter(Boolean).length;
+  try {
+    const keys = await Promise.all(
+      texts.map((text) => {
+        const spokenText = toSpokenNarration(text);
+        return spokenText === ""
+          ? Promise.resolve(null)
+          : utteranceCacheKey(activeProvider.providerId, spokenText, {
+              speed: preferences.speed,
+              voiceId: preferences.voiceId,
+            });
+      })
+    );
+    const wantedKeys = new Set(
+      keys.filter((key): key is string => key !== null)
+    );
+    const cachedKeys = await Effect.runPromise(
+      // oxlint-disable-next-line promise/valid-params
+      Effect.catch(readCachedUtteranceKeys([...wantedKeys]), () =>
+        Effect.succeed(new Set<string>())
+      )
+    );
+    // Count per line, not per unique key: the player's "N/M" denominator is
+    // the transcript entry count, which may repeat a sentence.
+    return keys.filter((key) => key !== null && cachedKeys.has(key)).length;
+  } catch {
+    return 0;
+  }
 }
 
 async function synthesizeUncached(
@@ -443,6 +508,7 @@ async function synthesizeUncached(
     JSON.stringify(text.slice(0, 60))
   );
   setStatus({ kind: "synthesizing" });
+  const synthesisStartedAt = performance.now();
   try {
     const utterance = await Effect.runPromise(
       activeProvider.synthesize(text, {
@@ -450,8 +516,15 @@ async function synthesizeUncached(
         voiceId: preferences.voiceId,
       })
     );
+    const synthesisMs = Math.max(
+      0,
+      Math.round(performance.now() - synthesisStartedAt)
+    );
     narrationLog(
       "synthesized:",
+      `${synthesisMs}ms`,
+      `${text.length} chars`,
+      `${((text.length / Math.max(synthesisMs, 1)) * 1000).toFixed(1)} chars/s`,
       `bytes=${utterance.wav.byteLength}`,
       `durationMs=${utterance.durationMs}`,
       `sampleRate=${utterance.sampleRate}`

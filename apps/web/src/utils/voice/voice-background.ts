@@ -43,8 +43,13 @@ export interface VoiceBackgroundSweepDeps {
     readonly lessonId: string;
   }) => Promise<CourseLessonDetail>;
   readonly listCourses: () => Promise<readonly CourseSummary[]>;
+  /** True while user-facing narration is playing; the sweep pauses between
+   * lines so playback never queues behind background prefetch work. */
+  readonly shouldYield?: () => boolean;
   /** Resolves to null when synthesis failed; failures are non-fatal. */
   readonly synthesize: (text: string) => Promise<unknown | null>;
+  /** How long to wait before re-checking `shouldYield`. Tests pass 0. */
+  readonly yieldPollMs?: number;
 }
 
 export interface VoiceBackgroundSweepResult {
@@ -52,6 +57,29 @@ export interface VoiceBackgroundSweepResult {
   readonly failedLessons: number;
   readonly lessonsVisited: number;
   readonly linesQueued: number;
+}
+
+/** How often to re-check whether playback took the engine back. */
+const DEFAULT_YIELD_POLL_MS = 200;
+
+function sleep(ms: number): Promise<void> {
+  // oxlint-disable-next-line promise/avoid-new
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+/** Waits while user-facing narration owns the engine, so prefetch never makes
+ * pressing Play wait behind a background line. */
+async function waitForClearLane(
+  deps: VoiceBackgroundSweepDeps,
+  cancelled: () => boolean
+): Promise<void> {
+  const pollMs = deps.yieldPollMs ?? DEFAULT_YIELD_POLL_MS;
+  while (!cancelled() && deps.shouldYield?.() === true) {
+    // oxlint-disable-next-line no-await-in-loop -- polling is the wait
+    await sleep(pollMs);
+  }
 }
 
 /** Walks every course/lesson sequentially. Server or synthesis failures only
@@ -129,6 +157,16 @@ export async function runVoiceBackgroundSweep(
           continue;
         }
         seenSentences.add(sentence);
+        // oxlint-disable-next-line no-await-in-loop -- pause point between lines
+        await waitForClearLane(deps, cancelled);
+        if (cancelled()) {
+          return {
+            cancelled: true,
+            failedLessons,
+            lessonsVisited,
+            linesQueued,
+          };
+        }
         // Sequential on purpose: one synthesis engine, and the cache write of
         // each line should land before the next probe.
         // oxlint-disable-next-line no-await-in-loop
