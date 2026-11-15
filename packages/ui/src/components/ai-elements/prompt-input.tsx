@@ -309,7 +309,9 @@ export const PromptInputActionAddAttachments = ({
       {...props}
       onSelect={handleActivate}
     >
-      <ImageIcon className="mr-2 size-4" /> {label}
+      <ImageIcon className="mr-2 size-4" />{" "}
+      {/* One line: an action label that wraps reads as two separate actions. */}
+      <span className="whitespace-nowrap">{label}</span>
     </DropdownMenuItem>
   );
 };
@@ -944,7 +946,13 @@ export const PromptInputActionMenuContent = ({
   className,
   ...props
 }: PromptInputActionMenuContentProps) => (
-  <DropdownMenuContent align="start" className={cn(className)} {...props} />
+  // Action labels are phrases, not anchor-width hints: size the menu to its
+  // content instead of clipping a nowrap label to the trigger's width.
+  <DropdownMenuContent
+    align="start"
+    className={cn("w-auto", className)}
+    {...props}
+  />
 );
 
 export type PromptInputActionMenuItemProps = ComponentProps<
