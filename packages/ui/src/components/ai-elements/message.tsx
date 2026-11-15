@@ -31,6 +31,7 @@ import { Streamdown } from "streamdown";
 import type { Components } from "streamdown";
 
 import { streamdownCodePlugin } from "./streamdown-code-plugin";
+import { MarkdownTable } from "./table";
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];
@@ -349,7 +350,10 @@ export function SafeMarkdownImage({
   return <img alt={alt ?? ""} src={src} />;
 }
 
-const streamdownComponents = { img: SafeMarkdownImage };
+const streamdownComponents = {
+  img: SafeMarkdownImage,
+  table: MarkdownTable,
+};
 
 export const MessageResponse = memo(
   ({ className, components, ...props }: MessageResponseProps) => (

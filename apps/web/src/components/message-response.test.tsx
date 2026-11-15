@@ -1,8 +1,11 @@
 import {
+  measureMarkdownTable,
+} from "@curio/ui/components/ai-elements/table";
+import {
   MessageResponse,
   SafeMarkdownImage,
 } from "@curio/ui/components/ai-elements/message";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 const DATA_IMAGE = "data:image/png;base64,AAAA";
@@ -74,5 +77,63 @@ describe("MessageResponse images", () => {
 
     expect(container.querySelector("img")).toBeNull();
     expect(container.innerHTML).not.toContain("attacker.example");
+  });
+});
+
+const TABLE_MARKDOWN = [
+  "| Metric | Value |",
+  "| --- | --- |",
+  "| Recall@10 | 0.94 |",
+  "| p50 latency | 180 ms |",
+].join("\n");
+
+describe("MarkdownTable", () => {
+  it("counts header columns and body rows", () => {
+    const table = document.createElement("table");
+    table.innerHTML =
+      "<thead><tr><th>a</th><th>b</th><th>c</th></tr></thead>" +
+      "<tbody><tr><td>1</td><td>2</td><td>3</td></tr><tr><td>4</td><td>5</td><td>6</td></tr></tbody>";
+
+    expect(measureMarkdownTable(table)).toStrictEqual({
+      columns: 3,
+      rows: 2,
+    });
+    expect(measureMarkdownTable(null)).toBeNull();
+  });
+
+  it("opens the full table in a window", async () => {
+    render(<MessageResponse>{TABLE_MARKDOWN}</MessageResponse>);
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand table" }));
+
+    const tableWindow = await screen.findByRole("dialog", {
+      name: "Expanded table",
+    });
+    expect(
+      within(tableWindow).getByText("2 columns · 2 rows")
+    ).toBeInTheDocument();
+    expect(within(tableWindow).getByRole("table")).toBeInTheDocument();
+  });
+
+  it("closes the window with Escape", async () => {
+    render(<MessageResponse>{TABLE_MARKDOWN}</MessageResponse>);
+    fireEvent.click(screen.getByRole("button", { name: "Expand table" }));
+    await screen.findByRole("dialog", { name: "Expanded table" });
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("keeps the table in the transcript when the window closes", async () => {
+    render(<MessageResponse>{TABLE_MARKDOWN}</MessageResponse>);
+    fireEvent.click(screen.getByRole("button", { name: "Expand table" }));
+    const tableWindow = await screen.findByRole("dialog", {
+      name: "Expanded table",
+    });
+
+    fireEvent.click(within(tableWindow).getByRole("button", { name: "Close table" }));
+
+    expect(screen.getByText("Recall@10")).toBeInTheDocument();
   });
 });
