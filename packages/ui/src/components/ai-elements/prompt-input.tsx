@@ -919,6 +919,40 @@ export const PromptInputActionMenu = (props: PromptInputActionMenuProps) => (
   <DropdownMenu {...props} />
 );
 
+export type PromptInputActionAddAttachmentsButtonProps = Omit<
+  PromptInputButtonProps,
+  "children" | "onClick"
+> & {
+  label?: string;
+};
+
+/**
+ * The attachments action as a plain icon button. When the file picker is the
+ * only action there is no menu to open, so the icon opens the dialog directly
+ * and the label lives in the tooltip instead of taking a line of its own.
+ */
+export const PromptInputActionAddAttachmentsButton = ({
+  label = "Add photos or files",
+  ...props
+}: PromptInputActionAddAttachmentsButtonProps) => {
+  const attachments = usePromptInputAttachments();
+
+  const handleActivate = useCallback(() => {
+    attachments.openFileDialog();
+  }, [attachments]);
+
+  return (
+    <PromptInputButton
+      aria-label={label}
+      onClick={handleActivate}
+      tooltip={label}
+      {...props}
+    >
+      <ImageIcon className="size-4" />
+    </PromptInputButton>
+  );
+};
+
 export type PromptInputActionMenuTriggerProps = PromptInputButtonProps;
 
 export const PromptInputActionMenuTrigger = ({

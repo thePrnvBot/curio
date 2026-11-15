@@ -20,10 +20,7 @@ import {
 import type { MessageResponseProps } from "@curio/ui/components/ai-elements/message";
 import {
   PromptInput,
-  PromptInputActionAddAttachments,
-  PromptInputActionMenu,
-  PromptInputActionMenuContent,
-  PromptInputActionMenuTrigger,
+  PromptInputActionAddAttachmentsButton,
   PromptInputBody,
   PromptInputButton,
   PromptInputFooter,
@@ -863,12 +860,7 @@ function ChatConversation({
                     </PromptInputBody>
                     <PromptInputFooter>
                       <PromptInputTools>
-                        <PromptInputActionMenu>
-                          <PromptInputActionMenuTrigger />
-                          <PromptInputActionMenuContent>
-                            <PromptInputActionAddAttachments />
-                          </PromptInputActionMenuContent>
-                        </PromptInputActionMenu>
+                        <PromptInputActionAddAttachmentsButton />
                         <PromptInputButton
                           aria-label="Session files"
                           className="lg:hidden"
