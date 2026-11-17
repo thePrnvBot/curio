@@ -10,10 +10,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@curio/ui/components/tooltip";
+import { cn } from "@curio/ui/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   AtSignIcon,
+  ChevronDownIcon,
   InfoIcon,
   MonitorIcon,
   MoonStarIcon,
@@ -21,7 +23,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useReducer, useState } from "react";
-import type { ReactElement, ReactNode } from "react";
+import type { ComponentProps, ReactElement, ReactNode } from "react";
 import { toast } from "sonner";
 
 import { PageContainer, PageHeader } from "@/components/page-layout";
@@ -107,10 +109,10 @@ function SettingsRow({
   title: string;
 }): ReactElement {
   return (
-    <div className="grid gap-3 py-7 md:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] md:gap-12">
+    <div className="grid gap-3 py-6 md:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] md:gap-12">
       <div>
         <div className="flex items-center gap-1.5">
-          <h2 className="text-foreground text-[13px] font-medium">{title}</h2>
+          <h3 className="text-foreground text-[13px] font-medium">{title}</h3>
           <TooltipProvider delay={120}>
             <Tooltip>
               <TooltipTrigger
@@ -128,6 +130,22 @@ function SettingsRow({
       </div>
       <div className="min-w-0">{children}</div>
     </div>
+  );
+}
+
+/** A band of settings: one micro-label, then hairline-separated rows. */
+function SettingsGroup({
+  children,
+  label,
+}: {
+  children: ReactNode;
+  label: string;
+}): ReactElement {
+  return (
+    <section>
+      <h2 className="section-label mb-1">{label}</h2>
+      <div className="divide-border divide-y">{children}</div>
+    </section>
   );
 }
 
@@ -218,6 +236,29 @@ function SettingSwitch({
 const selectClass =
   "border-input bg-background text-foreground focus-visible:border-ring focus-visible:ring-ring/25 dark:bg-white/[0.03] h-8 rounded-md border px-2.5 text-[13px] transition-[border-color,box-shadow] duration-150 outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50";
 
+/** Native select with Curio chrome: the OS arrow is replaced by a lucide
+ * chevron so selects match the inputs instead of the platform. */
+function SettingsSelect({
+  children,
+  className,
+  ...props
+}: ComponentProps<"select">): ReactElement {
+  return (
+    <span className={cn("relative inline-flex", className)}>
+      <select
+        className={`${selectClass} w-full appearance-none pr-8`}
+        {...props}
+      >
+        {children}
+      </select>
+      <ChevronDownIcon
+        aria-hidden="true"
+        className="text-muted-foreground pointer-events-none absolute top-1/2 right-2.5 size-3.5 -translate-y-1/2"
+      />
+    </span>
+  );
+}
+
 function ProviderField(props: {
   label: string;
   onChange: (value: string) => void;
@@ -227,9 +268,7 @@ function ProviderField(props: {
 }): ReactElement {
   return (
     <label className="block">
-      <span className="text-muted-foreground mb-1.5 block text-[11px] font-medium tracking-[0.06em] uppercase">
-        {props.label}
-      </span>
+      <span className="section-label mb-1.5 block">{props.label}</span>
       <Input
         onChange={(inputEvent) => props.onChange(inputEvent.target.value)}
         placeholder={props.placeholder}
@@ -294,7 +333,7 @@ function ActiveModelStatus({
       <p className="section-label">Active model</p>
       <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-4">
         <div className="flex min-w-0 items-baseline gap-3">
-          <p className="truncate text-[13.5px] font-medium tracking-[-0.01em]">
+          <p className="truncate text-[13px] font-medium tracking-[-0.01em]">
             {activeModel}
           </p>
           <p className="text-muted-foreground truncate text-xs">
@@ -397,7 +436,9 @@ function ProviderKeyStatus({
     );
   }
   if (hasSavedKey && typedKey.trim() === "") {
-    return <p className="text-muted-foreground text-xs">Using your saved key</p>;
+    return (
+      <p className="text-muted-foreground text-xs">Using your saved key</p>
+    );
   }
   return null;
 }
@@ -759,8 +800,12 @@ function LearningPreferencesSection(): ReactElement {
         value={instructions}
       />
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-muted-foreground text-xs">
-          {`${instructions.length}/${MAX_CUSTOM_INSTRUCTIONS_LENGTH} · Applied to every Director chat.`}
+        <p className="text-muted-foreground flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="font-mono tabular-nums">
+            {`${instructions.length}/${MAX_CUSTOM_INSTRUCTIONS_LENGTH}`}
+          </span>
+          <span aria-hidden="true">·</span>
+          <span>Applied to every Director chat.</span>
         </p>
         <Button
           disabled={!isDirty || isTooLong || setMutation.isPending}
@@ -891,229 +936,245 @@ function SettingsRoute(): ReactElement {
           title="Settings"
         />
 
-        <div className="divide-border divide-y">
-        {/* Profile */}
-        <SettingsRow
-          description="Your account details. Curio uses them to greet you and credit your work."
-          title="Profile"
-        >
-          <div className="flex items-center gap-3">
-            <span className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold">
-              {(session?.user.name ?? "C").slice(0, 1).toUpperCase()}
-            </span>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium">
-                {session?.user.name}
-              </p>
-              <p className="text-muted-foreground flex items-center gap-1.5 truncate text-xs">
-                <AtSignIcon className="size-3 shrink-0" aria-hidden="true" />
-                {session?.user.email}
-              </p>
-            </div>
-          </div>
-        </SettingsRow>
-
-        {/* Appearance */}
-        <SettingsRow
-          description="Follow your device's theme, or keep Curio light or dark."
-          title="Appearance"
-        >
-          {soundState.kind === "uninitialized" ? (
-            <Skeleton className="h-9 w-56" />
-          ) : (
-            <SegmentedControl
-              ariaLabel="Theme"
-              onSelect={(value) => {
-                playInteractionCue("select", { emphasis: "subtle" });
-                setTheme(value as "dark" | "light" | "system");
-              }}
-              options={THEME_OPTIONS.map((themeOption) => ({
-                icon: themeOption.icon,
-                label: themeOption.label,
-                value: themeOption.theme,
-              }))}
-              // The control reflects the stored preference (the persisted
-              // choice), not the resolved appearance - otherwise picking
-              // System while the OS is dark would highlight two chips.
-              value={theme ?? "system"}
-            />
-          )}
-        </SettingsRow>
-
-        {/* Interaction sounds */}
-        <SettingsRow
-          description="Soft sounds as you click, select, and save. Browsers only allow audio after a click, so turning this on is all that's needed."
-          title="Interaction sounds"
-        >
-          {soundState.kind === "uninitialized" ? (
-            <Skeleton className="h-5 w-9" />
-          ) : (
-            <SettingSwitch
-              ariaLabel="Interaction sounds"
-              checked={soundState.kind === "enabled"}
-              disabled={soundState.kind === "enabling"}
-              onToggle={() => {
-                void toggleSound();
-              }}
-            />
-          )}
-        </SettingsRow>
-
-        {/* Learning preferences */}
-        <SettingsRow
-          description="Tell the Director how you learn best. These notes shape every lesson: pace, depth, tone, examples, and study strategies."
-          title="Learning preferences"
-        >
-          <LearningPreferencesSection />
-        </SettingsRow>
-
-        {/* Lesson narration */}
-        <SettingsRow
-          description="Have guided lessons read aloud in the voice and at the speed you choose."
-          title="Lesson narration"
-        >
-          {soundState.kind === "uninitialized" ? (
-            <Skeleton className="h-9 w-full" />
-          ) : (
-            <div className="flex flex-wrap items-center gap-3">
-              <SettingSwitch
-                ariaLabel="Lesson narration"
-                checked={isNarrationEnabled}
-                onToggle={() => {
-                  playInteractionCue("toggle", { emphasis: "subtle" });
-                  saveVoicePreferences({
-                    ...narrationPreferences,
-                    enabled: !narrationPreferences.enabled,
-                  });
-                }}
-              />
-              <select
-                aria-label="Narration voice"
-                className={`${selectClass} max-w-52`}
-                disabled={!isNarrationEnabled || voiceCatalogState !== "ready"}
-                onChange={(changeEvent) => {
-                  playInteractionCue("select", { emphasis: "subtle" });
-                  saveVoicePreferences({
-                    ...narrationPreferences,
-                    voiceId: changeEvent.target.value,
-                  });
-                }}
-                value={narrationPreferences.voiceId}
-              >
-                {voiceCatalogState === "loading" && (
-                  <option value="">Loading voices…</option>
-                )}
-                {voiceCatalogState === "error" && (
-                  <option value="">Voice catalog unavailable</option>
-                )}
-                {(
-                  [
-                    ["en-us", "🇺🇸"],
-                    ["en-gb", "🇬🇧"],
-                    ["ja", "🇯🇵"],
-                    ["zh", "🇨🇳"],
-                    ["es", "🇪🇸"],
-                    ["fr-fr", "🇫🇷"],
-                    ["hi", "🇮🇳"],
-                    ["it", "🇮🇹"],
-                    ["pt-br", "🇧🇷"],
-                  ] as const
-                ).map(([languageCode, flag]) => {
-                  const languageVoices = voiceCatalog.filter(
-                    (entry) => entry.languageCode === languageCode
-                  );
-                  if (languageVoices.length === 0) {
-                    return null;
-                  }
-                  return (
-                    <optgroup
-                      label={`${flag} ${languageCode}`}
-                      key={languageCode}
-                    >
-                      {languageVoices
-                        .toSorted((first, second) =>
-                          compareVoiceGrades(first.grade, second.grade)
-                        )
-                        .map((entry) => (
-                          <option key={entry.voiceId} value={entry.voiceId}>
-                            {entry.displayName}
-                            {entry.grade === "" ? "" : ` · ${entry.grade}`}
-                          </option>
-                        ))}
-                    </optgroup>
-                  );
-                })}
-              </select>
-              <select
-                aria-label="Narration speed"
-                className={selectClass}
-                disabled={!isNarrationEnabled}
-                onChange={(changeEvent) => {
-                  playInteractionCue("select", { emphasis: "subtle" });
-                  saveVoicePreferences({
-                    ...narrationPreferences,
-                    speed: Number(changeEvent.target.value),
-                  });
-                }}
-                value={narrationPreferences.speed}
-              >
-                {[0.8, 1, 1.1, 1.25, 1.5].map((speed) => (
-                  <option key={speed} value={speed}>
-                    {`${speed}x`}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-        </SettingsRow>
-
-        {/* Narration GPU */}
-        <SettingsRow
-          description="Choose the graphics card (GPU) that creates narration audio. A faster card gets lessons speaking sooner; the CPU option works everywhere but is slower. Changes apply right away, and audio you've already generated is kept."
-          title="Narration GPU"
-        >
-          <div className="space-y-2">
-            <select
-              aria-label="Narration GPU"
-              className={`${selectClass} w-full max-w-72`}
-              disabled={!isNarrationEnabled || gpuDetection === null}
-              onChange={(changeEvent) => {
-                playInteractionCue("select", { emphasis: "subtle" });
-                saveVoicePreferences({
-                  ...narrationPreferences,
-                  gpuPreference: changeEvent.target.value as VoiceGpuPreference,
-                });
-              }}
-              value={narrationPreferences.gpuPreference}
+        <div className="space-y-10">
+          <SettingsGroup label="Account">
+            {/* Profile */}
+            <SettingsRow
+              description="Your account details. Curio uses them to greet you and credit your work."
+              title="Profile"
             >
-              {gpuDetection === null ? (
-                <option value="">Looking for graphics cards…</option>
-              ) : null}
-              {gpuAdapters.map((adapter) => (
-                <option key={adapter.id} value={adapter.id}>
-                  {adapter.name}
-                </option>
-              ))}
-              {currentGpuIsListed ? null : (
-                <option value={narrationPreferences.gpuPreference}>
-                  {voiceGpuFallbackLabel(narrationPreferences.gpuPreference)}
-                </option>
-              )}
-              <option value="wasm">CPU only (slower)</option>
-            </select>
-            {gpuStatus === null ? null : (
-              <p className="text-muted-foreground text-xs">{gpuStatus}</p>
-            )}
-          </div>
-        </SettingsRow>
+              <div className="flex items-center gap-3">
+                <span className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold">
+                  {(session?.user.name ?? "C").slice(0, 1).toUpperCase()}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">
+                    {session?.user.name}
+                  </p>
+                  <p className="text-muted-foreground flex items-center gap-1.5 truncate text-xs">
+                    <AtSignIcon
+                      className="size-3 shrink-0"
+                      aria-hidden="true"
+                    />
+                    {session?.user.email}
+                  </p>
+                </div>
+              </div>
+            </SettingsRow>
+          </SettingsGroup>
 
-        {/* Model provider */}
-        <SettingsRow
-          description="The AI model that powers the Director. Use OpenAI, or connect any service that supports the same API."
-          title="Model provider"
-        >
-          <ModelProviderSection />
-        </SettingsRow>
+          <SettingsGroup label="Appearance">
+            {/* Appearance */}
+            <SettingsRow
+              description="Follow your device's theme, or keep Curio light or dark."
+              title="Appearance"
+            >
+              {soundState.kind === "uninitialized" ? (
+                <Skeleton className="h-8 w-60" />
+              ) : (
+                <SegmentedControl
+                  ariaLabel="Theme"
+                  onSelect={(value) => {
+                    playInteractionCue("select", { emphasis: "subtle" });
+                    setTheme(value as "dark" | "light" | "system");
+                  }}
+                  options={THEME_OPTIONS.map((themeOption) => ({
+                    icon: themeOption.icon,
+                    label: themeOption.label,
+                    value: themeOption.theme,
+                  }))}
+                  // The control reflects the stored preference (the persisted
+                  // choice), not the resolved appearance - otherwise picking
+                  // System while the OS is dark would highlight two chips.
+                  value={theme ?? "system"}
+                />
+              )}
+            </SettingsRow>
+
+            {/* Interaction sounds */}
+            <SettingsRow
+              description="Soft sounds as you click, select, and save. Browsers only allow audio after a click, so turning this on is all that's needed."
+              title="Interaction sounds"
+            >
+              {soundState.kind === "uninitialized" ? (
+                <Skeleton className="h-5 w-9" />
+              ) : (
+                <SettingSwitch
+                  ariaLabel="Interaction sounds"
+                  checked={soundState.kind === "enabled"}
+                  disabled={soundState.kind === "enabling"}
+                  onToggle={() => {
+                    void toggleSound();
+                  }}
+                />
+              )}
+            </SettingsRow>
+          </SettingsGroup>
+
+          <SettingsGroup label="Learning">
+            {/* Learning preferences */}
+            <SettingsRow
+              description="Tell the Director how you learn best. These notes shape every lesson: pace, depth, tone, examples, and study strategies."
+              title="Learning preferences"
+            >
+              <LearningPreferencesSection />
+            </SettingsRow>
+
+            {/* Lesson narration */}
+            <SettingsRow
+              description="Have guided lessons read aloud in the voice and at the speed you choose."
+              title="Lesson narration"
+            >
+              {soundState.kind === "uninitialized" ? (
+                <Skeleton className="h-8 w-full" />
+              ) : (
+                <div className="flex flex-wrap items-center gap-3">
+                  <SettingSwitch
+                    ariaLabel="Lesson narration"
+                    checked={isNarrationEnabled}
+                    onToggle={() => {
+                      playInteractionCue("toggle", { emphasis: "subtle" });
+                      saveVoicePreferences({
+                        ...narrationPreferences,
+                        enabled: !narrationPreferences.enabled,
+                      });
+                    }}
+                  />
+                  <SettingsSelect
+                    aria-label="Narration voice"
+                    className="w-60 max-w-full"
+                    disabled={
+                      !isNarrationEnabled || voiceCatalogState !== "ready"
+                    }
+                    onChange={(changeEvent) => {
+                      playInteractionCue("select", { emphasis: "subtle" });
+                      saveVoicePreferences({
+                        ...narrationPreferences,
+                        voiceId: changeEvent.target.value,
+                      });
+                    }}
+                    value={narrationPreferences.voiceId}
+                  >
+                    {voiceCatalogState === "loading" && (
+                      <option value="">Loading voices…</option>
+                    )}
+                    {voiceCatalogState === "error" && (
+                      <option value="">Voice catalog unavailable</option>
+                    )}
+                    {(
+                      [
+                        ["en-us", "🇺🇸"],
+                        ["en-gb", "🇬🇧"],
+                        ["ja", "🇯🇵"],
+                        ["zh", "🇨🇳"],
+                        ["es", "🇪🇸"],
+                        ["fr-fr", "🇫🇷"],
+                        ["hi", "🇮🇳"],
+                        ["it", "🇮🇹"],
+                        ["pt-br", "🇧🇷"],
+                      ] as const
+                    ).map(([languageCode, flag]) => {
+                      const languageVoices = voiceCatalog.filter(
+                        (entry) => entry.languageCode === languageCode
+                      );
+                      if (languageVoices.length === 0) {
+                        return null;
+                      }
+                      return (
+                        <optgroup
+                          label={`${flag} ${languageCode}`}
+                          key={languageCode}
+                        >
+                          {languageVoices
+                            .toSorted((first, second) =>
+                              compareVoiceGrades(first.grade, second.grade)
+                            )
+                            .map((entry) => (
+                              <option key={entry.voiceId} value={entry.voiceId}>
+                                {entry.displayName}
+                                {entry.grade === "" ? "" : ` · ${entry.grade}`}
+                              </option>
+                            ))}
+                        </optgroup>
+                      );
+                    })}
+                  </SettingsSelect>
+                  <SettingsSelect
+                    aria-label="Narration speed"
+                    className="w-20"
+                    disabled={!isNarrationEnabled}
+                    onChange={(changeEvent) => {
+                      playInteractionCue("select", { emphasis: "subtle" });
+                      saveVoicePreferences({
+                        ...narrationPreferences,
+                        speed: Number(changeEvent.target.value),
+                      });
+                    }}
+                    value={narrationPreferences.speed}
+                  >
+                    {[0.8, 1, 1.1, 1.25, 1.5].map((speed) => (
+                      <option key={speed} value={speed}>
+                        {`${speed}x`}
+                      </option>
+                    ))}
+                  </SettingsSelect>
+                </div>
+              )}
+            </SettingsRow>
+
+            {/* Narration GPU */}
+            <SettingsRow
+              description="Choose the graphics card (GPU) that creates narration audio. A faster card gets lessons speaking sooner; the CPU option works everywhere but is slower. Changes apply right away, and audio you've already generated is kept."
+              title="Narration GPU"
+            >
+              <div className="space-y-2">
+                <SettingsSelect
+                  aria-label="Narration GPU"
+                  className="w-full max-w-72"
+                  disabled={!isNarrationEnabled || gpuDetection === null}
+                  onChange={(changeEvent) => {
+                    playInteractionCue("select", { emphasis: "subtle" });
+                    saveVoicePreferences({
+                      ...narrationPreferences,
+                      gpuPreference: changeEvent.target
+                        .value as VoiceGpuPreference,
+                    });
+                  }}
+                  value={narrationPreferences.gpuPreference}
+                >
+                  {gpuDetection === null ? (
+                    <option value="">Looking for graphics cards…</option>
+                  ) : null}
+                  {gpuAdapters.map((adapter) => (
+                    <option key={adapter.id} value={adapter.id}>
+                      {adapter.name}
+                    </option>
+                  ))}
+                  {currentGpuIsListed ? null : (
+                    <option value={narrationPreferences.gpuPreference}>
+                      {voiceGpuFallbackLabel(
+                        narrationPreferences.gpuPreference
+                      )}
+                    </option>
+                  )}
+                  <option value="wasm">CPU only (slower)</option>
+                </SettingsSelect>
+                {gpuStatus === null ? null : (
+                  <p className="text-muted-foreground text-xs">{gpuStatus}</p>
+                )}
+              </div>
+            </SettingsRow>
+          </SettingsGroup>
+
+          <SettingsGroup label="Model">
+            {/* Model provider */}
+            <SettingsRow
+              description="The AI model that powers the Director. Use OpenAI, or connect any service that supports the same API."
+              title="Model provider"
+            >
+              <ModelProviderSection />
+            </SettingsRow>
+          </SettingsGroup>
         </div>
       </PageContainer>
     </div>
