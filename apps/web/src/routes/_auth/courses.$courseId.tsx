@@ -5,6 +5,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeftIcon,
   CheckIcon,
+  ChevronDownIcon,
   LoaderCircleIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
@@ -100,8 +101,8 @@ function LessonListButton({
     <button
       className={
         isActive
-          ? "bg-accent text-foreground hover:bg-accent focus-visible:ring-ring w-full rounded-md px-2 py-2 text-left text-[13px] transition-colors duration-150 focus-visible:ring-2 focus-visible:outline-none"
-          : "hover:bg-accent text-muted-foreground hover:text-foreground focus-visible:ring-ring w-full rounded-md px-2 py-2 text-left text-[13px] transition-colors duration-150 focus-visible:ring-2 focus-visible:outline-none"
+          ? "bg-accent text-foreground focus-visible:ring-ring flex w-full flex-col gap-1 rounded-md px-2 py-1.5 text-left transition-colors duration-150 focus-visible:ring-2 focus-visible:outline-none"
+          : "hover:bg-accent text-muted-foreground hover:text-foreground focus-visible:ring-ring flex w-full flex-col gap-1 rounded-md px-2 py-1.5 text-left transition-colors duration-150 focus-visible:ring-2 focus-visible:outline-none"
       }
       onClick={() => {
         // Direction-aware cue: going up the course reads "back", going
@@ -123,7 +124,7 @@ function LessonListButton({
       }}
       type="button"
     >
-      <span className="flex items-center gap-2">
+      <span className="flex w-full min-w-0 items-center gap-2">
         <span
           aria-hidden="true"
           className={
@@ -134,9 +135,11 @@ function LessonListButton({
         >
           {lesson.completed && <CheckIcon className="size-3" />}
         </span>
-        <span className="truncate">{lesson.title}</span>
+        <span className="min-w-0 flex-1 truncate text-[13px] leading-5">
+          {lesson.title}
+        </span>
       </span>
-      <span className="text-muted-foreground/70 text-[11px]">
+      <span className="text-muted-foreground/70 pl-6 text-[11px] leading-4">
         {lessonKindLabel(lesson.kind)}
         {!lesson.hasContent && " · queued"}
       </span>
@@ -196,11 +199,16 @@ function CourseSidebar({
           <h1 className="text-[16px] leading-snug font-semibold tracking-[-0.015em]">
             {course.title}
           </h1>
-          <p className="text-muted-foreground mt-1.5 text-xs">
-            {`${course.completedLessonCount} of ${course.lessonCount} lessons`}
-          </p>
+          <div className="text-muted-foreground mt-1.5 flex items-baseline justify-between gap-3 text-xs">
+            <span>
+              {`${course.completedLessonCount} of ${course.lessonCount} lessons`}
+            </span>
+            <span className="text-foreground font-mono tabular-nums">
+              {`${progressPercent}%`}
+            </span>
+          </div>
           <ProgressFromZero
-            className="bg-muted mt-3 h-1.5 w-full"
+            className="bg-muted mt-2 h-1 w-full"
             label={`Course progress: ${progressPercent}%`}
             percent={progressPercent}
           />
@@ -208,9 +216,7 @@ function CourseSidebar({
         <nav className="space-y-6">
           {sections.map((section) => (
             <div key={section.id ?? section.title}>
-              <p className="text-muted-foreground pb-2 text-[11px] font-medium tracking-[0.08em] uppercase">
-                {section.title}
-              </p>
+              <p className="section-label pb-2">{section.title}</p>
               <ul className="space-y-0.5">
                 {section.lessons.map((lesson) => (
                   <li key={lesson.id}>
@@ -573,17 +579,23 @@ function CoursePageRoute() {
 
         {/* Center: lesson content — scrolls internally, never the page */}
         <main className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-none scroll-smooth">
-          <details className="border-border/70 bg-sidebar mx-4 mt-4 rounded-xl border px-4 py-3 md:hidden">
-            <summary className="cursor-pointer text-sm font-medium">
-              Course lessons · {course.completedLessonCount}/
-              {course.lessonCount}
+          <details className="group border-border/70 bg-sidebar mx-4 mt-4 rounded-xl border px-4 py-3 md:hidden">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium [&::-webkit-details-marker]:hidden">
+              <span>Course lessons</span>
+              <span className="flex shrink-0 items-center gap-2">
+                <span className="text-muted-foreground font-mono text-xs tabular-nums">
+                  {`${course.completedLessonCount}/${course.lessonCount}`}
+                </span>
+                <ChevronDownIcon
+                  aria-hidden="true"
+                  className="text-muted-foreground size-4 transition-transform duration-200 group-open:rotate-180"
+                />
+              </span>
             </summary>
             <nav className="mt-3 space-y-4">
               {sections.map((section) => (
                 <div key={section.id ?? section.title}>
-                  <p className="text-muted-foreground pb-1.5 text-[11px] font-medium tracking-[0.08em] uppercase">
-                    {section.title}
-                  </p>
+                  <p className="section-label pb-1.5">{section.title}</p>
                   <ul className="space-y-0.5">
                     {section.lessons.map((lesson) => (
                       <li key={lesson.id}>

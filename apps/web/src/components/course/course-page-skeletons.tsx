@@ -26,7 +26,7 @@ export function CoursePageSkeleton(): ReactElement {
         <div className="space-y-2">
           <Skeleton className="h-6 w-40" />
           <Skeleton className="h-3 w-32" />
-          <Skeleton className="h-1.5 w-full" />
+          <Skeleton className="h-1 w-full" />
         </div>
         <div className="space-y-2">
           <Skeleton className="h-3 w-28" />

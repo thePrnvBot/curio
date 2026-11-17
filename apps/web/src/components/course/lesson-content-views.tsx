@@ -16,7 +16,7 @@ interface RecapQuestion {
 }
 
 const OPTION_BASE_CLASS =
-  "flex w-full min-w-0 items-start justify-between gap-3 rounded-lg border px-3.5 py-3 text-left text-[13.5px] leading-6 transition-colors duration-150";
+  "flex w-full min-w-0 items-start justify-between gap-3 rounded-lg border px-3.5 py-3 text-left text-[13px] leading-6 transition-colors duration-150";
 
 function optionClass({
   checked: isChecked,
@@ -275,7 +275,7 @@ export function LessonContentView(props: {
           <div className="grid gap-4 sm:grid-cols-2">
             {content.cards.map((card) => (
               <div className="surface-card p-5" key={card.title}>
-                <p className="text-[13.5px] font-medium">{card.title}</p>
+                <p className="text-[13px] font-medium">{card.title}</p>
                 <div className="text-muted-foreground mt-2 text-[13px] leading-6">
                   <MessageResponse>{card.body}</MessageResponse>
                 </div>

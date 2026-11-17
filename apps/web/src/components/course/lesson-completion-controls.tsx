@@ -1,7 +1,7 @@
 import { Badge } from "@curio/ui/components/badge";
 import { Button } from "@curio/ui/components/button";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronRightIcon } from "lucide-react";
+import { CheckIcon, ChevronRightIcon } from "lucide-react";
 import { useReducer } from "react";
 import type { ReactElement } from "react";
 import { toast } from "sonner";
@@ -98,7 +98,17 @@ export function LessonCompletionControls(props: {
       )}
       <div className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-[13.5px] font-medium">{statusText}</p>
+          <div className="flex items-center gap-2">
+            {props.completed ? (
+              <span
+                aria-hidden="true"
+                className="bg-brand/15 text-brand flex size-4 shrink-0 items-center justify-center rounded-full"
+              >
+                <CheckIcon className="size-3" />
+              </span>
+            ) : null}
+            <p className="text-[13px] font-medium">{statusText}</p>
+          </div>
           <p className="text-muted-foreground mt-0.5 text-xs">
             {props.nextLessonTitle ??
               (props.completed

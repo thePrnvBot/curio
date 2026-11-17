@@ -553,8 +553,16 @@ export function GuidedExplanationPlayer(props: {
   const transcript = (
     <aside className="border-border/70 w-full shrink-0 border-b lg:h-full lg:min-h-0 lg:w-[360px] lg:overflow-hidden lg:border-r lg:border-b-0">
       <div className="flex h-full flex-col">
+        <div className="flex items-center justify-between gap-3 px-6 pt-4">
+          <p className="section-label">Transcript</p>
+          {transcriptModules.length > 1 ? (
+            <p className="text-muted-foreground font-mono text-[11px] tabular-nums">
+              {`${activeModuleIndex + 1}/${transcriptModules.length}`}
+            </p>
+          ) : null}
+        </div>
         <div
-          className="min-h-0 flex-1 overflow-y-auto overscroll-none px-6 pt-5 pb-6"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-none px-6 pt-3 pb-6"
           ref={transcriptRef}
         >
           {/* Only the active sub-lesson module is on the page; the rest are
@@ -697,6 +705,7 @@ export function GuidedExplanationPlayer(props: {
           <div className="flex items-center gap-2">
             <Button
               aria-label={isPlaying ? "Pause explanation" : "Play explanation"}
+              className="gap-1.5 pr-3 pl-2.5"
               disabled={isLastStep && !isPlaying}
               onClick={() => {
                 narrationLog(
@@ -706,7 +715,7 @@ export function GuidedExplanationPlayer(props: {
                 playInteractionCue("toggle");
                 setIsPlaying((currentlyPlaying) => !currentlyPlaying);
               }}
-              size="icon"
+              size="sm"
               variant={isPlaying ? "secondary" : "default"}
             >
               {isPlaying ? (
@@ -714,6 +723,7 @@ export function GuidedExplanationPlayer(props: {
               ) : (
                 <PlayIcon className="size-4" aria-hidden="true" />
               )}
+              <span>{isPlaying ? "Pause" : "Play"}</span>
             </Button>
             <Button
               aria-label="Previous step"
@@ -721,7 +731,7 @@ export function GuidedExplanationPlayer(props: {
               onClick={() => {
                 goToStep(stepIndex - 1);
               }}
-              size="icon"
+              size="icon-sm"
               variant="ghost"
             >
               <SkipBackIcon className="size-4" aria-hidden="true" />
@@ -732,7 +742,7 @@ export function GuidedExplanationPlayer(props: {
               onClick={() => {
                 goToStep(stepIndex + 1);
               }}
-              size="icon"
+              size="icon-sm"
               variant="ghost"
             >
               <SkipForwardIcon className="size-4" aria-hidden="true" />
