@@ -95,7 +95,7 @@ export function CardActions({
 
   return (
     <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-      <div className="absolute top-3 right-3 z-10 flex items-center gap-1">
+      <div className="absolute top-3 right-3 z-10 flex items-center gap-1 transition-opacity duration-150 md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100">
         <button
           aria-label={`Share ${title}`}
           className={cardActionButtonClass}
@@ -173,31 +173,27 @@ function CourseCard({
         params={{ courseId: course.id }}
         to="/courses/$courseId"
       >
-        <div className="relative aspect-[4/3] w-full">
+        <div className="border-border/70 relative aspect-[16/10] w-full border-b">
           <CourseCardArt active={isActive} />
-          <div className="from-card via-card/85 to-card/0 absolute inset-x-0 bottom-0 bg-gradient-to-t px-4 pt-16 pb-4">
-            <div className="flex items-end justify-between gap-3">
-              <div className="min-w-0">
-                <span className="block truncate text-[13.5px] font-medium tracking-[-0.01em]">
-                  {course.title}
-                </span>
-                <p className="text-muted-foreground mt-1 text-xs">
-                  {`${course.completedLessonCount} of ${course.lessonCount} lessons`}
-                </p>
-              </div>
-              {isActive ? <Badge variant="brand">In progress</Badge> : null}
-            </div>
-            <div className="mt-3.5 flex items-center gap-3">
-              <div className="bg-muted h-1 min-w-0 flex-1 overflow-hidden rounded-full">
-                <div
-                  className="bg-brand h-full rounded-full transition-[width] duration-500 ease-out"
-                  style={{ width: `${Math.max(percent, 2)}%` }}
-                />
-              </div>
-              <span className="text-muted-foreground w-8 shrink-0 text-right text-[11px] tabular-nums">
-                {`${percent}%`}
-              </span>
-            </div>
+        </div>
+        <div className="p-4">
+          <div className="flex items-start justify-between gap-3">
+            <span className="block truncate text-[13px] font-medium tracking-[-0.01em]">
+              {course.title}
+            </span>
+            {isActive ? <Badge variant="brand">In progress</Badge> : null}
+          </div>
+          <div className="text-muted-foreground mt-1.5 flex items-center justify-between gap-3 text-xs">
+            <span>
+              {`${course.completedLessonCount} of ${course.lessonCount} lessons`}
+            </span>
+            <span className="font-mono tabular-nums">{`${percent}%`}</span>
+          </div>
+          <div className="bg-muted mt-3 h-1 w-full overflow-hidden rounded-full">
+            <div
+              className="bg-brand h-full rounded-full transition-[width] duration-500 ease-out"
+              style={{ width: `${Math.max(percent, 2)}%` }}
+            />
           </div>
         </div>
       </Link>

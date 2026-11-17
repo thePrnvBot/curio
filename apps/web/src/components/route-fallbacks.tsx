@@ -21,10 +21,10 @@ function FallbackCard(props: {
   return (
     <div className="bg-background flex min-h-0 flex-1 items-center justify-center px-6 py-16">
       <div className="surface-card w-full max-w-sm p-8 text-center">
-        <span className="bg-muted text-foreground mx-auto flex size-10 items-center justify-center rounded-full">
+        <span className="border-border bg-card text-muted-foreground mx-auto flex size-11 items-center justify-center rounded-xl border shadow-xs">
           <CompassIcon aria-hidden="true" className="size-5" />
         </span>
-        <h1 className="mt-5 text-[18px] font-semibold tracking-[-0.02em]">
+        <h1 className="mt-5 text-[20px] font-semibold tracking-[-0.025em]">
           {props.heading}
         </h1>
         <p className="text-muted-foreground mt-2 text-[13px] leading-6">

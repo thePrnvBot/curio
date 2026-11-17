@@ -26,7 +26,7 @@ function EmptyStateCard({
         {icon}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-[13.5px] font-medium">{title}</p>
+        <p className="text-[13px] font-medium">{title}</p>
         <p className="text-muted-foreground mt-1 max-w-lg text-[13px] leading-6">
           {description}
         </p>
@@ -74,7 +74,7 @@ export function EmptyBadgeShowcase() {
           <SparklesIcon className="size-4" aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-[13.5px] font-medium">No badges yet</p>
+          <p className="text-[13px] font-medium">No badges yet</p>
           <p className="text-muted-foreground mt-1 max-w-lg text-[13px] leading-6">
             Earn your first badge by completing lessons from a course.
           </p>

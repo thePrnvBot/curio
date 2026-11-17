@@ -1,4 +1,3 @@
-import { Badge } from "@curio/ui/components/badge";
 import { Link } from "@tanstack/react-router";
 import { ArrowUpRightIcon } from "lucide-react";
 
@@ -16,42 +15,44 @@ function CurrentCourseCard({
   const percent = progressPercent(activeCourse);
   return (
     <Link
-      className="surface-card group hover:border-foreground/15 relative block overflow-hidden transition-[border-color] duration-200 ease-out"
+      className="surface-card group hover:border-foreground/15 grid overflow-hidden transition-[border-color] duration-200 ease-out sm:grid-cols-[minmax(0,17rem)_minmax(0,1fr)]"
       data-cue="navigate"
       params={{ courseId: activeCourse.id }}
       to="/courses/$courseId"
     >
-      <div className="relative aspect-[4/3] max-h-[320px] min-h-[240px] w-full sm:aspect-[21/7]">
+      <div className="border-border/70 relative aspect-[16/9] w-full border-b sm:aspect-auto sm:min-h-44 sm:border-r sm:border-b-0">
         <CourseCardArt active />
-        <div className="from-card via-card/85 to-card/0 absolute inset-x-0 bottom-0 bg-gradient-to-t px-5 pt-24 pb-5 md:px-6">
-          <div className="flex items-end justify-between gap-4">
-            <div className="min-w-0">
-              <p className="section-label mb-1.5">
-                Continue where you left off
-              </p>
-              <span className="block truncate text-[16px] font-medium tracking-[-0.015em]">
-                {activeCourse.title}
-              </span>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <Badge variant="brand">{`${percent}%`}</Badge>
-              <ArrowUpRightIcon
-                aria-hidden="true"
-                className="text-muted-foreground group-hover:text-foreground size-4 transition-colors"
-              />
-            </div>
+      </div>
+
+      <div className="flex flex-col justify-between gap-8 p-5">
+        <div>
+          <div className="flex items-start justify-between gap-4">
+            <p className="section-label">Continue where you left off</p>
+            <ArrowUpRightIcon
+              aria-hidden="true"
+              className="text-muted-foreground group-hover:text-foreground size-4 transition-colors"
+            />
+          </div>
+          <span className="mt-2.5 block truncate text-[17px] font-medium tracking-[-0.02em]">
+            {activeCourse.title}
+          </span>
+          <p className="text-muted-foreground mt-1 text-xs">
+            {`${activeCourse.completedLessonCount} of ${activeCourse.lessonCount} lessons complete`}
+          </p>
+        </div>
+
+        <div>
+          <div className="text-muted-foreground flex items-baseline justify-between gap-4 text-xs">
+            <span>In progress</span>
+            <span className="text-foreground font-mono tabular-nums">
+              {`${percent}%`}
+            </span>
           </div>
           <ProgressFromZero
-            className="bg-muted mt-4 h-1.5 w-full"
+            className="bg-muted mt-2 h-1 w-full"
             label={`Course progress: ${percent}%`}
             percent={percent}
           />
-          <div className="text-muted-foreground mt-2.5 flex items-center justify-between gap-4 text-xs">
-            <span className="truncate">
-              {`${activeCourse.completedLessonCount} of ${activeCourse.lessonCount} lessons complete`}
-            </span>
-            <span className="shrink-0">In progress</span>
-          </div>
         </div>
       </div>
     </Link>

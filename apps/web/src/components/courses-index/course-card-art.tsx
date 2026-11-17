@@ -3,8 +3,8 @@ import { BookOpenIcon } from "lucide-react";
 /**
  * Placeholder cover art for a course. Curio does not generate course imagery,
  * so the cover is an intentional quiet surface: a soft warm field, a faint
- * dot grid, and the course glyph. The real content details sit over the
- * bottom fade of the card.
+ * dot grid, and the course glyph. The content sits in its own footer below
+ * the art, so nothing is ever typeset over the texture.
  */
 export function CourseCardArt({ active = false }: { active?: boolean }) {
   return (
@@ -28,7 +28,7 @@ export function CourseCardArt({ active = false }: { active?: boolean }) {
             : "radial-gradient(ellipse at 24% 8%, color-mix(in oklab, var(--foreground) 8%, transparent), transparent 58%)",
         }}
       />
-      <div className="absolute inset-0 flex items-center justify-center pb-16">
+      <div className="absolute inset-0 flex items-center justify-center">
         <span
           className={
             active

@@ -10,7 +10,6 @@ import {
 import type { LucideIcon } from "lucide-react";
 
 import AnimatedContent from "@/components/animated-content";
-import { DotField, Squiggle } from "@/components/doodles";
 import { LandingBackground } from "@/components/landing-background";
 import SplitText from "@/components/split-text";
 
@@ -104,15 +103,15 @@ function HomeComponent() {
             className="mt-10 w-full max-w-lg"
           >
             <Link
-              className="group border-border/80 bg-card/95 hover:border-foreground/20 flex items-center gap-3 rounded-2xl border p-1.5 pl-4 text-left shadow-lg shadow-black/[0.05] transition-[border-color,background-color] duration-200"
+              className="group border-border bg-card hover:border-foreground/20 focus-visible:ring-ring flex items-center gap-3 rounded-xl border p-1 pl-3.5 text-left shadow-xs shadow-black/[0.03] transition-[border-color,box-shadow] duration-200 focus-visible:ring-2 focus-visible:outline-none"
               data-cue="navigate"
               to="/chat"
             >
               <Sparkles className="text-brand size-4 shrink-0" />
-              <span className="text-muted-foreground group-hover:text-foreground min-w-0 flex-1 truncate text-[13.5px] transition-colors">
+              <span className="text-muted-foreground group-hover:text-foreground min-w-0 flex-1 truncate text-[13px] transition-colors">
                 What do you want to learn?
               </span>
-              <span className="bg-primary text-primary-foreground flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-3 text-[12px] font-medium">
+              <span className="bg-primary text-primary-foreground flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-3 text-xs font-medium">
                 Start
                 <ArrowRightIcon
                   aria-hidden="true"
@@ -157,7 +156,10 @@ function HomeComponent() {
                   key={step.title}
                   threshold={0.15}
                 >
-                  <h3 className="text-[15px] font-medium tracking-[-0.01em]">
+                  <span className="text-muted-foreground/70 font-mono text-[11px] tracking-[0.14em] tabular-nums">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  <h3 className="mt-5 text-sm font-medium tracking-[-0.01em]">
                     {step.title}
                   </h3>
                   <p className="text-muted-foreground mt-2 text-[13px] leading-6">
@@ -178,7 +180,7 @@ function HomeComponent() {
             teaching, exercises that meet you where you are, and recaps that
             greet you when you come back.
           </p>
-          <p className="text-muted-foreground mt-6 max-w-xl text-[13.5px] leading-6">
+          <p className="text-muted-foreground mt-6 max-w-xl text-[13px] leading-6">
             The Director keeps the thread: what you have covered, what is still
             shaky, and what to try next. You get a course that feels built for
             the moment, not a generic track with your name on it.
@@ -187,13 +189,12 @@ function HomeComponent() {
       </section>
 
       {/* Features */}
-      <section className="relative mx-auto max-w-5xl px-6 pb-24">
-        <DotField className="absolute inset-0 [mask-image:radial-gradient(ellipse_at_center,black_20%,transparent_70%)] text-teal-700/[0.06] dark:text-teal-200/[0.05]" />
-        <h2 className="relative mb-10 text-[26px] leading-[1.15] font-semibold tracking-[-0.03em] text-balance sm:text-[28px]">
+      <section className="mx-auto max-w-5xl px-6 pb-24">
+        <h2 className="mb-10 text-[26px] leading-[1.15] font-semibold tracking-[-0.03em] text-balance sm:text-[28px]">
           Built around how you learn.
         </h2>
 
-        <div className="relative grid gap-x-12 sm:grid-cols-2">
+        <div className="grid gap-x-12 sm:grid-cols-2">
           {FEATURES.map(({ icon: FeatureIcon, title, description }, index) => (
             <AnimatedContent
               className="border-border/80 border-t py-6"
@@ -204,10 +205,10 @@ function HomeComponent() {
             >
               <div className="group hover:bg-muted/25 -mx-3 rounded-lg px-3 py-2 transition-colors duration-200">
                 <div className="flex items-center gap-3">
-                  <span className="bg-muted text-foreground flex size-8 shrink-0 items-center justify-center rounded-lg">
+                  <span className="border-border bg-card text-foreground flex size-8 shrink-0 items-center justify-center rounded-lg border">
                     <FeatureIcon aria-hidden="true" className="size-4" />
                   </span>
-                  <h3 className="text-[14.5px] font-medium tracking-[-0.01em]">
+                  <h3 className="text-sm font-medium tracking-[-0.01em]">
                     {title}
                   </h3>
                 </div>
@@ -259,29 +260,27 @@ function HomeComponent() {
           <h2 className="text-[32px] leading-[1.12] font-semibold tracking-[-0.035em] text-balance sm:text-[40px]">
             Your next skill is one prompt away.
           </h2>
-          <Squiggle className="text-brand/40 mx-auto mt-5 h-2.5 w-24" />
-          <p className="text-muted-foreground mx-auto mt-4 max-w-md text-[13.5px] leading-6 text-balance">
+          <p className="text-muted-foreground mx-auto mt-5 max-w-md text-[13px] leading-6 text-balance">
             Create a course, work through guided lessons, and earn badges worth
             sharing. Curio keeps the streak alive while life does its thing.
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Link
-              className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex h-10 items-center gap-1.5 rounded-lg px-5 text-[13px] font-medium transition-colors duration-150"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex h-9 items-center gap-1.5 rounded-lg px-4 text-[13px] font-medium transition-colors duration-150"
               to="/chat"
             >
               Create your first course
               <ArrowRightIcon aria-hidden="true" className="size-3.5" />
             </Link>
             <Link
-              className="border-border hover:bg-muted/60 inline-flex h-10 items-center rounded-lg border px-5 text-[13px] font-medium transition-colors duration-150"
+              className="border-border bg-card hover:bg-muted/60 inline-flex h-9 items-center rounded-lg border px-4 text-[13px] font-medium transition-colors duration-150"
               to="/courses"
             >
               See your courses
             </Link>
           </div>
           <p className="text-muted-foreground mt-16 text-[11px]">
-            © {CURRENT_YEAR} Curio · Built with TanStack Start, Vercel AI SDK
-            and React Bits
+            © {CURRENT_YEAR} Curio
           </p>
         </AnimatedContent>
       </section>

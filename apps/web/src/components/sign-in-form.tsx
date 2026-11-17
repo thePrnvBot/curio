@@ -63,7 +63,7 @@ export default function SignInForm({
   return (
     <div className="mx-auto flex min-h-[calc(100svh-4rem)] w-full max-w-sm flex-col justify-center px-6 py-12">
       <div className="mb-7 flex flex-col items-center gap-2 text-center">
-        <span className="bg-muted text-foreground mb-1 flex size-9 items-center justify-center rounded-lg border">
+        <span className="border-border bg-card text-foreground mb-1 flex size-10 items-center justify-center rounded-xl border shadow-xs">
           <SparklesIcon aria-hidden="true" className="size-4" />
         </span>
         <h1 className="text-[22px] leading-tight font-semibold tracking-[-0.025em]">

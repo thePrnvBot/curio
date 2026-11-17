@@ -50,7 +50,7 @@ function CoursesRoute() {
             title="Courses"
           />
           <div className="surface-card flex flex-col items-start gap-3 p-6">
-            <p className="text-[13.5px] font-medium">
+            <p className="text-[13px] font-medium">
               Could not load your courses
             </p>
             <p className="text-muted-foreground text-xs leading-relaxed">

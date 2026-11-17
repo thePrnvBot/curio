@@ -67,22 +67,25 @@ export function CoursesPageSkeleton(): ReactElement {
           {/* Currently learning */}
           <div>
             <Skeleton className="mb-4 h-3 w-40" />
-            <div className="surface-card overflow-hidden">
-              <div className="relative aspect-[4/3] max-h-[320px] min-h-[240px] w-full sm:aspect-[21/7]">
+            <div className="surface-card grid overflow-hidden sm:grid-cols-[minmax(0,17rem)_minmax(0,1fr)]">
+              <div className="border-border/70 relative aspect-[16/9] w-full border-b sm:aspect-auto sm:min-h-44 sm:border-r sm:border-b-0">
                 <Skeleton className="absolute inset-0 rounded-none" />
-                <div className="from-card via-card/85 to-card/0 absolute inset-x-0 bottom-0 bg-gradient-to-t px-5 pt-24 pb-5 md:px-6">
-                  <div className="flex items-end justify-between gap-4">
-                    <div className="space-y-2">
-                      <Skeleton className="h-3 w-40" />
-                      <Skeleton className="h-5 w-56" />
-                    </div>
-                    <Skeleton className="h-5 w-12 rounded-full" />
+              </div>
+              <div className="flex flex-col justify-between gap-8 p-5">
+                <div className="space-y-2.5">
+                  <div className="flex items-start justify-between gap-4">
+                    <Skeleton className="h-3 w-40" />
+                    <Skeleton className="size-4 rounded-sm" />
                   </div>
-                  <Skeleton className="mt-4 h-1.5 w-full rounded-full" />
-                  <div className="mt-2.5 flex items-center justify-between gap-4">
-                    <Skeleton className="h-3 w-32" />
+                  <Skeleton className="h-5 w-56" />
+                  <Skeleton className="h-3 w-32" />
+                </div>
+                <div>
+                  <div className="flex items-center justify-between gap-4">
                     <Skeleton className="h-3 w-16" />
+                    <Skeleton className="h-3 w-8" />
                   </div>
+                  <Skeleton className="mt-2 h-1 w-full rounded-full" />
                 </div>
               </div>
             </div>
@@ -94,18 +97,16 @@ export function CoursesPageSkeleton(): ReactElement {
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {COURSES_SKELETON_CARDS.map((card) => (
                 <div className="surface-card overflow-hidden" key={card}>
-                  <div className="relative aspect-[4/3] w-full">
+                  <div className="border-border/70 relative aspect-[16/10] w-full border-b">
                     <Skeleton className="absolute inset-0 rounded-none" />
-                    <div className="from-card via-card/85 to-card/0 absolute inset-x-0 bottom-0 bg-gradient-to-t px-4 pt-16 pb-4">
-                      <div className="flex items-end justify-between gap-3">
-                        <div className="min-w-0 flex-1 space-y-2">
-                          <Skeleton className="h-4 w-4/5" />
-                          <Skeleton className="h-3 w-1/2" />
-                        </div>
-                        <Skeleton className="h-5 w-16 rounded-full" />
-                      </div>
-                      <Skeleton className="mt-3.5 h-1 w-full rounded-full" />
+                  </div>
+                  <div className="space-y-3 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <Skeleton className="h-4 w-4/5" />
+                      <Skeleton className="h-5 w-16 rounded-full" />
                     </div>
+                    <Skeleton className="h-3 w-1/2" />
+                    <Skeleton className="h-1 w-full rounded-full" />
                   </div>
                 </div>
               ))}
