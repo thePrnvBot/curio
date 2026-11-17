@@ -449,7 +449,7 @@ function SessionKindFilterBar({
   onSelectKind: (kind: SessionEntryKind | null) => void;
 }) {
   return (
-    <div className="flex items-center justify-center gap-1 px-2 pb-2">
+    <div className="border-border bg-background mx-2 mb-2 flex items-stretch divide-x divide-border overflow-hidden rounded-lg border">
       {ENTRY_KIND_ORDER.map((entryKind) => {
         const kindCount = entries.filter(
           (entry) => entry.kind === entryKind
@@ -466,9 +466,9 @@ function SessionKindFilterBar({
             title: "",
           } satisfies ChatSessionEntry);
 
-        let stateClass = "hover:bg-muted hover:text-foreground";
+        let stateClass = "text-muted-foreground hover:bg-muted/50 hover:text-foreground";
         if (isDisabled) {
-          stateClass = "cursor-not-allowed opacity-50";
+          stateClass = "cursor-not-allowed opacity-40";
         } else if (isActive) {
           stateClass = "bg-muted text-foreground";
         }
@@ -476,7 +476,7 @@ function SessionKindFilterBar({
           <button
             aria-label={`${ENTRY_KIND_LABELS[entryKind]} (${kindCount})`}
             aria-pressed={isActive}
-            className={`border-border text-muted-foreground focus-visible:ring-ring flex size-7 items-center justify-center rounded-md border transition-colors duration-150 focus-visible:ring-2 focus-visible:outline-none ${stateClass}`}
+            className={`focus-visible:ring-ring flex h-7 flex-1 items-center justify-center transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-inset focus-visible:outline-none ${stateClass}`}
             disabled={isDisabled}
             key={entryKind}
             onClick={() => {
@@ -485,9 +485,7 @@ function SessionKindFilterBar({
             title={`${ENTRY_KIND_LABELS[entryKind]} (${kindCount})`}
             type="button"
           >
-            <span className={isDisabled ? "opacity-40" : undefined}>
-              <SessionEntryIcon entry={sampleEntryForIcon} />
-            </span>
+            <SessionEntryIcon entry={sampleEntryForIcon} />
           </button>
         );
       })}
@@ -541,10 +539,9 @@ export default function ChatSessionPanel({
     </Button>
   );
 
-  let panelVisibilityClass = mobileOpen ? "max-lg:flex" : "hidden lg:flex";
-  if (isCollapsed) {
-    panelVisibilityClass = mobileOpen ? "max-lg:flex lg:hidden" : "hidden";
-  }
+  // Kept mounted at every size so the mobile drawer can animate out; desktop
+  // hides it only while collapsed.
+  const panelVisibilityClass = isCollapsed ? "flex lg:hidden" : "flex";
 
   return (
     <>
@@ -553,21 +550,27 @@ export default function ChatSessionPanel({
           {collapseToggle}
         </aside>
       )}
-      {mobileOpen && (
-        <button
-          aria-label="Close session files"
-          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
-          onClick={onCloseMobile}
-          type="button"
-        />
-      )}
+      <button
+        aria-hidden={!mobileOpen}
+        aria-label="Close session files"
+        className={`fixed inset-0 z-40 bg-black/40 transition-opacity duration-200 lg:hidden ${
+          mobileOpen ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+        onClick={onCloseMobile}
+        tabIndex={mobileOpen ? 0 : -1}
+        type="button"
+      />
       <aside
-        className={`bg-sidebar border-border/70 w-64 shrink-0 flex-col border-l max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-50 max-lg:shadow-xl ${panelVisibilityClass}`}
+        className={`bg-sidebar border-border/70 w-64 shrink-0 flex-col border-l max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-50 max-lg:shadow-xl max-lg:transition-[transform,visibility] max-lg:duration-300 max-lg:ease-[cubic-bezier(0.32,0.72,0,1)] ${panelVisibilityClass} ${
+          mobileOpen
+            ? "max-lg:visible max-lg:translate-x-0"
+            : "max-lg:pointer-events-none max-lg:invisible max-lg:translate-x-full"
+        }`}
       >
-        <div className="text-muted-foreground flex items-center justify-between px-3 pt-3 pb-2 text-[11px] font-medium tracking-[0.08em] uppercase">
+        <div className="flex items-center justify-between px-3 pt-3 pb-2">
           <div className="flex items-center gap-1">
             {collapseToggle}
-            <span>Session files</span>
+            <span className="section-label">Session files</span>
           </div>
           <button
             aria-label="Close session files"
@@ -593,8 +596,13 @@ export default function ChatSessionPanel({
             }
             return (
               <section key={entryKind}>
-                <div className="text-muted-foreground px-2 pb-1.5 text-[11px] font-medium tracking-[0.08em] uppercase">
-                  {ENTRY_KIND_LABELS[entryKind]} · {kindEntries.length}
+                <div className="flex items-center justify-between px-2 pb-1.5">
+                  <p className="section-label">
+                    {ENTRY_KIND_LABELS[entryKind]}
+                  </p>
+                  <span className="text-muted-foreground/70 font-mono text-[11px] tabular-nums">
+                    {kindEntries.length}
+                  </span>
                 </div>
                 <div className="space-y-0.5">
                   {kindEntries.map((entry) => (
@@ -605,9 +613,14 @@ export default function ChatSessionPanel({
             );
           })}
           {visibleEntries.length === 0 && (
-            <div className="text-muted-foreground p-2 text-xs">
-              Artifacts, files, audio, video, and links from this session appear
-              here.
+            <div className="mt-4 px-4 text-center">
+              <span className="border-border bg-background text-muted-foreground mx-auto flex size-8 items-center justify-center rounded-lg border">
+                <FileIcon className="size-4" aria-hidden="true" />
+              </span>
+              <p className="text-muted-foreground mt-3 text-xs leading-5">
+                Artifacts, files, audio, video, and links from this session
+                appear here.
+              </p>
             </div>
           )}
         </div>

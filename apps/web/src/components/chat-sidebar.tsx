@@ -148,18 +148,24 @@ export default function ChatSidebar() {
       >
         <PanelLeftOpenIcon />
       </Button>
-      {isMobileOpen && (
-        <button
-          aria-label="Close chats"
-          className="fixed inset-0 z-40 bg-black/40 md:hidden"
-          onClick={() => {
-            setIsMobileOpen(false);
-          }}
-          type="button"
-        />
-      )}
+      <button
+        aria-hidden={!isMobileOpen}
+        aria-label="Close chats"
+        className={`fixed inset-0 z-40 bg-black/40 transition-opacity duration-200 md:hidden ${
+          isMobileOpen ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+        onClick={() => {
+          setIsMobileOpen(false);
+        }}
+        tabIndex={isMobileOpen ? 0 : -1}
+        type="button"
+      />
       <aside
-        className={`bg-sidebar border-border/70 h-full w-64 shrink-0 flex-col border-r max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:w-72 max-md:shadow-xl ${isMobileOpen ? "max-md:flex" : "max-md:hidden"} md:flex`}
+        className={`bg-sidebar border-border/70 h-full w-64 shrink-0 flex-col border-r max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:flex max-md:w-72 max-md:shadow-xl max-md:transition-[transform,visibility] max-md:duration-300 max-md:ease-[cubic-bezier(0.32,0.72,0,1)] md:flex ${
+          isMobileOpen
+            ? "max-md:visible max-md:translate-x-0"
+            : "max-md:pointer-events-none max-md:invisible max-md:-translate-x-full"
+        }`}
       >
         <div className="flex items-center justify-between px-3 py-2.5">
           <Button
@@ -173,9 +179,7 @@ export default function ChatSidebar() {
           >
             <XIcon />
           </Button>
-          <span className="text-muted-foreground text-[11px] font-medium tracking-[0.08em] uppercase">
-            Chats
-          </span>
+          <span className="section-label">Chats</span>
           <div className="flex items-center gap-1">
             <Button
               onClick={() => {

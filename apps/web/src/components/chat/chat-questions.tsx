@@ -93,7 +93,7 @@ export function PendingQuestionsPanel({
       data-align="block-start"
     >
       <div className="mb-3 flex items-start justify-between gap-3">
-        <p className="text-muted-foreground text-[13.5px] leading-6">
+        <p className="text-muted-foreground text-[13px] leading-6">
           {pendingQuestions.intro}
         </p>
         <p className="text-muted-foreground shrink-0 text-xs tabular-nums">

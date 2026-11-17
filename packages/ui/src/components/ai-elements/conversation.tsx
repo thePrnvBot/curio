@@ -61,12 +61,12 @@ export const ConversationEmptyState = ({
     {children ?? (
       <>
         {icon && (
-          <div className="bg-muted text-muted-foreground flex size-10 items-center justify-center rounded-full">
+          <div className="border-border bg-card text-muted-foreground flex size-11 items-center justify-center rounded-xl border shadow-xs">
             {icon}
           </div>
         )}
         <div className="space-y-1.5">
-          <h3 className="text-[15px] font-medium tracking-[-0.01em]">
+          <h3 className="text-[17px] font-medium tracking-[-0.02em] sm:text-lg">
             {title}
           </h3>
           {description && (

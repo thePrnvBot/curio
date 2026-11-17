@@ -21,7 +21,7 @@ import {
 import { cn } from "@curio/ui/lib/utils";
 import type { ChatStatus, FileUIPart } from "ai";
 import {
-  CornerDownLeftIcon,
+  ArrowUpIcon,
   ImageIcon,
   PlusIcon,
   SquareIcon,
@@ -1020,7 +1020,7 @@ export const PromptInputSubmit = ({
 }: PromptInputSubmitProps) => {
   const isGenerating = status === "submitted" || status === "streaming";
 
-  let icon = <CornerDownLeftIcon className="size-4" />;
+  let icon = <ArrowUpIcon className="size-4" />;
 
   if (status === "submitted") {
     icon = <Spinner />;

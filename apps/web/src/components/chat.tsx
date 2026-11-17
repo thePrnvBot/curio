@@ -34,15 +34,12 @@ import {
   ReasoningContent,
   ReasoningTrigger,
 } from "@curio/ui/components/ai-elements/reasoning";
-import {
-  Suggestion,
-  Suggestions,
-} from "@curio/ui/components/ai-elements/suggestion";
 import { useQueryClient } from "@tanstack/react-query";
 import { isToolUIPart } from "ai";
 import type { UIMessage } from "ai";
 import { Option } from "effect";
 import {
+  ArrowUpRightIcon,
   CopyIcon,
   PanelRightIcon,
   RefreshCwIcon,
@@ -65,7 +62,6 @@ import {
   PromptInputReposDisplay,
   PromptInputTextareaWithGitHubRepos,
 } from "@/components/chat/chat-input-repos";
-import { GitHubRepoLink } from "@/components/chat/github-repo-chip";
 import {
   ChatSkeleton,
   CourseCreatedNote,
@@ -76,6 +72,8 @@ import {
   PendingQuestionsPanel,
 } from "@/components/chat/chat-questions";
 import { WebToolView } from "@/components/chat/chat-web-tools";
+import { ChatDraftSync } from "@/components/chat/chat-draft";
+import { GitHubRepoLink } from "@/components/chat/github-repo-chip";
 import { RabbitHoleHost } from "@/components/rabbit-hole/rabbit-hole-host";
 import { RabbitHolePromptNote } from "@/components/rabbit-hole/rabbit-hole-prompt-note";
 import { RabbitHoleToolCard } from "@/components/rabbit-hole/rabbit-hole-tool-card";
@@ -101,11 +99,11 @@ import {
 import { appendGitHubRepoRefs } from "@/utils/github-repos";
 import type { GitHubRepoRef } from "@/utils/github-repos";
 import { logger } from "@/utils/logger";
+import { parseRabbitHoleUserPrompt } from "@/utils/rabbit-hole-prompt";
 import { playInteractionCue } from "@/utils/sound";
 import { useTRPC } from "@/utils/trpc";
 import type { ArtifactUIData } from "@/utils/ui-messages";
 import { restoreUIMessages } from "@/utils/ui-messages";
-import { parseRabbitHoleUserPrompt } from "@/utils/rabbit-hole-prompt";
 
 export { ChatSkeleton } from "@/components/chat/chat-notes";
 
@@ -482,9 +480,11 @@ ChatMessageRow.displayName = "ChatMessageRow";
 
 function ChatConversation({
   chatId,
+  draftKey,
   initialMessages,
 }: {
   chatId: string;
+  draftKey: string;
   initialMessages: UIMessage[];
 }) {
   // The Chat instance lives outside the React tree: navigating away to
@@ -514,9 +514,7 @@ function ChatConversation({
   const [stagedRepos, setStagedRepos] = useState<readonly GitHubRepoRef[]>([]);
   const stageRepos = useCallback((repos: readonly GitHubRepoRef[]) => {
     setStagedRepos((previous) => {
-      const staged = new Set(
-        previous.map((repo) => repo.slug.toLowerCase())
-      );
+      const staged = new Set(previous.map((repo) => repo.slug.toLowerCase()));
       const additions = repos.filter(
         (repo) => !staged.has(repo.slug.toLowerCase())
       );
@@ -526,8 +524,7 @@ function ChatConversation({
   const removeStagedRepo = useCallback((repo: GitHubRepoRef) => {
     setStagedRepos((previous) =>
       previous.filter(
-        (candidate) =>
-          candidate.slug.toLowerCase() !== repo.slug.toLowerCase()
+        (candidate) => candidate.slug.toLowerCase() !== repo.slug.toLowerCase()
       )
     );
   }, []);
@@ -792,18 +789,25 @@ function ChatConversation({
                   title="What do you want to learn?"
                 />
                 {!isStreaming && (
-                  <Suggestions className="mx-auto max-w-2xl justify-center px-2">
+                  <div className="mx-auto grid w-full max-w-2xl gap-2 px-2 sm:grid-cols-2">
                     {CHAT_STARTER_SUGGESTIONS.map((suggestion) => (
-                      <Suggestion
+                      <button
+                        className="group border-border bg-card hover:border-foreground/20 hover:bg-muted/40 focus-visible:ring-ring text-muted-foreground hover:text-foreground flex items-start justify-between gap-3 rounded-lg border px-3.5 py-3 text-left text-[13px] leading-5 transition-[color,border-color,background-color] duration-150 focus-visible:ring-2 focus-visible:outline-none"
                         key={suggestion}
                         onClick={() => {
                           playInteractionCue("tap", { emphasis: "subtle" });
                           void sendTextMessage(suggestion);
                         }}
-                        suggestion={suggestion}
-                      />
+                        type="button"
+                      >
+                        <span className="text-pretty">{suggestion}</span>
+                        <ArrowUpRightIcon
+                          aria-hidden="true"
+                          className="text-muted-foreground/60 group-hover:text-foreground mt-0.5 size-3.5 shrink-0 transition-colors"
+                        />
+                      </button>
                     ))}
-                  </Suggestions>
+                  </div>
                 )}
               </>
             )}
@@ -826,6 +830,7 @@ function ChatConversation({
             {/* The provider keeps the draft text and staged attachments alive
               while the questionnaire panel temporarily replaces the input. */}
             <PromptInputProvider>
+              <ChatDraftSync draftKey={draftKey} />
               <PromptInput
                 accept={CHAT_ATTACHMENT_ACCEPT}
                 globalDrop
@@ -923,6 +928,7 @@ export default function Chat({
   return (
     <ChatConversation
       chatId={chatId}
+      draftKey={persistedMessages === undefined ? "new" : chatId}
       initialMessages={restoredState.messages}
     />
   );
