@@ -4,14 +4,19 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@curio/ui/components/dropdown-menu";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { MenuIcon } from "lucide-react";
-import { useLayoutEffect, useRef, useState } from "react";
+import { MenuIcon, SearchIcon } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
+import { authClient } from "@/lib/auth-client";
 import { playInteractionCue } from "@/utils/sound";
+import { useTRPC } from "@/utils/trpc";
 
+import { CommandPalette } from "./command-palette";
 import { ThemeToggle } from "./theme-toggle";
 import UserMenu from "./user-menu";
 
@@ -38,11 +43,29 @@ const NAV_LINKS = [
 ] as const;
 
 /** Full labelled dock, sm (640px) and up. */
-function DesktopDock() {
+function DesktopDock({ onOpenCommand }: { onOpenCommand: () => void }) {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
   const activeIndex = NAV_LINKS.findIndex((navLink) => navLink.match(pathname));
+  const queryClient = useQueryClient();
+  const trpc = useTRPC();
+  const { data: session } = authClient.useSession();
+
+  // Prefetch the data a tab will need before the pointer lands on it.
+  function prefetchForPath(to: string): void {
+    if (session === null || session === undefined) {
+      return;
+    }
+    if (to === "/chat") {
+      void queryClient.prefetchQuery(trpc.chats.list.queryOptions());
+      return;
+    }
+    if (to === "/courses") {
+      void queryClient.prefetchQuery(trpc.courses.list.queryOptions());
+      void queryClient.prefetchQuery(trpc.courses.listBadges.queryOptions());
+    }
+  }
 
   const containerRef = useRef<HTMLElement | null>(null);
   const itemRefs = useRef<Record<string, HTMLAnchorElement | null>>({});
@@ -102,7 +125,7 @@ function DesktopDock() {
 
   return (
     <nav
-      className="border-border/80 bg-card/90 pointer-events-auto relative hidden items-center rounded-full border p-1 shadow-lg shadow-black/[0.04] backdrop-blur-md sm:flex"
+      className="border-border bg-card/85 pointer-events-auto relative hidden items-center rounded-full border p-1 shadow-xs shadow-black/[0.03] backdrop-blur-xl sm:flex"
       onPointerLeave={() => {
         setHoveredIndex(null);
       }}
@@ -141,9 +164,14 @@ function DesktopDock() {
             }
             data-cue="navigate"
             key={navLink.to}
+            onFocus={() => {
+              prefetchForPath(navLink.to);
+            }}
             onMouseEnter={() => {
               setHoveredIndex(navLinkIndex);
+              prefetchForPath(navLink.to);
             }}
+            preload="intent"
             ref={(anchor) => {
               itemRefs.current[String(navLinkIndex)] = anchor;
             }}
@@ -155,6 +183,16 @@ function DesktopDock() {
       })}
       <div aria-hidden="true" className="bg-border/80 mx-1 h-5 w-px" />
       <div className="flex items-center gap-1 px-1">
+        <Button
+          aria-label="Search commands"
+          className="rounded-full"
+          onClick={onOpenCommand}
+          size="icon"
+          title="Search (⌘K)"
+          variant="ghost"
+        >
+          <SearchIcon />
+        </Button>
         <ThemeToggle />
         <UserMenu />
       </div>
@@ -175,14 +213,14 @@ function DesktopDock() {
  * an absolutely-positioned pill: the pill needed measured offsets inside a
  * portalled, animating popup, and when that measurement failed the active
  * label was left in primary-foreground on the card colour — invisible. */
-function MobileDock() {
+function MobileDock({ onOpenCommand }: { onOpenCommand: () => void }) {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
   const activeIndex = NAV_LINKS.findIndex((navLink) => navLink.match(pathname));
 
   return (
-    <nav className="border-border/80 bg-card/90 pointer-events-auto flex w-28 items-center gap-1 rounded-full border p-1 shadow-lg shadow-black/[0.04] backdrop-blur-md sm:hidden">
+    <nav className="border-border bg-card/85 pointer-events-auto flex w-28 items-center gap-1 rounded-full border p-1 shadow-xs shadow-black/[0.03] backdrop-blur-xl sm:hidden">
       <DropdownMenu
         onOpenChange={(open) => {
           if (open) {
@@ -208,6 +246,13 @@ function MobileDock() {
           className="bg-card"
           style={{ width: "7rem", minWidth: "7rem" }}
         >
+          <DropdownMenuGroup>
+            <DropdownMenuItem onClick={onOpenCommand}>
+              <SearchIcon className="size-3.5" />
+              Search
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
           <DropdownMenuGroup>
             {NAV_LINKS.map((navLink, navLinkIndex) => {
               const isActive = navLinkIndex === activeIndex;
@@ -251,10 +296,33 @@ function MobileDock() {
  * fighting for a ~320px viewport.
  */
 export default function Header() {
+  const [isCommandOpen, setIsCommandOpen] = useState(false);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        playInteractionCue("toggle", { emphasis: "subtle" });
+        setIsCommandOpen((currentlyOpen) => !currentlyOpen);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   return (
     <header className="pointer-events-none fixed inset-x-0 top-2.5 z-50 flex justify-center px-3">
-      <DesktopDock />
-      <MobileDock />
+      <DesktopDock
+        onOpenCommand={() => {
+          setIsCommandOpen(true);
+        }}
+      />
+      <MobileDock
+        onOpenCommand={() => {
+          setIsCommandOpen(true);
+        }}
+      />
+      <CommandPalette onOpenChange={setIsCommandOpen} open={isCommandOpen} />
     </header>
   );
 }
